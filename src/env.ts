@@ -1,0 +1,25 @@
+export interface Env {
+  DB: D1Database;
+  // The issuer URL, exactly as clients are configured with (no trailing slash).
+  ISSUER: string;
+  PBKDF2_ITERATIONS?: string;
+  // Private signing key: a JWK (RSA, alg RS256, with a kid) as JSON. Create
+  // one with `npm run generate-key`.
+  SIGNING_KEY: string;
+  // Public JWKs (JSON array) still published after a key rotation, so tokens
+  // signed with the previous key keep verifying until they expire.
+  PREVIOUS_PUBLIC_KEYS?: string;
+  // Bearer key for /admin/* (creating clients — the installer uses this).
+  ADMIN_API_KEY: string;
+  // Sign in with Google (optional — the button only shows when both are set).
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  // Test hook: where Google's token endpoint is (defaults to Google's own).
+  GOOGLE_TOKEN_URL?: string;
+  // Verification / reset emails via arcanum-mailer (optional — without it,
+  // codes are only logged).
+  MAILER?: Fetcher;
+  MAILER_INTERNAL_KEY?: string;
+  // JSON: { host, port, username, password, fromAddress, fromName? }
+  MAIL_SMTP?: string;
+}

@@ -1,0 +1,11 @@
+# Copy to .dev.vars for `npm run dev` (never commit .dev.vars).
+# SIGNING_KEY: output of `npm run generate-key`
+SIGNING_KEY=
+ADMIN_API_KEY=dev-admin-key
+# Local dev serves on http://localhost:8788 — override the issuer to match:
+ISSUER=http://localhost:8788
+# Optional:
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# MAILER_INTERNAL_KEY=
+# MAIL_SMTP={"host":"smtp.example.be","port":465,"username":"…","password":"…","fromAddress":"noreply@kaboutersoft.be","fromName":"Arcanum"}

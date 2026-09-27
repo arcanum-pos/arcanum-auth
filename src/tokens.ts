@@ -1,0 +1,70 @@
+import { jwtVerify, SignJWT } from 'jose';
+import type { Env } from './env';
+import { signingKey, verificationKey } from './keys';
+import type { User } from './store';
+import { inSeconds, nowIso, randomToken, sha256, unixNow } from './util';
+
+export const ACCESS_TOKEN_SECONDS = 3600;
+export const REFRESH_TOKEN_SECONDS = 60 * 60 * 24 * 30;
+
+export function scopeHas(scope: string, value: string): boolean {
+  return scope.split(' ').includes(value);
+}
+
+// Access token + id token (+ a refresh token with offline_access), as the
+// token endpoint returns them for every grant.
+export async function issueTokens(
+  env: Env,
+  params: { clientId: string; user: User; scope: string; authTime: number; nonce?: string | null }
+): Promise<Record<string, unknown>> {
+  const { key, kid } = await signingKey(env);
+  const now = unixNow();
+  const accessToken = await new SignJWT({ scope: params.scope, client_id: params.clientId })
+    .setProtectedHeader({ alg: 'RS256', kid, typ: 'at+jwt' })
+    .setIssuer(env.ISSUER)
+    .setSubject(params.user.id)
+    .setAudience(params.clientId)
+    .setIssuedAt(now)
+    .setExpirationTime(now + ACCESS_TOKEN_SECONDS)
+    .setJti(randomToken(16))
+    .sign(key);
+
+  const body: Record<string, unknown> = { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_SECONDS, scope: params.scope };
+
+  if (scopeHas(params.scope, 'openid')) {
+    const claims: Record<string, unknown> = { auth_time: params.authTime };
+    if (params.nonce) claims.nonce = params.nonce;
+    if (scopeHas(params.scope, 'email')) Object.assign(claims, { email: params.user.email, email_verified: !!params.user.email_verified });
+    if (scopeHas(params.scope, 'profile')) claims.name = params.user.name;
+    body.id_token = await new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
+      .setIssuer(env.ISSUER)
+      .setSubject(params.user.id)
+      .setAudience(params.clientId)
+      .setIssuedAt(now)
+      .setExpirationTime(now + ACCESS_TOKEN_SECONDS)
+      .sign(key);
+  }
+
+  if (scopeHas(params.scope, 'offline_access')) {
+    const refresh = randomToken(32);
+    await env.DB.prepare(
+      'INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )
+      .bind(await sha256(refresh), params.clientId, params.user.id, params.scope, params.authTime, nowIso(), inSeconds(REFRESH_TOKEN_SECONDS))
+      .run();
+    body.refresh_token = refresh;
+  }
+  return body;
+}
+
+// One of our own access tokens (for /userinfo) → its subject and scope.
+export async function verifyAccessToken(env: Env, token: string): Promise<{ sub: string; scope: string } | null> {
+  try {
+    const { payload, protectedHeader } = await jwtVerify(token, await verificationKey(env), { issuer: env.ISSUER, algorithms: ['RS256'] });
+    if (protectedHeader.typ !== 'at+jwt' || typeof payload.sub !== 'string') return null;
+    return { sub: payload.sub, scope: String(payload.scope || '') };
+  } catch {
+    return null;
+  }
+}
