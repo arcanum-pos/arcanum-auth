@@ -33,9 +33,11 @@
 	},
 	"d1_databases": [
 		{
-			"binding": "arcanuDBm_auth",
+			// The code reads env.DB — keep this name.
+			"binding": "DB",
 			"database_name": "arcanum-auth",
-			"database_id": "c6e24332-3100-48cd-acea-b8f728b9ae52"
+			"database_id": "c6e24332-3100-48cd-acea-b8f728b9ae52",
+			"migrations_dir": "migrations"
 		}
 	],
 	// Verification / password-reset emails go through arcanum-mailer (same
