@@ -286,6 +286,21 @@ describe('accounts', () => {
     expect(mail.body.subject).toBeTruthy();
   });
 
+  it("accepts its own page's form when the browser sends Origin: null (Sec-Fetch-Site decides)", async () => {
+    const email = uniqueEmail('nullorigin');
+    const own = await post('/signup', { name: 'N', email, password: 'correct horse battery', continue: '/account' }, { Origin: 'null', 'Sec-Fetch-Site': 'same-origin' });
+    expect(own.status).toBe(302);
+    const unknown = await post('/signup', { name: 'N', email: uniqueEmail('nullorigin2'), password: 'correct horse battery' }, { Origin: 'null' });
+    expect(unknown.status).toBe(403);
+    const crossSite = await post('/login', { email, password: 'x' }, { Origin: 'null', 'Sec-Fetch-Site': 'cross-site' });
+    expect(crossSite.status).toBe(403);
+  });
+
+  it('pages send a referrer policy that keeps Origin on their own form posts', async () => {
+    const res = await call('/signup')
+    expect(res.headers.get('Referrer-Policy')).toBe('same-origin');
+  });
+
   it('refuses a form post from another site (CSRF)', async () => {
     const res = await call('/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://evil.test' }, body: 'email=a@b.c&password=x' });
     expect(res.status).toBe(403);

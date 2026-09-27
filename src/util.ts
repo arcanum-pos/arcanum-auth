@@ -115,10 +115,12 @@ export function isEmail(email: string): boolean {
 }
 
 // Form posts must come from this very origin (with SameSite=Lax cookies,
-// the CSRF defence).
+// the CSRF defence). A browser may send `Origin: null` for its own page's
+// form (privacy settings, or a no-referrer policy) — then its
+// Sec-Fetch-Site decides.
 export function sameOrigin(request: Request, issuer: string): boolean {
   const origin = request.headers.get('Origin');
-  if (origin) return origin === new URL(issuer).origin;
+  if (origin && origin !== 'null') return origin === new URL(issuer).origin;
   const site = request.headers.get('Sec-Fetch-Site');
   return site === 'same-origin' || site === 'none';
 }

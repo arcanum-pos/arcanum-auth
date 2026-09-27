@@ -215,7 +215,9 @@ export function page(request: Request, title: string, body: string, status = 200
       'Cache-Control': 'no-store',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
       'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'no-referrer',
+      // Not no-referrer: that makes browsers send `Origin: null` on our own
+      // form posts. same-origin still leaks nothing to other sites (Google).
+      'Referrer-Policy': 'same-origin',
       ...headers,
     },
   });
