@@ -8,9 +8,18 @@
 	"compatibility_date": "2026-09-11",
 	// Public, but only on its own hostname — never on *.workers.dev.
 	"workers_dev": false,
-	"routes": [{ "pattern": "login.kaboutersoft.be", "custom_domain": true }],
-	"observability": { "enabled": true },
-	"dev": { "port": 8788 },
+	"routes": [
+		{
+			"pattern": "login.kaboutersoft.be",
+			"custom_domain": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"dev": {
+		"port": 8788
+	},
 	"vars": {
 		// Must equal what arcanum's identity_providers.issuer_url (and the BFF's
 		// default IdP) is configured with, character for character — the BFF
@@ -22,17 +31,20 @@
 	},
 	"d1_databases": [
 		{
-			"binding": "DB",
+			"binding": "arcanuDBm_auth",
 			"database_name": "arcanum-auth",
-			// Replace with the id from `npx wrangler d1 create arcanum-auth`.
-			"database_id": "00000000-0000-0000-0000-000000000000",
-			"migrations_dir": "migrations"
+			"database_id": "c6e24332-3100-48cd-acea-b8f728b9ae52"
 		}
 	],
 	// Verification / password-reset emails go through arcanum-mailer (same
 	// account). Remove this block to run without it: codes are then only
 	// logged (fine for testing, not for real users).
-	"services": [{ "binding": "MAILER", "service": "arcanum-mailer" }]
+	"services": [
+		{
+			"binding": "MAILER",
+			"service": "arcanum-mailer"
+		}
+	]
 	// Secrets (wrangler secret put …): SIGNING_KEY, ADMIN_API_KEY,
 	// MAILER_INTERNAL_KEY, MAIL_SMTP (JSON), GOOGLE_CLIENT_ID,
 	// GOOGLE_CLIENT_SECRET — see README.md.
