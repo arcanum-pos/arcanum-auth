@@ -1,6 +1,8 @@
 // arcanum-auth: the platform's own OpenID Connect provider (issuer), at
 // login.kaboutersoft.be — the default identity provider for every Arcanum
 // installation, in place of Auth0. See README.md.
+
+
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "arcanum-auth",
