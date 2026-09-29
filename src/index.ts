@@ -9,8 +9,10 @@
 // Users sign in with e-mail + password (address verified by a mailed code)
 // or with Google; both link to one user (and one `sub`) by verified e-mail.
 // Clients — one per installation — are created by the installer via /admin.
-import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, resetConfirm, resetRequest, signup, verify } from './account';
+import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, loginOnce, resetConfirm, resetRequest, signup, verify } from './account';
 import { admin } from './admin';
+import { cleanup } from './cleanup';
+import { clientSelf } from './clients';
 import type { Env } from './env';
 import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
 import { messagePage, texts } from './pages';
@@ -42,6 +44,8 @@ export default {
       if (path === '/device' && (method === 'GET' || method === 'POST')) return devicePage(request, env);
       if (path === '/device/confirm' && method === 'POST') return deviceConfirm(request, env);
       if (path === '/account' && method === 'GET') return account(request, env);
+      if (path === '/login/once' && method === 'GET') return loginOnce(request, env);
+      if (path === '/clients/self' || path === '/clients/self/secret') return clientSelf(request, env, path);
       if (path.startsWith('/admin/')) return admin(request, env, path);
       if (path === '/' && method === 'GET') return redirect('/account');
       if (path === '/health') return json({ ok: true });
@@ -50,5 +54,10 @@ export default {
       console.error('arcanum-auth error', err);
       return json({ error: 'server_error' }, 500);
     }
+  },
+
+  // Hourly (triggers.crons): expired guests and old protocol state.
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    console.log(JSON.stringify({ event: 'arcanum-auth cleanup', deleted: await cleanup(env) }));
   },
 };

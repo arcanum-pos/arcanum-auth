@@ -19,6 +19,9 @@
 	"observability": {
 		"enabled": true
 	},
+	// Hourly clean-up: expired guests, old protocol state. Removing it here
+	// later doesn't remove it from Cloudflare — do that in the dashboard too.
+	"triggers": { "crons": ["17 * * * *"] },
 	"dev": {
 		"port": 8788
 	},

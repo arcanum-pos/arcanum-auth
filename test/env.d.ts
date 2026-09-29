@@ -5,6 +5,8 @@ declare global {
     interface Env extends WorkerEnv {
       // migrations/0001_initial.sql as a JSON array of statements — see vitest.config.mts.
       TEST_SCHEMA: string;
+      // migrations/0002+ as statements.
+      TEST_MIGRATIONS: string;
     }
   }
 }

@@ -19,6 +19,12 @@ People sign in with **e-mail + password** (the address is proven with a
 Both lead to the same user — the same `sub` — when the verified e-mail is
 the same, so switching sign-in method never breaks an Arcanum membership.
 
+**Guests** are for the demo's "Direct proberen": the bootstrapper creates
+one and a one-time sign-in link for it (both with the admin key). An expired
+guest is refused everywhere at once (session, every grant, userinfo); an
+hourly cron (`triggers.crons`) deletes expired guests with their sessions,
+tokens and links, and purges old protocol state.
+
 **One client per Arcanum installation**, used for both grants. Clients are
 created through the admin API (`/admin/clients`, bearer `ADMIN_API_KEY`) —
 what the installer will call when it sets up a new instance.
@@ -35,7 +41,11 @@ what the installer will call when it sets up a new instance.
 | `GET /userinfo` | the user behind an access token |
 | `GET /logout` | ends the session; back to a *registered* `post_logout_redirect_uri` |
 | `/login`, `/signup`, `/verify`, `/reset`, `/google`, `/device`, `/account` | the pages people see (nl/fr/en from the browser, light/dark) |
-| `POST/GET /admin/clients`, `DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`) |
+| `POST/GET /admin/clients`, `DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`); a client can carry `instance_url`, `owner_email`, `owner_sub` |
+| `POST /admin/guests` | a **guest** — a demo visitor without an account: no password, `guest-…@guest.invalid` (unverified), gone after `lifetime_hours` (default 5, max 24) |
+| `POST /admin/login-links` | a **one-time sign-in link** for a guest (single use, 60 s) that continues to an address on an origin some client registered |
+| `GET /login/once?token=…` | where that link leads: starts the guest's session, then continues |
+| `GET/PATCH /clients/self`, `POST /clients/self/secret` | **client self-service** with the client's own id + secret (HTTP Basic): read/replace its redirect and logout URIs, rotate its secret — what an installation's installer uses after setting a custom domain |
 
 ## Deploy (Cloudflare, your account)
 
@@ -57,11 +67,15 @@ what the installer will call when it sets up a new instance.
    `https://login.kaboutersoft.be/callback/google`, then
    `npx wrangler secret put GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
-   Optional, for **verification and reset mails** (without them, codes are
-   only written to the Worker's log — `npx wrangler tail` — fine for testing,
-   not for real users): `MAILER_INTERNAL_KEY` (the same value arcanum-mailer
-   has) and `MAIL_SMTP` as JSON:
-   `{"host":"…","port":465,"username":"…","password":"…","fromAddress":"noreply@kaboutersoft.be","fromName":"Arcanum"}`.
+   For **verification and reset mails** (without them, codes are only
+   written to the Worker's log — `npx wrangler tail` — fine for testing, not
+   for real users): `MAILER_INTERNAL_KEY` (the same value arcanum-mailer has)
+   and `MAIL_CONFIG` as JSON, either provider arcanum-mailer supports:
+   - SMTP: `{"provider":"smtp","credentials":{"host":"…","port":465,"username":"…","password":"…","fromAddress":"noreply@kaboutersoft.be","fromName":"Arcanum"}}`
+   - Gmail API (a Google service account with domain-wide delegation):
+     `{"provider":"gmail_api","credentials":{"clientEmail":"…@….iam.gserviceaccount.com","privateKey":"-----BEGIN PRIVATE KEY-----\n…","impersonatedUser":"noreply@kaboutersoft.be","fromName":"Arcanum"}}`
+
+   (`MAIL_SMTP` with only the SMTP credentials still works.)
    The `MAILER` service binding in `wrangler.jsonc` points at `arcanum-mailer`
    on the same account; remove it if that Worker isn't there.
 3. **Deploy.** Push to `main` with Workers Builds connected, or
@@ -78,7 +92,8 @@ arcanum-bff compares the id_token's `iss` to it character for character.
 ### 1. Automated tests
 ```sh
 npm install
-npm test          # 19 tests: every flow end to end, incl. the security checks
+npm test          # 33 tests: every flow end to end, incl. the security checks,
+                  # guests + one-time links, client self-service, the clean-up
 npm run typecheck
 ```
 They run the Worker in workerd with a local D1, a throwaway signing key, a

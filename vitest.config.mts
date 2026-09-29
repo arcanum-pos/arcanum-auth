@@ -54,6 +54,8 @@ export default defineConfig({
       miniflare: {
         bindings: {
           TEST_SCHEMA: JSON.stringify(sqlStatements('./migrations/0001_initial.sql')),
+          // Later migrations, run once per test file after the schema (ALTERs aren't idempotent).
+          TEST_MIGRATIONS: JSON.stringify(['./migrations/0002_guests_and_client_metadata.sql'].flatMap((f) => sqlStatements(f))),
           SIGNING_KEY: signingKey,
           ADMIN_API_KEY: 'test-admin-key',
           MAILER_INTERNAL_KEY: 'test-mailer-key',

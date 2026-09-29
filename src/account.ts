@@ -359,6 +359,23 @@ export async function deviceConfirm(request: Request, env: Env): Promise<Respons
   return messagePage(request, allow ? t.deviceDone : t.deviceDenied);
 }
 
+// A one-time sign-in link (POST /admin/login-links): a guest's session, then
+// on to where the bootstrapper said (an origin a client registered).
+export async function loginOnce(request: Request, env: Env): Promise<Response> {
+  const token = new URL(request.url).searchParams.get('token') || '';
+  const hash = await sha256(token);
+  const claimed = await env.DB.prepare('UPDATE login_links SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?')
+    .bind(nowIso(), hash, nowIso())
+    .run();
+  const link = claimed.meta.changes
+    ? await env.DB.prepare('SELECT user_id, continue_to FROM login_links WHERE token_hash = ?').bind(hash).first<{ user_id: string; continue_to: string }>()
+    : null;
+  const user = link ? await env.DB.prepare('SELECT * FROM users WHERE id = ? AND guest = 1 AND expires_at > ?').bind(link.user_id, nowIso()).first<User>() : null;
+  if (!link || !user) return messagePage(request, texts(request).errors.linkInvalid, 400);
+  const cookie = await createSession(env, user.id, unixNow(), user.expires_at);
+  return redirect(link.continue_to, { 'Set-Cookie': cookie });
+}
+
 export async function account(request: Request, env: Env): Promise<Response> {
   const session = await currentSession(env, request);
   return session ? accountPage(request, session.user.email) : redirect('/login?continue=%2Faccount');

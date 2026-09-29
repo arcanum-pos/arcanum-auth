@@ -22,4 +22,8 @@ export interface Env {
   MAILER_INTERNAL_KEY?: string;
   // JSON: { host, port, username, password, fromAddress, fromName? }
   MAIL_SMTP?: string;
+  // Or either provider: {"provider":"smtp"|"gmail_api","credentials":{…}} —
+  // gmail_api credentials: { clientEmail, privateKey, impersonatedUser, fromName? }
+  // (a Google service account with domain-wide delegation).
+  MAIL_CONFIG?: string;
 }
