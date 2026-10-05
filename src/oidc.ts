@@ -139,12 +139,28 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
   return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, nonce: row.nonce }));
 }
 
+// A rotated-away refresh token presented again within this window counts as
+// a parallel request of the same app (several API calls at once when the
+// access token runs out; an eventually consistent session store), not as a
+// stolen copy: it gets fresh tokens. After it, reuse revokes them all.
+const ROTATION_GRACE_MS = 30_000;
+
 async function refreshGrant(env: Env, client: Client, form: Record<string, string>): Promise<Response> {
   const tokenHash = await sha256(form.refresh_token || '');
   const row = await env.DB.prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?')
     .bind(tokenHash)
-    .first<{ client_id: string; user_id: string; scope: string; auth_time: number; expires_at: string; revoked_at: string | null }>();
+    .first<{ client_id: string; user_id: string; scope: string; auth_time: number; expires_at: string; revoked_at: string | null; rotated_at: string | null }>();
   if (!row || row.client_id !== client.id) return oauthError('invalid_grant', 'Invalid refresh token');
+  if (row.revoked_at && row.rotated_at && Date.now() - Date.parse(row.rotated_at) <= ROTATION_GRACE_MS && row.expires_at > nowIso()) {
+    // Only while nothing of this user + client was revoked since (theft, a new password).
+    const revokedSince = await env.DB.prepare(
+      'SELECT 1 FROM refresh_tokens WHERE user_id = ? AND client_id = ? AND rotated_at IS NULL AND revoked_at IS NOT NULL AND revoked_at >= ? LIMIT 1'
+    )
+      .bind(row.user_id, row.client_id, row.rotated_at)
+      .first();
+    const user = revokedSince ? null : await userById(env, row.user_id);
+    if (user) return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time }));
+  }
   if (row.revoked_at) {
     // A rotated-away token used again: someone has a copy. Revoke them all.
     await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL')
@@ -153,7 +169,8 @@ async function refreshGrant(env: Env, client: Client, form: Record<string, strin
     return oauthError('invalid_grant', 'Refresh token was already used');
   }
   if (row.expires_at <= nowIso()) return oauthError('invalid_grant', 'Refresh token expired');
-  const revoked = await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL').bind(nowIso(), tokenHash).run();
+  const now = nowIso();
+  const revoked = await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ?, rotated_at = ? WHERE token_hash = ? AND revoked_at IS NULL').bind(now, now, tokenHash).run();
   if (!revoked.meta.changes) return oauthError('invalid_grant', 'Refresh token was already used');
   const user = await userById(env, row.user_id);
   if (!user) return oauthError('invalid_grant', 'User no longer exists');

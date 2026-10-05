@@ -221,9 +221,29 @@ describe('refresh tokens', () => {
     const second = ((await r1.json()) as Record<string, string>).refresh_token;
     expect(second).not.toBe(first);
 
+    // Again right away: a parallel request of the same app — fresh tokens, nothing revoked.
+    const parallel = await refresh(first);
+    expect(parallel.status).toBe(200);
+    expect((await refresh(((await parallel.json()) as Record<string, string>).refresh_token)).status).toBe(200);
+
+    // Again after the grace window: a stolen copy.
+    await env.DB.prepare('UPDATE refresh_tokens SET rotated_at = ? WHERE rotated_at IS NOT NULL AND client_id = ?').bind(new Date(Date.now() - 60_000).toISOString(), client.client_id).run();
     expect(((await (await refresh(first)).json()) as Record<string, string>).error).toBe('invalid_grant');
     // The theft response also killed the newer one.
     expect(((await (await refresh(second)).json()) as Record<string, string>).error).toBe('invalid_grant');
+  });
+
+  it('the grace window ends at a revocation: after a new password, an old token gets nothing', async () => {
+    const client = await newClient();
+    const email = uniqueEmail('refresh-reset');
+    const { tokenRes } = await codeFlow(client, await signUp(email));
+    const first = ((await tokenRes.json()) as Record<string, string>).refresh_token;
+    const refresh = (token: string) => post('/token', { grant_type: 'refresh_token', refresh_token: token, client_id: client.client_id, client_secret: client.client_secret });
+    expect((await refresh(first)).status).toBe(200);
+    // Everything of this user revoked (what a new password does), within the window.
+    const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>())!;
+    await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').bind(new Date(Date.now() + 1000).toISOString(), user.id).run();
+    expect(((await (await refresh(first)).json()) as Record<string, string>).error).toBe('invalid_grant');
   });
 });
 
