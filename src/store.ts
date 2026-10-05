@@ -12,6 +12,8 @@ export interface User {
   // at expires_at (see LIVE_USER).
   guest: number;
   expires_at: string | null;
+  // "Not now" on the offer to add a passkey (passkeys.ts).
+  passkey_offer_dismissed_at: string | null;
 }
 
 // Only users that still exist: an expired guest is refused everywhere

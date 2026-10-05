@@ -1,6 +1,8 @@
 // The issuer's own pages — sign in, create an account, verify an e-mail,
-// reset a password, connect a device. Plain server-rendered HTML (no
-// scripts), in the browser's language (nl/fr/en), light or dark.
+// reset a password, connect a device, manage passkeys. Server-rendered HTML
+// in the browser's language (nl/fr/en), light or dark. The only script is
+// /passkey.js (passkeys need the browser's WebAuthn API), on the pages that
+// offer them.
 
 type Lang = 'nl' | 'fr' | 'en';
 
@@ -42,6 +44,23 @@ const T = {
     signedInAs: (email: string) => `Aangemeld als ${email}.`,
     signOut: 'Afmelden',
     signedOut: 'Je bent afgemeld.',
+    withPasskey: 'Aanmelden met een passkey',
+    accountTitle: 'Je account',
+    passkeysTitle: 'Passkeys',
+    passkeysIntro: 'Met een passkey meld je je aan met je vingerafdruk, je gezicht of de pincode van je toestel — zonder wachtwoord.',
+    noPasskeys: 'Nog geen passkeys.',
+    addPasskey: 'Passkey toevoegen',
+    passkeyAdded: 'Passkey toegevoegd.',
+    passkeyMeta: (created: string, used: string | null) => `Toegevoegd op ${created}` + (used ? ` · laatst gebruikt op ${used}` : ''),
+    rename: 'Naam wijzigen',
+    remove: 'Verwijderen',
+    passkeyName: 'Naam',
+    passkeyUnsupported: 'Deze browser ondersteunt geen passkeys.',
+    offerTitle: 'Sneller aanmelden met een passkey?',
+    offerText: 'Meld je voortaan aan met je vingerafdruk, je gezicht of de pincode van dit toestel — zonder wachtwoord. Je huidige manier van aanmelden blijft ook werken.',
+    notNow: 'Niet nu',
+    mailPasskeySubject: 'Nieuwe passkey voor je Arcanum-account',
+    mailPasskey: (name: string, accountUrl: string) => `Er werd een passkey ("${name}") aan je account toegevoegd.\n\nWas jij dat niet? Verwijder hem op ${accountUrl} en wijzig je wachtwoord.`,
     errors: {
       invalid: 'E-mailadres of wachtwoord klopt niet.',
       tooMany: 'Te veel pogingen. Probeer het over een kwartier opnieuw.',
@@ -55,6 +74,12 @@ const T = {
       request: 'Deze aanvraag is ongeldig.',
       mail: 'De e-mail kon niet verstuurd worden. Probeer het later opnieuw.',
       linkInvalid: 'Deze aanmeldlink is al gebruikt of verlopen. Vraag een nieuwe aan.',
+      passkeyFailed: 'Aanmelden met een passkey is niet gelukt. Probeer opnieuw.',
+      passkeyUnknown: 'Deze passkey hoort bij geen account (meer). Meld je op een andere manier aan.',
+      passkeyExpired: 'Dat duurde te lang. Probeer opnieuw.',
+      passkeyExists: 'Dit toestel heeft al een passkey voor je account.',
+      passkeyAddFailed: 'De passkey kon niet toegevoegd worden. Probeer opnieuw.',
+      signInFirst: 'Meld je eerst aan.',
     },
     mailSignupSubject: 'Je code voor Arcanum',
     mailSignup: (code: string) => `Je code om je account te bevestigen: ${code}\n\nDe code is 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
@@ -98,6 +123,23 @@ const T = {
     signedInAs: (email: string) => `Connecté en tant que ${email}.`,
     signOut: 'Se déconnecter',
     signedOut: 'Vous êtes déconnecté.',
+    withPasskey: 'Se connecter avec une clé d’accès',
+    accountTitle: 'Votre compte',
+    passkeysTitle: 'Clés d’accès',
+    passkeysIntro: 'Avec une clé d’accès, vous vous connectez avec votre empreinte, votre visage ou le code de votre appareil — sans mot de passe.',
+    noPasskeys: 'Aucune clé d’accès pour l’instant.',
+    addPasskey: 'Ajouter une clé d’accès',
+    passkeyAdded: 'Clé d’accès ajoutée.',
+    passkeyMeta: (created: string, used: string | null) => `Ajoutée le ${created}` + (used ? ` · utilisée pour la dernière fois le ${used}` : ''),
+    rename: 'Renommer',
+    remove: 'Supprimer',
+    passkeyName: 'Nom',
+    passkeyUnsupported: 'Ce navigateur ne prend pas en charge les clés d’accès.',
+    offerTitle: 'Vous connecter plus vite avec une clé d’accès ?',
+    offerText: 'Connectez-vous désormais avec votre empreinte, votre visage ou le code de cet appareil — sans mot de passe. Votre façon actuelle de vous connecter continue aussi de fonctionner.',
+    notNow: 'Pas maintenant',
+    mailPasskeySubject: 'Nouvelle clé d’accès pour votre compte Arcanum',
+    mailPasskey: (name: string, accountUrl: string) => `Une clé d’accès (« ${name} ») a été ajoutée à votre compte.\n\nCe n’était pas vous ? Supprimez-la sur ${accountUrl} et changez votre mot de passe.`,
     errors: {
       invalid: 'Adresse e-mail ou mot de passe incorrect.',
       tooMany: 'Trop de tentatives. Réessayez dans un quart d’heure.',
@@ -111,6 +153,12 @@ const T = {
       request: 'Cette demande n’est pas valable.',
       mail: 'L’e-mail n’a pas pu être envoyé. Réessayez plus tard.',
       linkInvalid: 'Ce lien de connexion a déjà été utilisé ou a expiré. Demandez-en un nouveau.',
+      passkeyFailed: 'La connexion avec une clé d’accès a échoué. Réessayez.',
+      passkeyUnknown: 'Cette clé d’accès n’appartient (plus) à aucun compte. Connectez-vous autrement.',
+      passkeyExpired: 'C’était trop long. Réessayez.',
+      passkeyExists: 'Cet appareil a déjà une clé d’accès pour votre compte.',
+      passkeyAddFailed: 'La clé d’accès n’a pas pu être ajoutée. Réessayez.',
+      signInFirst: 'Connectez-vous d’abord.',
     },
     mailSignupSubject: 'Votre code pour Arcanum',
     mailSignup: (code: string) => `Votre code pour confirmer votre compte : ${code}\n\nLe code est valable 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
@@ -154,6 +202,23 @@ const T = {
     signedInAs: (email: string) => `Signed in as ${email}.`,
     signOut: 'Sign out',
     signedOut: 'You are signed out.',
+    withPasskey: 'Sign in with a passkey',
+    accountTitle: 'Your account',
+    passkeysTitle: 'Passkeys',
+    passkeysIntro: 'With a passkey you sign in with your fingerprint, your face or your device’s PIN — no password.',
+    noPasskeys: 'No passkeys yet.',
+    addPasskey: 'Add a passkey',
+    passkeyAdded: 'Passkey added.',
+    passkeyMeta: (created: string, used: string | null) => `Added on ${created}` + (used ? ` · last used on ${used}` : ''),
+    rename: 'Rename',
+    remove: 'Remove',
+    passkeyName: 'Name',
+    passkeyUnsupported: 'This browser doesn’t support passkeys.',
+    offerTitle: 'Sign in faster with a passkey?',
+    offerText: 'From now on, sign in with your fingerprint, your face or this device’s PIN — no password. The way you sign in today keeps working too.',
+    notNow: 'Not now',
+    mailPasskeySubject: 'New passkey for your Arcanum account',
+    mailPasskey: (name: string, accountUrl: string) => `A passkey ("${name}") was added to your account.\n\nWasn't you? Remove it at ${accountUrl} and change your password.`,
     errors: {
       invalid: 'Email address or password is incorrect.',
       tooMany: 'Too many attempts. Try again in a quarter of an hour.',
@@ -167,6 +232,12 @@ const T = {
       request: 'This request is not valid.',
       mail: 'The email could not be sent. Try again later.',
       linkInvalid: 'This sign-in link has already been used or has expired. Ask for a new one.',
+      passkeyFailed: 'Signing in with a passkey failed. Try again.',
+      passkeyUnknown: 'This passkey doesn’t belong to an account (any more). Sign in another way.',
+      passkeyExpired: 'That took too long. Try again.',
+      passkeyExists: 'This device already has a passkey for your account.',
+      passkeyAddFailed: 'The passkey could not be added. Try again.',
+      signInFirst: 'Sign in first.',
     },
     mailSignupSubject: 'Your code for Arcanum',
     mailSignup: (code: string) => `Your code to confirm your account: ${code}\n\nThe code is valid for 15 minutes. Didn't ask for this? Then ignore this email.`,
@@ -205,18 +276,23 @@ input.code{letter-spacing:.3em;text-align:center;font-size:20px;font-family:ui-m
 button,.button{display:flex;align-items:center;justify-content:center;width:100%;height:44px;margin-top:18px;border-radius:10px;border:1px solid var(--primary);background:var(--primary);color:var(--on-primary);font:600 15px system-ui,sans-serif;text-decoration:none;cursor:pointer}
 .secondary{background:transparent;color:var(--fg);border-color:var(--border)}.row{display:flex;gap:10px}.row>*{flex:1}
 .error{color:var(--danger);font-size:14px;margin:12px 0 0}.hint{font-size:12.5px;margin:6px 0 0}.links{margin-top:18px;font-size:13.5px;display:flex;flex-direction:column;gap:6px}
-a{color:var(--fg)}.or{text-align:center;color:var(--muted);font-size:13px;margin:16px 0 0}`;
+a{color:var(--fg)}.or{text-align:center;color:var(--muted);font-size:13px;margin:16px 0 0}
+.ok{color:var(--fg);font-size:14px}h2{font-size:16px;margin:22px 0 6px}ul.keys{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}
+ul.keys li{border:1px solid var(--border);border-radius:10px;padding:10px 12px}.key-name{font-weight:600}.key-meta{font-size:12.5px;color:var(--muted)}
+ul.keys form{display:flex;gap:8px;margin-top:8px}ul.keys input{height:36px}ul.keys button{width:auto;height:36px;margin:0;padding:0 12px;font-size:13.5px}
+[hidden]{display:none!important}`;
 
-export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}): Response {
+export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean } = {}): Response {
+  const script = opts.passkeys ? '<script src="/passkey.js" defer></script>' : '';
   const html = `<!doctype html><html lang="${language(request)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${esc(title)} · Arcanum</title><style>${STYLE}</style></head>
+<meta name="robots" content="noindex"><title>${esc(title)} · Arcanum</title><style>${STYLE}</style>${script}</head>
 <body><main><div class="brand">arcanum</div>${body}</main></body></html>`;
   return new Response(html, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
+      'Content-Security-Policy': "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
       'X-Frame-Options': 'DENY',
       // Not no-referrer: that makes browsers send `Origin: null` on our own
       // form posts. same-origin still leaks nothing to other sites (Google).
@@ -237,12 +313,16 @@ export function loginPage(request: Request, opts: { continueTo: string; email?: 
     t.signIn,
     `<h1>${t.signIn}</h1>
 <form method="post" action="/login">${hidden('continue', opts.continueTo)}
-<label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="username" required value="${esc(opts.email ?? '')}">
+<label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="username webauthn" required value="${esc(opts.email ?? '')}">
 <label for="password">${t.password}</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 ${error(t, opts.error)}<button type="submit">${t.submitSignIn}</button></form>
+<div data-passkey-box hidden><p class="or">${t.or}</p><button type="button" class="secondary" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button></div>
+<p class="error" role="alert" data-passkey-error hidden></p>
 ${opts.google ? `<p class="or">${t.or}</p><a class="button secondary" href="/google${q}">${t.withGoogle}</a>` : ''}
 <div class="links"><span>${t.noAccount} <a href="/signup${q}">${t.createAccount}</a></span><a href="/reset${q}">${t.forgot}</a></div>`,
-    status
+    status,
+    {},
+    { passkeys: true }
   );
 }
 
@@ -333,7 +413,55 @@ export function messagePage(request: Request, message: string, status = 200) {
   return page(request, 'Arcanum', `<p style="color:var(--fg)">${esc(message)}</p>`, status);
 }
 
-export function accountPage(request: Request, email: string) {
+export interface PasskeyItem {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+const LOCALES: Record<Lang, string> = { nl: 'nl-BE', fr: 'fr-BE', en: 'en-GB' };
+const day = (request: Request, iso: string) => new Date(iso).toLocaleDateString(LOCALES[language(request)], { day: 'numeric', month: 'long', year: 'numeric' });
+
+// The add-a-passkey button: shown by /passkey.js only where the browser can.
+const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
+  `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
+<p class="error" role="alert" data-passkey-error hidden></p>`;
+
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; added?: boolean; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
-  return page(request, 'Arcanum', `<p style="color:var(--fg)">${esc(t.signedInAs(email))}</p><a class="button secondary" href="/logout">${t.signOut}</a>`);
+  const items = opts.passkeys
+    .map(
+      (k) => `<li><div class="key-name">${esc(k.name)}</div><div class="key-meta">${esc(t.passkeyMeta(day(request, k.created_at), k.last_used_at ? day(request, k.last_used_at) : null))}</div>
+<form method="post" action="/account/passkeys">${hidden('id', k.id)}<input name="name" aria-label="${t.passkeyName}" maxlength="60" required value="${esc(k.name)}"><button type="submit" name="action" value="rename" class="secondary">${t.rename}</button><button type="submit" name="action" value="delete" class="secondary">${t.remove}</button></form></li>`
+    )
+    .join('');
+  return page(
+    request,
+    t.accountTitle,
+    `<h1>${t.accountTitle}</h1><p>${esc(t.signedInAs(opts.email))}</p>
+<h2>${t.passkeysTitle}</h2><p>${t.passkeysIntro}</p>
+${opts.added ? `<p class="ok" role="status">${t.passkeyAdded}</p>` : ''}${error(t, opts.error)}
+${items ? `<ul class="keys">${items}</ul>` : `<p>${t.noPasskeys}</p>`}
+${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidden>${t.passkeyUnsupported}</p>
+<a class="button secondary" href="/logout">${t.signOut}</a>`,
+    status,
+    {},
+    { passkeys: true }
+  );
+}
+
+// After signing in another way: once, the offer to add a passkey (or not now).
+export function passkeyOfferPage(request: Request, continueTo: string) {
+  const t = texts(request);
+  return page(
+    request,
+    t.offerTitle,
+    `<h1>${t.offerTitle}</h1><p>${t.offerText}</p>
+${addPasskeyButton(t, continueTo, continueTo)}
+<form method="post" action="/passkey/offer">${hidden('continue', continueTo)}<button type="submit" class="secondary">${t.notNow}</button></form>`,
+    200,
+    {},
+    { passkeys: true }
+  );
 }

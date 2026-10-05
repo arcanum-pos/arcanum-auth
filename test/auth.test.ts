@@ -189,7 +189,12 @@ describe('authorization code flow (the console)', () => {
     expect(wrong.status).toBe(401);
     const ok = await post('/login', { email, password: 'correct horse battery', continue: continueTo });
     expect(ok.status).toBe(302);
-    expect(ok.headers.get('Location')).toBe(continueTo);
+    // No passkey yet: once by way of the offer to add one, then on.
+    expect(ok.headers.get('Location')).toBe(`/passkey/offer?continue=${encodeURIComponent(continueTo)}`);
+    const notNow = await post('/passkey/offer', { continue: continueTo }, { Cookie: cookieOf(ok) });
+    expect(notNow.headers.get('Location')).toBe(continueTo);
+    const again = await post('/login', { email, password: 'correct horse battery', continue: continueTo });
+    expect(again.headers.get('Location')).toBe(continueTo);
   });
 
   it('never redirects to an unregistered redirect_uri, and requires PKCE', async () => {

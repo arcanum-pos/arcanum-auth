@@ -8,6 +8,7 @@
 //   - discovery, JWKS, RP-initiated logout
 // Users sign in with e-mail + password (address verified by a mailed code)
 // or with Google; both link to one user (and one `sub`) by verified e-mail.
+// A passkey (passkeys.ts) is one more way into that same user.
 // Clients — one per installation — are created by the installer via /admin.
 import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, loginOnce, resetConfirm, resetRequest, signup, verify } from './account';
 import { admin } from './admin';
@@ -16,6 +17,8 @@ import { clientSelf } from './clients';
 import type { Env } from './env';
 import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
 import { messagePage, texts } from './pages';
+import { managePasskey, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions } from './passkeys';
+import { PASSKEY_SCRIPT } from './passkey-script';
 import { json, redirect } from './util';
 
 export type { Env };
@@ -45,6 +48,15 @@ export default {
       if (path === '/device/confirm' && method === 'POST') return deviceConfirm(request, env);
       if (path === '/account' && method === 'GET') return account(request, env);
       if (path === '/login/once' && method === 'GET') return loginOnce(request, env);
+      if (path === '/passkey/login/options' && method === 'POST') return passkeyLoginOptions(request, env);
+      if (path === '/passkey/login' && method === 'POST') return passkeyLogin(request, env);
+      if (path === '/passkey/register/options' && method === 'POST') return passkeyRegisterOptions(request, env);
+      if (path === '/passkey/register' && method === 'POST') return passkeyRegister(request, env);
+      if (path === '/passkey/offer' && (method === 'GET' || method === 'POST')) return passkeyOffer(request, env);
+      if (path === '/account/passkeys' && method === 'POST') return managePasskey(request, env);
+      if (path === '/passkey.js' && method === 'GET') {
+        return new Response(PASSKEY_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' } });
+      }
       if (path === '/clients/self' || path === '/clients/self/secret') return clientSelf(request, env, path);
       if (path.startsWith('/admin/')) return admin(request, env, path);
       if (path === '/' && method === 'GET') return redirect('/account');

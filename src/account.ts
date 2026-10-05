@@ -2,7 +2,6 @@ import { decodeJwt as decodeJwtPayload } from 'jose';
 import type { Env } from './env';
 import { sendMail } from './mail';
 import {
-  accountPage,
   deviceCodePage,
   deviceConfirmPage,
   loginPage,
@@ -13,6 +12,7 @@ import {
   texts,
   verifyPage,
 } from './pages';
+import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
 import { clientById, clientIp, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
 import {
   hashPassword,
@@ -38,9 +38,13 @@ const EMAIL_CODE_SECONDS = 900;
 const MAX_CODE_TRIES = 5;
 const googleEnabled = (env: Env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
+// Signed in with a password, a mailed code or Google: on to `continueTo` —
+// by way of the offer to add a passkey, when that's due (passkeys.ts).
 async function signIn(env: Env, user: User, continueTo: string): Promise<Response> {
   const cookie = await createSession(env, user.id, unixNow());
-  return redirect(safeContinue(continueTo), { 'Set-Cookie': cookie });
+  const next = safeContinue(continueTo);
+  const offer = await shouldOfferPasskey(env, user);
+  return redirect(offer ? `/passkey/offer?continue=${encodeURIComponent(next)}` : next, { 'Set-Cookie': cookie });
 }
 
 // A form post from anywhere but these pages is refused (CSRF).
@@ -378,5 +382,6 @@ export async function loginOnce(request: Request, env: Env): Promise<Response> {
 
 export async function account(request: Request, env: Env): Promise<Response> {
   const session = await currentSession(env, request);
-  return session ? accountPage(request, session.user.email) : redirect('/login?continue=%2Faccount');
+  if (!session) return redirect('/login?continue=%2Faccount');
+  return accountWithPasskeys(request, env, session.user, { added: new URL(request.url).searchParams.get('passkey') === 'added' });
 }

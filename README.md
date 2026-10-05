@@ -19,6 +19,28 @@ People sign in with **e-mail + password** (the address is proven with a
 Both lead to the same user — the same `sub` — when the verified e-mail is
 the same, so switching sign-in method never breaks an Arcanum membership.
 
+**Passkeys** are one more way into that same user (`src/passkeys.ts`,
+verified with `@simplewebauthn/server`): fingerprint, face or the device's
+PIN, no password, no e-mail to type. Nothing changes for the installations
+— same `sub`, same claims.
+- **Adding one:** on `/account` → *Passkey toevoegen*; and once after
+  signing in another way (password, mailed code, Google), a page offers it
+  (*Niet nu* = not asked again for 30 days; a browser without passkeys
+  skips the page). The owner gets a mail whenever one is added.
+- **Signing in:** *Aanmelden met een passkey* on the login page, or the
+  browser's own suggestion in the e-mail field (`autocomplete="username
+  webauthn"`). Discoverable credentials, so no e-mail is asked.
+- **Relying party = the ISSUER's host** (`login.kaboutersoft.be`). A passkey
+  only works there: changing that host would leave every passkey unusable
+  (people fall back to their password, Google or a reset).
+- User verification required, attestation `none`, single-use challenges
+  (5 minutes), the signature counter kept and checked, the user handle
+  must match. Guests can't add one. `/account` lists, renames and removes
+  them.
+- The pages' only script is `/passkey.js` (`src/passkey-script.ts`, plain
+  ES2017), on the pages that offer passkeys; the CSP allows scripts and
+  fetches from this origin only. Without it every page still works.
+
 **Guests** are for the demo's "Direct proberen": the bootstrapper creates
 one and a one-time sign-in link for it (both with the admin key). An expired
 guest is refused everywhere at once (session, every grant, userinfo); an
@@ -41,6 +63,11 @@ what the installer will call when it sets up a new instance.
 | `GET /userinfo` | the user behind an access token |
 | `GET /logout` | ends the session; back to a *registered* `post_logout_redirect_uri` |
 | `/login`, `/signup`, `/verify`, `/reset`, `/google`, `/device`, `/account` | the pages people see (nl/fr/en from the browser, light/dark) |
+| `POST /passkey/login/options`, `POST /passkey/login` | sign in with a passkey (JSON from this origin) → `{ redirect }` + session cookie |
+| `POST /passkey/register/options`, `POST /passkey/register` | add a passkey (signed in; JSON from this origin) |
+| `GET/POST /passkey/offer` | the one-time offer after signing in another way (POST = "not now") |
+| `POST /account/passkeys` | rename (`action=rename`) or remove (`action=delete`) one of your own |
+| `GET /passkey.js` | the pages' one script (WebAuthn in the browser) |
 | `POST/GET /admin/clients`, `DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`); a client can carry `instance_url`, `owner_email`, `owner_sub` |
 | `POST /admin/guests` | a **guest** — a demo visitor without an account: no password, `guest-…@guest.invalid` (unverified), gone after `lifetime_hours` (default 5, max 24) |
 | `POST /admin/login-links` | a **one-time sign-in link** for a guest (single use, 60 s) that continues to an address on an origin some client registered |

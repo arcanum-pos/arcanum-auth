@@ -9,6 +9,8 @@ export async function cleanup(env: Env, now = new Date()): Promise<Record<string
   const ago = (hours: number) => new Date(now.getTime() - hours * 3600_000).toISOString();
   const expiredGuests = `SELECT id FROM users WHERE guest = 1 AND expires_at <= ?`;
   const steps: [string, string, unknown[]][] = [
+    ['passkeys', `DELETE FROM passkeys WHERE user_id IN (${expiredGuests})`, [iso]],
+    ['webauthn_challenges', 'DELETE FROM webauthn_challenges WHERE expires_at <= ?', [iso]],
     ['login_links', `DELETE FROM login_links WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [ago(1), iso]],
     ['sessions', `DELETE FROM sessions WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [iso, iso]],
     ['refresh_tokens', `DELETE FROM refresh_tokens WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [iso, iso]],
