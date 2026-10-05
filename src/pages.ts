@@ -61,6 +61,11 @@ const T = {
     notNow: 'Niet nu',
     mailPasskeySubject: 'Nieuwe passkey voor je Arcanum-account',
     mailPasskey: (name: string, accountUrl: string) => `Er werd een passkey ("${name}") aan je account toegevoegd.\n\nWas jij dat niet? Verwijder hem op ${accountUrl} en wijzig je wachtwoord.`,
+    securityKey: 'Beveiligingssleutel',
+    phone: 'Telefoon',
+    kindSecurityKey: (how: string) => `Beveiligingssleutel${how ? ` · ${how}` : ''}`,
+    kindSynced: 'Gesynchroniseerd tussen je toestellen',
+    kindDevice: 'Alleen op het toestel waarop hij gemaakt werd',
     errors: {
       invalid: 'E-mailadres of wachtwoord klopt niet.',
       tooMany: 'Te veel pogingen. Probeer het over een kwartier opnieuw.',
@@ -140,6 +145,11 @@ const T = {
     notNow: 'Pas maintenant',
     mailPasskeySubject: 'Nouvelle clé d’accès pour votre compte Arcanum',
     mailPasskey: (name: string, accountUrl: string) => `Une clé d’accès (« ${name} ») a été ajoutée à votre compte.\n\nCe n’était pas vous ? Supprimez-la sur ${accountUrl} et changez votre mot de passe.`,
+    securityKey: 'Clé de sécurité',
+    phone: 'Téléphone',
+    kindSecurityKey: (how: string) => `Clé de sécurité${how ? ` · ${how}` : ''}`,
+    kindSynced: 'Synchronisée entre vos appareils',
+    kindDevice: 'Uniquement sur l’appareil où elle a été créée',
     errors: {
       invalid: 'Adresse e-mail ou mot de passe incorrect.',
       tooMany: 'Trop de tentatives. Réessayez dans un quart d’heure.',
@@ -219,6 +229,11 @@ const T = {
     notNow: 'Not now',
     mailPasskeySubject: 'New passkey for your Arcanum account',
     mailPasskey: (name: string, accountUrl: string) => `A passkey ("${name}") was added to your account.\n\nWasn't you? Remove it at ${accountUrl} and change your password.`,
+    securityKey: 'Security key',
+    phone: 'Phone',
+    kindSecurityKey: (how: string) => `Security key${how ? ` · ${how}` : ''}`,
+    kindSynced: 'Synced across your devices',
+    kindDevice: 'Only on the device it was made on',
     errors: {
       invalid: 'Email address or password is incorrect.',
       tooMany: 'Too many attempts. Try again in a quarter of an hour.',
@@ -418,10 +433,17 @@ export interface PasskeyItem {
   name: string;
   created_at: string;
   last_used_at: string | null;
+  // How it connects: a USB/NFC/Bluetooth key, synced (iCloud, Google …), or this device only.
+  kind: 'securityKey' | 'synced' | 'device';
+  transports: string[];
 }
 
 const LOCALES: Record<Lang, string> = { nl: 'nl-BE', fr: 'fr-BE', en: 'en-GB' };
-const day = (request: Request, iso: string) => new Date(iso).toLocaleDateString(LOCALES[language(request)], { day: 'numeric', month: 'long', year: 'numeric' });
+// Date and time as people here read it (Belgian time, whatever the server's).
+const when = (request: Request, iso: string) =>
+  new Date(iso).toLocaleString(LOCALES[language(request)], { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Brussels' });
+const kindOf = (t: Texts, k: PasskeyItem) =>
+  k.kind === 'securityKey' ? t.kindSecurityKey(k.transports.map((x) => x.toUpperCase().replace('BLE', 'Bluetooth')).join(', ')) : k.kind === 'synced' ? t.kindSynced : t.kindDevice;
 
 // The add-a-passkey button: shown by /passkey.js only where the browser can.
 const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
@@ -432,7 +454,7 @@ export function accountPage(request: Request, opts: { email: string; passkeys: P
   const t = texts(request);
   const items = opts.passkeys
     .map(
-      (k) => `<li><div class="key-name">${esc(k.name)}</div><div class="key-meta">${esc(t.passkeyMeta(day(request, k.created_at), k.last_used_at ? day(request, k.last_used_at) : null))}</div>
+      (k) => `<li><div class="key-name">${esc(k.name)}</div><div class="key-meta">${esc(kindOf(t, k))}</div><div class="key-meta">${esc(t.passkeyMeta(when(request, k.created_at), k.last_used_at ? when(request, k.last_used_at) : null))}</div>
 <form method="post" action="/account/passkeys">${hidden('id', k.id)}<input name="name" aria-label="${t.passkeyName}" maxlength="60" required value="${esc(k.name)}"><button type="submit" name="action" value="rename" class="secondary">${t.rename}</button><button type="submit" name="action" value="delete" class="secondary">${t.remove}</button></form></li>`
     )
     .join('');

@@ -95,11 +95,13 @@ class Authenticator {
     return concat(await sha256(utf8(rpId)), Uint8Array.of(flags), counter, attested ?? new Uint8Array());
   }
 
-  async create(options: any, opts: { uv?: boolean; origin?: string; rpId?: string } = {}) {
+  async create(options: any, opts: { uv?: boolean; origin?: string; rpId?: string; aaguid?: string; transports?: string[]; synced?: boolean } = {}) {
     const jwk = (await crypto.subtle.exportKey('jwk', this.keys.publicKey)) as JsonWebKey;
     const cose = new Map<number, unknown>([[1, 2], [3, -7], [-1, 1], [-2, fromB64u(jwk.x!)], [-3, fromB64u(jwk.y!)]]);
-    const attested = concat(new Uint8Array(16), Uint8Array.of(0, this.id.length), this.id, cbor(cose));
-    const authData = await this.authData(UP | (opts.uv === false ? 0 : UV) | BE | BS | AT, opts.rpId ?? RP_ID, attested);
+    const aaguid = opts.aaguid ? Uint8Array.from(opts.aaguid.replace(/-/g, '').match(/../g)!, (h) => parseInt(h, 16)) : new Uint8Array(16);
+    const attested = concat(aaguid, Uint8Array.of(0, this.id.length), this.id, cbor(cose));
+    const synced = opts.synced === false ? 0 : BE | BS;
+    const authData = await this.authData(UP | (opts.uv === false ? 0 : UV) | synced | AT, opts.rpId ?? RP_ID, attested);
     this.userHandle = options.user.id;
     const clientData = utf8(JSON.stringify({ type: 'webauthn.create', challenge: options.challenge, origin: opts.origin ?? ISSUER, crossOrigin: false }));
     return {
@@ -107,7 +109,7 @@ class Authenticator {
       rawId: b64u(this.id),
       type: 'public-key',
       clientExtensionResults: {},
-      response: { clientDataJSON: b64u(clientData), attestationObject: b64u(cbor(new Map<string, unknown>([['fmt', 'none'], ['attStmt', new Map()], ['authData', authData]]))), transports: ['internal', 'hybrid'] },
+      response: { clientDataJSON: b64u(clientData), attestationObject: b64u(cbor(new Map<string, unknown>([['fmt', 'none'], ['attStmt', new Map()], ['authData', authData]]))), transports: opts.transports ?? ['internal', 'hybrid'] },
     };
   }
 
@@ -184,6 +186,29 @@ describe('adding a passkey', () => {
     const o3 = await (await postJson('/passkey/register/options', {}, { Cookie: a.cookie })).json();
     expect((await postJson('/passkey/register', { response: await auth.create(o3, { rpId: 'evil.test' }) }, { Cookie: a.cookie })).status).toBe(400);
     expect(await row(auth.id)).toBeNull();
+  });
+
+  it('names it by what it is: a known model, a security key, a phone — else the device; the list shows which kind and when', async () => {
+    const { cookie } = await signUp(uniqueEmail('names'));
+    const add = async (create: Record<string, unknown>, browserName = 'Mac') => {
+      const auth = await new Authenticator().init();
+      const options = await (await postJson('/passkey/register/options', {}, { Cookie: cookie })).json();
+      expect((await postJson('/passkey/register', { response: await auth.create(options, create), name: browserName }, { Cookie: cookie })).status).toBe(200);
+      return (await row(auth.id))!;
+    };
+    expect(await add({ aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd' })).toMatchObject({ name: 'iCloud Keychain', aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd' });
+    expect(await add({ transports: ['usb'], synced: false })).toMatchObject({ name: 'Beveiligingssleutel', device_type: 'singleDevice', aaguid: '00000000-0000-0000-0000-000000000000' });
+    expect((await add({ transports: ['hybrid'] })).name).toBe('Telefoon');
+    expect((await add({ transports: ['internal'], synced: false }, 'Windows')).name).toBe('Windows');
+    const page = await (await call('/account', { headers: { Cookie: cookie } })).text();
+    expect(page).toContain('Beveiligingssleutel · USB');
+    expect(page).toContain('Gesynchroniseerd tussen je toestellen');
+    expect(page).toContain('Alleen op het toestel waarop hij gemaakt werd');
+    // Date and time, Belgian time.
+    expect(page).toMatch(/Toegevoegd op \d{1,2} \w+ \d{4} om \d{2}:\d{2}/);
+    const en = await (await call('/account', { headers: { Cookie: cookie, 'Accept-Language': 'en' } })).text();
+    expect(en).toMatch(/Added on \d{1,2} \w+ \d{4} at \d{2}:\d{2}/);
+    expect(en).toContain('Security key · USB'); // the kind follows the language; the stored name doesn't
   });
 
   it('a device that already has one for the account is excluded', async () => {

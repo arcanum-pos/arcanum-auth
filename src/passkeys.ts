@@ -29,6 +29,32 @@ import { clientIp, createSession, currentSession, recordAttempt, tooManyAttempts
 import { base64url, fromBase64url, inSeconds, json, nowIso, readForm, redirect, safeContinue, sameOrigin, sha256, unixNow } from './util';
 
 const CHALLENGE_SECONDS = 300;
+
+// Well-known authenticators by the model id (AAGUID) a passkey reports — a
+// name for the list on /account. Anything else is named by how it connects.
+const KNOWN_AUTHENTICATORS: Record<string, string> = {
+  'fbfc3007-154e-4ecc-8c0b-6e020557d7bd': 'iCloud Keychain',
+  'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4': 'Google Password Manager',
+  'adce0002-35bc-c60a-648b-0b25f1f05503': 'Chrome (Mac)',
+  '08987058-cadc-4b81-b6e1-30de50dcbe96': 'Windows Hello',
+  '9ddd1817-af5a-4672-a2b9-3e3dd95000a9': 'Windows Hello',
+  '6028b017-b1d4-4c02-b4b3-afcdafc96bb2': 'Windows Hello',
+  'bada5566-a7aa-401f-bd96-45619a55120d': '1Password',
+  'd548826e-79b4-db40-a3d8-11116f7e8349': 'Bitwarden',
+};
+
+const isSecurityKey = (transports: string[]) => transports.some((t) => t === 'usb' || t === 'nfc' || t === 'ble') && !transports.includes('internal');
+
+// The name a new passkey gets (renamable on /account): a known model, else
+// "Beveiligingssleutel" for a USB/NFC/Bluetooth key, "Telefoon" for one
+// on a phone (the QR code), else the device the browser runs on.
+function defaultName(request: Request, aaguid: string, transports: string[], browserName: unknown): string {
+  const t = texts(request);
+  if (KNOWN_AUTHENTICATORS[aaguid]) return KNOWN_AUTHENTICATORS[aaguid];
+  if (isSecurityKey(transports)) return t.securityKey;
+  if (transports.length === 1 && transports[0] === 'hybrid') return t.phone;
+  return (typeof browserName === 'string' ? browserName.trim().slice(0, 60) : '') || 'Passkey';
+}
 const OFFER_AGAIN_DAYS = 30;
 
 interface PasskeyRow {
@@ -37,6 +63,7 @@ interface PasskeyRow {
   public_key: string;
   counter: number;
   transports: string;
+  device_type: string;
   name: string;
   created_at: string;
   last_used_at: string | null;
@@ -203,19 +230,21 @@ export async function passkeyRegister(request: Request, env: Env): Promise<Respo
   if (!info) return fail(request, 'passkeyAddFailed', 400);
   if (await env.DB.prepare('SELECT 1 FROM passkeys WHERE id = ?').bind(info.credential.id).first()) return fail(request, 'passkeyExists', 409);
 
-  const name = (typeof b.name === 'string' ? b.name.trim().slice(0, 60) : '') || 'Passkey';
+  const transports = info.credential.transports ?? response.response.transports ?? [];
+  const name = defaultName(request, info.aaguid, transports, b.name);
   await env.DB.prepare(
-    'INSERT INTO passkeys (id, user_id, public_key, counter, transports, device_type, backed_up, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO passkeys (id, user_id, public_key, counter, transports, device_type, backed_up, name, aaguid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
     .bind(
       info.credential.id,
       user.id,
       base64url(info.credential.publicKey),
       info.credential.counter,
-      JSON.stringify(info.credential.transports ?? response.response.transports ?? []),
+      JSON.stringify(transports),
       info.credentialDeviceType,
       info.credentialBackedUp ? 1 : 0,
       name,
+      info.aaguid,
       nowIso()
     )
     .run();
@@ -246,7 +275,17 @@ export async function passkeyOffer(request: Request, env: Env): Promise<Response
 // --- /account: the list, rename, remove.
 
 export async function accountWithPasskeys(request: Request, env: Env, user: User, opts: { added?: boolean; error?: ErrorKey | null } = {}, status = 200) {
-  const passkeys: PasskeyItem[] = (await passkeysOf(env, user.id)).map((k) => ({ id: k.id, name: k.name, created_at: k.created_at, last_used_at: k.last_used_at }));
+  const passkeys: PasskeyItem[] = (await passkeysOf(env, user.id)).map((k) => {
+    const transports = JSON.parse(k.transports) as string[];
+    return {
+      id: k.id,
+      name: k.name,
+      created_at: k.created_at,
+      last_used_at: k.last_used_at,
+      kind: isSecurityKey(transports) ? 'securityKey' : k.device_type === 'multiDevice' ? 'synced' : 'device',
+      transports: transports.filter((t) => t === 'usb' || t === 'nfc' || t === 'ble'),
+    };
+  });
   return accountPage(request, { email: user.email, passkeys, ...opts }, status);
 }
 
