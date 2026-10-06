@@ -13,7 +13,7 @@ import {
   verifyPage,
 } from './pages';
 import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
-import { clientById, clientIp, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
+import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
 import {
   hashPassword,
   inSeconds,
@@ -36,6 +36,9 @@ import {
 
 const EMAIL_CODE_SECONDS = 900;
 const MAX_CODE_TRIES = 5;
+// Per e-mail address, per hour: wrong codes (all its codes together), and codes asked.
+const MAX_CODE_TRIES_PER_ADDRESS = 10;
+const MAX_CODES_PER_ADDRESS = 5;
 const googleEnabled = (env: Env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
 // Signed in with a password, a mailed code or Google: on to `continueTo` —
@@ -99,7 +102,8 @@ export async function signup(request: Request, env: Env): Promise<Response> {
   if ((form.password || '').length < 10) return again('passwordShort');
   if (await userByEmail(env, email)) return again('exists');
   const ipKey = `mail-ip:${clientIp(request)}`;
-  if (await tooManyAttempts(env, ipKey, 10, 3600)) return again('tooMany');
+  const addressKey = `mail-email:${email}`;
+  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) return again('tooMany');
 
   const t = texts(request);
   const code = newEmailCode();
@@ -110,6 +114,7 @@ export async function signup(request: Request, env: Env): Promise<Response> {
     .bind(id, email, await sha256(code), name || email.split('@')[0], await hashPassword(form.password, iterations(env)), inSeconds(EMAIL_CODE_SECONDS))
     .run();
   await recordAttempt(env, ipKey);
+  await recordAttempt(env, addressKey);
   try {
     await sendMail(env, email, t.mailSignupSubject, t.mailSignup(code));
   } catch (err) {
@@ -131,12 +136,18 @@ interface EmailCodeRow {
   used_at: string | null;
 }
 
-// A mailed code: right, not expired, not used, fewer than MAX_CODE_TRIES wrong.
+// A mailed code: right, not expired, not used, fewer than MAX_CODE_TRIES wrong
+// — and, per e-mail address across all its codes, fewer than
+// MAX_CODE_TRIES_PER_ADDRESS wrong in an hour. Per code alone, an attacker
+// with many IP addresses could ask many codes for one address and guess on each.
 async function checkEmailCode(env: Env, id: string, purpose: 'signup' | 'reset', code: string): Promise<EmailCodeRow | 'invalid' | 'unknown'> {
   const row = await env.DB.prepare('SELECT * FROM email_codes WHERE id = ? AND purpose = ?').bind(id, purpose).first<EmailCodeRow>();
   if (!row || row.used_at || row.expires_at <= nowIso() || row.attempts >= MAX_CODE_TRIES) return 'unknown';
+  const addressKey = `code-email:${row.email}`;
+  if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS, 3600)) return 'unknown';
   if (!timingSafeEqual(await sha256(code.trim()), row.code_hash)) {
     await env.DB.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE id = ?').bind(id).run();
+    await recordAttempt(env, addressKey);
     return 'invalid';
   }
   const claimed = await env.DB.prepare('UPDATE email_codes SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(nowIso(), id).run();
@@ -182,8 +193,13 @@ export async function resetRequest(request: Request, env: Env): Promise<Response
   const email = normalizeEmail(form.email || '');
   if (!isEmail(email)) return resetRequestPage(request, { continueTo, error: 'emailInvalid' }, 400);
   const ipKey = `mail-ip:${clientIp(request)}`;
-  if (await tooManyAttempts(env, ipKey, 10, 3600)) return resetRequestPage(request, { continueTo, error: 'tooMany' }, 429);
+  // Also per address — whether or not it has an account (no enumeration).
+  const addressKey = `mail-email:${email}`;
+  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) {
+    return resetRequestPage(request, { continueTo, error: 'tooMany' }, 429);
+  }
   await recordAttempt(env, ipKey);
+  await recordAttempt(env, addressKey);
 
   const id = randomToken(16);
   const code = newEmailCode();
@@ -225,6 +241,7 @@ export async function resetConfirm(request: Request, env: Env): Promise<Response
 
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
+const GOOGLE_STATE_COOKIE = '__Host-arcanum_google_state';
 
 export async function googleStart(request: Request, env: Env): Promise<Response> {
   if (!googleEnabled(env)) return messagePage(request, texts(request).errors.google, 404);
@@ -235,6 +252,7 @@ export async function googleStart(request: Request, env: Env): Promise<Response>
     .bind(await sha256(state), verifier, continueTo, inSeconds(600))
     .run();
   const target = new URL(GOOGLE_AUTH);
+  const cookie = `${GOOGLE_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`;
   target.search = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
     redirect_uri: `${env.ISSUER}/callback/google`,
@@ -245,18 +263,24 @@ export async function googleStart(request: Request, env: Env): Promise<Response>
     code_challenge_method: 'S256',
     prompt: 'select_account',
   }).toString();
-  return redirect(target.toString());
+  return redirect(target.toString(), { 'Set-Cookie': cookie });
 }
 
 export async function googleCallback(request: Request, env: Env): Promise<Response> {
   const t = texts(request);
   const p = new URL(request.url).searchParams;
+  // Only the browser that started this Google sign-in may finish it (its
+  // cookie names that state) — else someone's callback link would sign a
+  // victim in as them (login CSRF). The cookie is spent either way.
+  const browserState = cookieValue(request, GOOGLE_STATE_COOKIE);
+  const fromThisBrowser = !!browserState && timingSafeEqual(browserState, p.get('state') || '');
   const stateHash = await sha256(p.get('state') || '');
   const saved = await env.DB.prepare('SELECT * FROM oauth_states WHERE state_hash = ? AND expires_at > ?')
     .bind(stateHash, nowIso())
     .first<{ code_verifier: string; continue_to: string }>();
   await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash = ?').bind(stateHash).run();
-  if (!saved || !p.get('code') || !googleEnabled(env)) return messagePage(request, t.errors.google, 400);
+  const spent = { 'Set-Cookie': `${GOOGLE_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0` };
+  if (!saved || !fromThisBrowser || !p.get('code') || !googleEnabled(env)) return messagePage(request, t.errors.google, 400, spent);
 
   const res = await fetch(env.GOOGLE_TOKEN_URL || GOOGLE_TOKEN, {
     method: 'POST',

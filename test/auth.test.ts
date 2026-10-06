@@ -362,9 +362,9 @@ describe('sign in with Google', () => {
     expect(target.origin).toBe('https://accounts.google.com');
     expect(target.searchParams.get('redirect_uri')).toBe(`${ISSUER}/callback/google`);
 
-    const back = await call(`/callback/google?code=${encodeURIComponent(email)}&state=${target.searchParams.get('state')}`);
+    const back = await call(`/callback/google?code=${encodeURIComponent(email)}&state=${target.searchParams.get('state')}`, { headers: { Cookie: cookieOf(start) } });
     expect(back.status).toBe(302);
-    expect(cookieOf(back)).toMatch(/^arcanum_auth=/);
+    expect(cookieOf(back)).toMatch(/^__Host-arcanum_auth=/);
     const after = await env.DB.prepare('SELECT id, google_sub FROM users WHERE email = ?').bind(email).first<{ id: string; google_sub: string }>();
     expect(after).toEqual({ id: before!.id, google_sub: `google-${email}` });
   });
@@ -372,10 +372,22 @@ describe('sign in with Google', () => {
   it('refuses an unverified Google address and a replayed state', async () => {
     const start = await call('/google?continue=%2Faccount');
     const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
-    const res = await call(`/callback/google?code=unverified-${uniqueEmail('g')}&state=${state}`);
+    const browser = { headers: { Cookie: cookieOf(start) } };
+    const res = await call(`/callback/google?code=unverified-${uniqueEmail('g')}&state=${state}`, browser);
     expect(res.status).toBe(400);
-    const replay = await call(`/callback/google?code=${uniqueEmail('g2')}&state=${state}`);
+    const replay = await call(`/callback/google?code=${uniqueEmail('g2')}&state=${state}`, browser);
     expect(replay.status).toBe(400);
+  });
+
+  it("only finishes in the browser that started it (no login CSRF): someone else's callback link signs nobody in", async () => {
+    const start = await call('/google?continue=%2Faccount');
+    const stateCookie = start.headers.get('Set-Cookie')!;
+    expect(stateCookie).toMatch(/^__Host-arcanum_google_state=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax/);
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
+    const link = `/callback/google?code=${encodeURIComponent(uniqueEmail('attacker'))}&state=${state}`;
+    // The victim's browser: no state cookie, or another login's.
+    expect((await call(link)).status).toBe(400);
+    expect((await call(link, { headers: { Cookie: '__Host-arcanum_google_state=someone-elses' } })).status).toBe(400);
   });
 });
 

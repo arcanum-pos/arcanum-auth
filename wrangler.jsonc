@@ -25,7 +25,10 @@
 	"dev": {
 		"port": 8788
 	},
-	"vars": {
+	// PUBLIC_RATE_LIMITER (src/ratelimit.ts): 20 a minute per key — device
+	// codes per client, Google sign-ins and passkey challenges per IP.
+	"ratelimits": [{ "name": "PUBLIC_RATE_LIMITER", "namespace_id": "3001", "simple": { "limit": 20, "period": 60 } }],
+		"vars": {
 		// Must equal what arcanum's identity_providers.issuer_url (and the BFF's
 		// default IdP) is configured with, character for character — the BFF
 		// compares the id_token's `iss` to it. No trailing slash.

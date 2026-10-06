@@ -3,6 +3,7 @@ import { publicKeys } from './keys';
 import { messagePage, texts } from './pages';
 import { authenticateClient, clientById, currentSession, endSession, userById, type Client } from './store';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
+import { withinLimit } from './ratelimit';
 import { inSeconds, json, newUserCode, nowIso, oauthError, pkceMatches, randomToken, readForm, redirect, sha256, unixNow } from './util';
 
 const SUPPORTED_SCOPES = ['openid', 'profile', 'email', 'offline_access'];
@@ -219,6 +220,10 @@ export async function deviceAuthorization(request: Request, env: Env): Promise<R
   const form = await readForm(request);
   const client = await clientById(env, form.client_id);
   if (!client) return oauthError('invalid_client', 'Unknown client', 401);
+  // Per client (installation), not per IP: the kassas' requests come from
+  // their installation's bff, i.e. Cloudflare's shared addresses. A client_id
+  // is public; this keeps one from being used to flood the database.
+  if (!(await withinLimit(env, `device-code:${client.id}`))) return oauthError('slow_down', 'Too many device codes for this client', 429);
   const deviceCode = randomToken(32);
   let userCode = newUserCode();
   for (let i = 0; i < 3; i++) {

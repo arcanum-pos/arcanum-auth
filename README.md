@@ -51,6 +51,26 @@ tokens and links, and purges old protocol state.
 created through the admin API (`/admin/clients`, bearer `ADMIN_API_KEY`) —
 what the installer will call when it sets up a new instance.
 
+## Security notes
+
+- **Sessions** on the issuer: `__Host-arcanum_auth` (Secure, HttpOnly,
+  SameSite=Lax, Path=/, no Domain — no sibling subdomain can plant one).
+- **Form posts and the passkey JSON** only from this exact origin.
+- **Mailed codes** (sign-up, password reset): 6 digits, 5 tries per code,
+  and per e-mail address at most 5 codes and 10 wrong tries an hour (across
+  all its codes) — on top of the per-IP limits, so many IPs can't guess
+  together. Sign-in: 10 wrong passwords per address per 15 minutes.
+- **What writes a row without anyone signed in** — a device code (per
+  client), a Google sign-in's state and a passkey challenge (per IP) — is
+  limited in memory (`PUBLIC_RATE_LIMITER`, 20 a minute), so it can't eat
+  D1's daily write quota.
+- **Google sign-in** finishes only in the browser that started it (its state
+  in a `__Host-` cookie): no login CSRF.
+- **The admin API** (`/admin/*`) only over a service binding (the
+  bootstrapper's): a request from the internet (`CF-Connecting-IP`) gets a
+  404, even with the right key.
+- **HSTS** on every answer; a CSP and no framing on every page.
+
 ## Endpoints
 
 | Path | What |

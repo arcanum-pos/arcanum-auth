@@ -1,5 +1,9 @@
 export interface Env {
   DB: D1Database;
+  // Requests that write a row without anyone signed in (a device code, a
+  // Google sign-in's state, a passkey challenge): limited per caller in
+  // memory — no D1 write to count them, so they can't eat the daily quota.
+  PUBLIC_RATE_LIMITER?: RateLimit;
   // The issuer URL, exactly as clients are configured with (no trailing slash).
   ISSUER: string;
   PBKDF2_ITERATIONS?: string;

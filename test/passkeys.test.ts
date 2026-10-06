@@ -228,7 +228,7 @@ describe('signing in with a passkey', () => {
     expect(res.status, await res.clone().text()).toBe(200);
     expect(await res.json()).toEqual({ redirect: '/device?user_code=BCDF-GHJK' });
     const session = cookieOf(res);
-    expect(session).toMatch(/^arcanum_auth=/);
+    expect(session).toMatch(/^__Host-arcanum_auth=/);
     expect(await (await call('/account', { headers: { Cookie: session } })).text()).toContain(email);
     expect((await row(auth.id))!.last_used_at).toBeTruthy();
     // Somewhere else than our own pages: /account.

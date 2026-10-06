@@ -20,11 +20,31 @@ import { messagePage, texts } from './pages';
 import { managePasskey, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions } from './passkeys';
 import { PASSKEY_SCRIPT } from './passkey-script';
 import { json, redirect } from './util';
+import { tooManyRequests, withinLimit } from './ratelimit';
 
 export type { Env };
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const response = await handle(request, env);
+    // Browsers only ever reach this over https.
+    if (!response.headers.has('Strict-Transport-Security')) {
+      const out = new Response(response.body, response);
+      out.headers.set('Strict-Transport-Security', 'max-age=31536000');
+      return out;
+    }
+    return response;
+  },
+
+  // Hourly (triggers.crons): expired guests and old protocol state.
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    console.log(JSON.stringify({ event: 'arcanum-auth cleanup', deleted: await cleanup(env) }));
+  },
+};
+
+const tooMany = tooManyRequests;
+
+async function handle(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = request.method;
@@ -42,13 +62,19 @@ export default {
       if (path === '/verify' && (method === 'GET' || method === 'POST')) return verify(request, env);
       if (path === '/reset' && (method === 'GET' || method === 'POST')) return resetRequest(request, env);
       if (path === '/reset/confirm' && method === 'POST') return resetConfirm(request, env);
-      if (path === '/google' && method === 'GET') return googleStart(request, env);
+      if (path === '/google' && method === 'GET') {
+        if (!(await withinLimit(env, `google:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`))) return tooMany();
+        return googleStart(request, env);
+      }
       if (path === '/callback/google' && method === 'GET') return googleCallback(request, env);
       if (path === '/device' && (method === 'GET' || method === 'POST')) return devicePage(request, env);
       if (path === '/device/confirm' && method === 'POST') return deviceConfirm(request, env);
       if (path === '/account' && method === 'GET') return account(request, env);
       if (path === '/login/once' && method === 'GET') return loginOnce(request, env);
-      if (path === '/passkey/login/options' && method === 'POST') return passkeyLoginOptions(request, env);
+      if (path === '/passkey/login/options' && method === 'POST') {
+        if (!(await withinLimit(env, `passkey-options:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`))) return tooMany();
+        return passkeyLoginOptions(request, env);
+      }
       if (path === '/passkey/login' && method === 'POST') return passkeyLogin(request, env);
       if (path === '/passkey/register/options' && method === 'POST') return passkeyRegisterOptions(request, env);
       if (path === '/passkey/register' && method === 'POST') return passkeyRegister(request, env);
@@ -58,7 +84,14 @@ export default {
         return new Response(PASSKEY_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' } });
       }
       if (path === '/clients/self' || path === '/clients/self/secret') return clientSelf(request, env, path);
-      if (path.startsWith('/admin/')) return admin(request, env, path);
+      // The admin API is for the bootstrapper, over its service binding —
+      // never from the internet (Cloudflare marks those with
+      // CF-Connecting-IP; a service binding's calls don't carry it), even
+      // with the right key.
+      if (path.startsWith('/admin/')) {
+        if (request.headers.has('CF-Connecting-IP')) return json({ error: 'Not found' }, 404);
+        return admin(request, env, path);
+      }
       if (path === '/' && method === 'GET') return redirect('/account');
       if (path === '/health') return json({ ok: true });
       return messagePage(request, texts(request).errors.request, 404);
@@ -66,10 +99,4 @@ export default {
       console.error('arcanum-auth error', err);
       return json({ error: 'server_error' }, 500);
     }
-  },
-
-  // Hourly (triggers.crons): expired guests and old protocol state.
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    console.log(JSON.stringify({ event: 'arcanum-auth cleanup', deleted: await cleanup(env) }));
-  },
-};
+}

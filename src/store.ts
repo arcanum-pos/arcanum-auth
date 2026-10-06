@@ -112,7 +112,9 @@ export async function authenticateClient(env: Env, request: Request, form: Recor
 
 // --- Browser sessions on the issuer itself.
 
-export const SESSION_COOKIE = 'arcanum_auth';
+// __Host-: only Secure, Path=/ and without a Domain — no sibling subdomain
+// of the issuer's (start., arcanum. …) can plant or overwrite it.
+export const SESSION_COOKIE = '__Host-arcanum_auth';
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
 
 // `until`: a guest's session ends with the guest, not after 14 days.
@@ -127,7 +129,7 @@ export async function createSession(env: Env, userId: string, authTime: number, 
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
-function cookieValue(request: Request, name: string): string | null {
+export function cookieValue(request: Request, name: string): string | null {
   for (const part of (request.headers.get('Cookie') || '').split(';')) {
     const [k, ...v] = part.trim().split('=');
     if (k === name) return v.join('=');

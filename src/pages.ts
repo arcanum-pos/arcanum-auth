@@ -424,8 +424,8 @@ export function deviceConfirmPage(request: Request, opts: { userCode: string; cl
   );
 }
 
-export function messagePage(request: Request, message: string, status = 200) {
-  return page(request, 'Arcanum', `<p style="color:var(--fg)">${esc(message)}</p>`, status);
+export function messagePage(request: Request, message: string, status = 200, headers: Record<string, string> = {}) {
+  return page(request, 'Arcanum', `<p style="color:var(--fg)">${esc(message)}</p>`, status, headers);
 }
 
 export interface PasskeyItem {
