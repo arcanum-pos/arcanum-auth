@@ -122,6 +122,20 @@ what the installer will call when it sets up a new instance.
    - Gmail API (a Google service account with domain-wide delegation):
      `{"provider":"gmail_api","credentials":{"clientEmail":"…@….iam.gserviceaccount.com","privateKey":"-----BEGIN PRIVATE KEY-----\n…","impersonatedUser":"noreply@kaboutersoft.be","fromName":"Arcanum"}}`
 
+   login.kaboutersoft.be sends through **iCloud+ with the custom domain**
+   (since 2026-10-06): SMTP `smtp.mail.me.com`, port 587 (STARTTLS), an
+   app-specific password (appleid.apple.com). The username must be the
+   primary **@icloud.com** address, not the Apple ID's own address
+   (otherwise `550 5.1.1 Mailbox does not exist`); `fromAddress` can be any
+   address of the custom domain. Set it without the password ever
+   appearing on screen:
+
+   ```sh
+   user="…@icloud.com"; printf "App-specific password: "; read -rs pw; echo
+   [ -n "$pw" ] && PW="$pw" U="$user" node -e 'process.stdout.write(JSON.stringify({provider:"smtp",credentials:{host:"smtp.mail.me.com",port:587,username:process.env.U,password:process.env.PW,fromAddress:"bert@kaboutersoft.be",fromName:"Arcanum"}}))' | npx wrangler secret put MAIL_CONFIG --name arcanum-auth
+   unset pw
+   ```
+
    (`MAIL_SMTP` with only the SMTP credentials still works.)
    The `MAILER` service binding in `wrangler.jsonc` points at
    `arcanum-platform-mailer` on the same account (the platform's own, never an
