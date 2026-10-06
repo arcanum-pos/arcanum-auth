@@ -90,10 +90,17 @@ describe('the admin API', () => {
   });
 });
 
-describe('HSTS', () => {
+describe('headers on every answer', () => {
   it('on pages, redirects and JSON answers', async () => {
     for (const res of [await call('/login'), await call('/'), await call('/.well-known/openid-configuration'), await call('/token', { method: 'POST' })]) {
       expect(res.headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+      expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     }
+  });
+
+  it('pages switch off what they never use, but not passkeys', async () => {
+    const policy = (await call('/login')).headers.get('Permissions-Policy')!;
+    expect(policy).toContain('camera=()');
+    expect(policy).not.toContain('publickey-credentials');
   });
 });

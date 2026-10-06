@@ -312,6 +312,9 @@ export function page(request: Request, title: string, body: string, status = 200
       // Not no-referrer: that makes browsers send `Origin: null` on our own
       // form posts. same-origin still leaks nothing to other sites (Google).
       'Referrer-Policy': 'same-origin',
+      // Nothing here needs the camera, microphone or location; passkeys
+      // (publickey-credentials-*) stay allowed.
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
       ...headers,
     },
   });

@@ -27,13 +27,12 @@ export type { Env };
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const response = await handle(request, env);
-    // Browsers only ever reach this over https.
-    if (!response.headers.has('Strict-Transport-Security')) {
-      const out = new Response(response.body, response);
-      out.headers.set('Strict-Transport-Security', 'max-age=31536000');
-      return out;
-    }
-    return response;
+    // Browsers only ever reach this over https; and no answer is ever read
+    // as another type than it says it is.
+    const out = new Response(response.body, response);
+    if (!out.headers.has('Strict-Transport-Security')) out.headers.set('Strict-Transport-Security', 'max-age=31536000');
+    out.headers.set('X-Content-Type-Options', 'nosniff');
+    return out;
   },
 
   // Hourly (triggers.crons): expired guests and old protocol state.
