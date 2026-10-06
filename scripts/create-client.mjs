@@ -4,7 +4,7 @@
 // Prints client_id + client_secret (the secret is shown only once).
 const [name, appUrl, issuer = process.env.ISSUER || 'https://login.kaboutersoft.be'] = process.argv.slice(2);
 if (!name || !appUrl || !process.env.ADMIN_API_KEY) {
-  console.error('usage: ADMIN_API_KEY=… node scripts/create-client.mjs "<name>" <arcanum URL, e.g. https://arcanum.kaboutersoft.be> [issuer]');
+  console.error('usage: ADMIN_API_KEY=… node scripts/create-client.mjs "<name>" <arcanum URL, e.g. https://demo.arcanum.kaboutersoft.be> [issuer]');
   process.exit(1);
 }
 const base = appUrl.replace(/\/+$/, '');
