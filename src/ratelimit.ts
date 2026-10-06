@@ -4,15 +4,12 @@ import { json } from './util';
 // Requests that write a row without anyone signed in are limited per caller
 // in memory (PUBLIC_RATE_LIMITER, 20 a minute per key) — no D1 write to count
 // them, so a script can't eat the database's daily write quota with them.
+// Not exact: each machine counts locally and reports in the background, so a
+// handful of requests passes; a flood is refused after a few dozen (measured
+// 2026-10-06: 200 at once → 72 through, then 429s for the rest of the minute).
 export async function withinLimit(env: Env, key: string): Promise<boolean> {
-  if (!env.PUBLIC_RATE_LIMITER) {
-    console.warn(JSON.stringify({ event: 'rate-limit', key, binding: false }));
-    return true;
-  }
-  const outcome = await env.PUBLIC_RATE_LIMITER.limit({ key });
-  // Temporary: what the limiter answers (is it counting at all?) — see `wrangler tail`.
-  console.log(JSON.stringify({ event: 'rate-limit', key, success: outcome.success }));
-  return outcome.success;
+  if (!env.PUBLIC_RATE_LIMITER) return true;
+  return (await env.PUBLIC_RATE_LIMITER.limit({ key })).success;
 }
 
 export const tooManyRequests = () => json({ error: 'too_many_requests' }, 429, { 'Retry-After': '60' });
