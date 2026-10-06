@@ -1,6 +1,6 @@
 import type { Env } from './env';
 
-// Sends through arcanum-mailer (its /send, bearer MAILER_INTERNAL_KEY) with
+// Sends through arcanum-platform-mailer (its /send, bearer MAILER_INTERNAL_KEY) with
 // the provider from MAIL_CONFIG — {"provider":"smtp"|"gmail_api","credentials":{…}}
 // (arcanum-mailer's own shapes) — or plain SMTP credentials in MAIL_SMTP.
 // Without a mailer configured the message is only logged — enough to test,

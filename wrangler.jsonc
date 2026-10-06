@@ -46,13 +46,15 @@
 			"migrations_dir": "migrations"
 		}
 	],
-	// Verification / password-reset emails go through arcanum-mailer (same
-	// account). Remove this block to run without it: codes are then only
-	// logged (fine for testing, not for real users).
+	// Verification / password-reset emails go through the platform's own
+	// mailer, arcanum-platform-mailer (same account; same code as
+	// arcanum-mailer, never an installation's). Remove this block to run
+	// without it: codes are then only logged (fine for testing, not for
+	// real users).
 	"services": [
 		{
 			"binding": "MAILER",
-			"service": "arcanum-mailer"
+			"service": "arcanum-platform-mailer"
 		}
 	]
 	// Secrets (wrangler secret put …): SIGNING_KEY, ADMIN_API_KEY,

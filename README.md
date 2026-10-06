@@ -116,15 +116,16 @@ what the installer will call when it sets up a new instance.
 
    For **verification and reset mails** (without them, codes are only
    written to the Worker's log — `npx wrangler tail` — fine for testing, not
-   for real users): `MAILER_INTERNAL_KEY` (the same value arcanum-mailer has)
-   and `MAIL_CONFIG` as JSON, either provider arcanum-mailer supports:
+   for real users): `MAILER_INTERNAL_KEY` (the same value arcanum-platform-mailer has — see
+   its README) and `MAIL_CONFIG` as JSON, either provider the mailer supports:
    - SMTP: `{"provider":"smtp","credentials":{"host":"…","port":465,"username":"…","password":"…","fromAddress":"noreply@kaboutersoft.be","fromName":"Arcanum"}}`
    - Gmail API (a Google service account with domain-wide delegation):
      `{"provider":"gmail_api","credentials":{"clientEmail":"…@….iam.gserviceaccount.com","privateKey":"-----BEGIN PRIVATE KEY-----\n…","impersonatedUser":"noreply@kaboutersoft.be","fromName":"Arcanum"}}`
 
    (`MAIL_SMTP` with only the SMTP credentials still works.)
-   The `MAILER` service binding in `wrangler.jsonc` points at `arcanum-mailer`
-   on the same account; remove it if that Worker isn't there.
+   The `MAILER` service binding in `wrangler.jsonc` points at
+   `arcanum-platform-mailer` on the same account (the platform's own, never an
+   installation's arcanum-mailer); remove it if that Worker isn't there.
 3. **Deploy.** Push to `main` with Workers Builds connected, or
    `npx wrangler deploy`. `wrangler.jsonc` claims `login.kaboutersoft.be` as
    a custom domain (the `kaboutersoft.be` zone must be on the same account).
