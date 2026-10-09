@@ -2,11 +2,22 @@ import type { Env } from './env';
 import { currentMail, mailProvider, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
 import { createGuest, userById } from './store';
-import { inSeconds, json, nowIso, randomToken, sha256, timingSafeEqual } from './util';
+import { texts } from './pages';
+import { inSeconds, json, newEmailCode, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
 const LOGIN_LINK_SECONDS = 60;
 
 const PLATFORM_MAIL_SERVICES = ['smtp', 'gmail_api', 'brevo', 'resend'];
+
+// Test mails (/admin/mail/test): at most 10 an hour — counted in this
+// isolate's memory, best effort (only the bootstrapper's admins get here).
+const testMailsSent: number[] = [];
+function overTestLimit(now = Date.now()): boolean {
+  while (testMailsSent.length && now - testMailsSent[0] >= 3600_000) testMailsSent.shift();
+  if (testMailsSent.length >= 10) return true;
+  testMailsSent.push(now);
+  return false;
+}
 
 // An absolute https URL whose origin some (enabled) client registered a
 // redirect URI on — so a login link can never become an open redirect.
@@ -40,7 +51,7 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 //   PUT    /admin/mail       { provider, settings{}, keep[]? } — keep: secret
 //          fields to take over from the stored account (same service)
 //   DELETE /admin/mail       → back to MAIL_CONFIG / MAIL_SMTP
-//   POST   /admin/mail/test  { to } → the mailer's answer
+//   POST   /admin/mail/test  { to } → the mailer's answer (a sign-in code mail; 10 an hour)
 
 function authorized(request: Request, env: Env): boolean {
   const auth = request.headers.get('Authorization') || '';
@@ -183,7 +194,11 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     const body = (await request.json().catch(() => ({}))) as { to?: unknown };
     const to = typeof body.to === 'string' ? body.to.trim() : '';
     if (!/^[^@\s]+@[^@\s]+$/.test(to)) return json({ error: 'to must be an e-mail address' }, 400);
-    const result = await sendTestMail(env, to, 'Arcanum — testmail', `Deze testmail komt van ${env.ISSUER}: het e-mailaccount van het platform werkt.`);
+    if (overTestLimit()) return json({ ok: false, code: 'too_many_test_mails', error: 'At most 10 test mails an hour' }, 429);
+    // A real sign-in code mail (with a code that opens nothing), in the
+    // asker's language — what people get, so a checker scores what matters.
+    const t = texts(request);
+    const result = await sendTestMail(env, to, t.mailSignupSubject, t.mailSignup(newEmailCode()));
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 

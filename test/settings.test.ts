@@ -59,8 +59,16 @@ describe('the platform mail account (/admin/mail)', () => {
     const test = await admin('POST', '/admin/mail/test', { to: 'bert@example.test' });
     expect(test.status).toBe(200);
     expect(await test.json()).toEqual({ ok: true, source: 'settings' });
-    expect((await mailTo('bert@example.test'))[0]).toMatchObject({ message: { subject: 'Arcanum — testmail' }, provider: { type: 'resend', apiKey: 're_1' } });
+    expect((await mailTo('bert@example.test'))[0]).toMatchObject({ message: { subject: 'Je code voor Arcanum' }, provider: { type: 'resend', apiKey: 're_1' } });
     expect((await admin('POST', '/admin/mail/test', { to: 'geen-adres' })).status).toBe(400);
+  });
+
+  it('at most 10 test mails an hour', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 10; i++) statuses.push((await admin('POST', '/admin/mail/test', { to: `n${i}@example.test` })).status);
+    // One went out in the test before.
+    expect(statuses.filter((s) => s === 200)).toHaveLength(9);
+    expect(statuses.at(-1)).toBe(429);
   });
 
   it('removed: back to the secret', async () => {
