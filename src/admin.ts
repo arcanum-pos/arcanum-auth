@@ -196,9 +196,10 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     if (!/^[^@\s]+@[^@\s]+$/.test(to)) return json({ error: 'to must be an e-mail address' }, 400);
     if (overTestLimit()) return json({ ok: false, code: 'too_many_test_mails', error: 'At most 10 test mails an hour' }, 429);
     // A real sign-in code mail (with a code that opens nothing), in the
-    // asker's language — what people get, so a checker scores what matters.
+    // asker's language — what people get, so a checker scores what matters —
+    // marked as a test, so nobody takes it for a real one.
     const t = texts(request);
-    const result = await sendTestMail(env, to, t.mailSignupSubject, t.mailSignup(newEmailCode()));
+    const result = await sendTestMail(env, to, `${t.mailTestSubject} — ${t.mailSignupSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailSignup(newEmailCode())}`);
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 

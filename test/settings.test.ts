@@ -64,7 +64,9 @@ describe('the platform mail account (/admin/mail)', () => {
     const test = await admin('POST', '/admin/mail/test', { to: 'bert@example.test' });
     expect(test.status).toBe(200);
     expect(await test.json()).toEqual({ ok: true, source: 'settings' });
-    expect((await mailTo('bert@example.test'))[0]).toMatchObject({ message: { subject: 'Je code voor Arcanum' }, provider: { type: 'resend', apiKey: 're_1' } });
+    const testMail = (await mailTo('bert@example.test'))[0];
+    expect(testMail).toMatchObject({ message: { subject: 'Testmail — Je code voor Arcanum' }, provider: { type: 'resend', apiKey: 're_1' } });
+    expect((testMail.message as any).text).toMatch(/^Dit is een testmail van login\.kaboutersoft\.be/);
     expect((await admin('POST', '/admin/mail/test', { to: 'geen-adres' })).status).toBe(400);
   });
 
