@@ -137,6 +137,14 @@ what the installer will call when it sets up a new instance.
    ```
 
    (`MAIL_SMTP` with only the SMTP credentials still works.)
+
+   **Or set it in the bootstrapper** (`/admin/e-mail`, platform admins):
+   stored in this Worker's D1 (`settings`, migration 0006), encrypted with
+   `SETTINGS_KEY` — 32 random bytes, base64; without it nothing is stored
+   (`openssl rand -base64 32 | npx wrangler secret put SETTINGS_KEY --name
+   arcanum-auth`). A stored account comes before `MAIL_CONFIG`; removing it
+   there falls back to the secret. API: `/admin/mail` (GET, PUT, DELETE)
+   and `/admin/mail/test`, with `ADMIN_API_KEY` (`src/admin.ts`).
    The `MAILER` service binding in `wrangler.jsonc` points at
    `arcanum-platform-mailer` on the same account (the platform's own, never an
    installation's arcanum-mailer); remove it if that Worker isn't there.

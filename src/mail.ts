@@ -1,8 +1,10 @@
 import type { Env } from './env';
+import { readSetting, type MailSetting } from './settings';
 
 // Sends through arcanum-platform-mailer (its /send, bearer MAILER_INTERNAL_KEY,
 // the mailer's one contract — MAIL.md): { message, provider: { type, …settings } }.
-// The account is MAIL_CONFIG, either form:
+// The account: the one set in the bootstrapper (/admin/e-mail, stored
+// encrypted — settings.ts), else MAIL_CONFIG, either form:
 //   {"provider":"brevo","apiKey":"…","fromAddress":"…"}         (flat, any service)
 //   {"provider":"smtp"|"gmail_api","credentials":{…}}           (as before)
 // or plain SMTP credentials in MAIL_SMTP. Without one the message is only
@@ -17,16 +19,41 @@ export function mailProvider(env: Env): ({ type: string } & Record<string, unkno
   return env.MAIL_SMTP ? { ...(JSON.parse(env.MAIL_SMTP) as Record<string, unknown>), type: 'smtp' } : null;
 }
 
-export async function sendMail(env: Env, to: string, subject: string, text: string): Promise<void> {
-  const provider = mailProvider(env);
-  if (!env.MAILER || !env.MAILER_INTERNAL_KEY || !provider) {
-    console.log(`[arcanum-auth] no mailer configured — mail to ${to}: ${subject}\n${text}`);
-    return;
+// The account in use, and where it comes from.
+export async function currentMail(env: Env): Promise<{ source: 'settings' | 'secret'; provider: { type: string } & Record<string, unknown> } | null> {
+  const stored = await readSetting<MailSetting>(env, 'mail');
+  if (stored) {
+    const { provider, ...settings } = stored.value;
+    return { source: 'settings', provider: { ...settings, type: provider } };
   }
-  const res = await env.MAILER.fetch('https://arcanum-mailer/send', {
+  const fromSecret = mailProvider(env);
+  return fromSecret ? { source: 'secret', provider: fromSecret } : null;
+}
+
+async function callMailer(env: Env, provider: { type: string } & Record<string, unknown>, to: string, subject: string, text: string): Promise<Response> {
+  return env.MAILER!.fetch('https://arcanum-mailer/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.MAILER_INTERNAL_KEY}` },
     body: JSON.stringify({ message: { to, subject, text }, provider }),
   });
+}
+
+// A test mail (the bootstrapper's "Testmail sturen"): the mailer's answer as it is.
+export async function sendTestMail(env: Env, to: string, subject: string, text: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  const mail = await currentMail(env);
+  if (!env.MAILER || !env.MAILER_INTERNAL_KEY) return { status: 409, body: { ok: false, code: 'invalid_config', error: 'No platform mailer bound (MAILER, MAILER_INTERNAL_KEY)' } };
+  if (!mail) return { status: 409, body: { ok: false, code: 'invalid_config', error: 'No mail account set' } };
+  const res = await callMailer(env, mail.provider, to, subject, text);
+  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  return { status: res.status, body: { ...(body ?? { ok: false, code: 'unreachable', error: `arcanum-mailer returned ${res.status}` }), source: mail.source } };
+}
+
+export async function sendMail(env: Env, to: string, subject: string, text: string): Promise<void> {
+  const provider = (await currentMail(env))?.provider;
+  if (!env.MAILER || !env.MAILER_INTERNAL_KEY || !provider) {
+    console.log(`[arcanum-auth] no mailer configured — mail to ${to}: ${subject}\n${text}`);
+    return;
+  }
+  const res = await callMailer(env, provider, to, subject, text);
   if (!res.ok) throw new Error(`arcanum-mailer returned ${res.status}: ${await res.text()}`);
 }

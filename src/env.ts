@@ -30,4 +30,7 @@ export interface Env {
   // gmail_api credentials: { clientEmail, privateKey, impersonatedUser, fromName? }
   // (a Google service account with domain-wide delegation).
   MAIL_CONFIG?: string;
+  // Encrypts the platform settings stored in D1 (settings.ts): 32 random
+  // bytes, base64. Unset: the bootstrapper can't store a mail account here.
+  SETTINGS_KEY?: string;
 }

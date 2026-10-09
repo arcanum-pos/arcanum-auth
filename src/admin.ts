@@ -1,8 +1,12 @@
 import type { Env } from './env';
+import { currentMail, mailProvider, sendTestMail } from './mail';
+import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
 import { createGuest, userById } from './store';
 import { inSeconds, json, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
 const LOGIN_LINK_SECONDS = 60;
+
+const PLATFORM_MAIL_SERVICES = ['smtp', 'gmail_api', 'brevo', 'resend'];
 
 // An absolute https URL whose origin some (enabled) client registered a
 // redirect URI on — so a login link can never become an open redirect.
@@ -31,6 +35,12 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 //   POST   /admin/login-links  { sub, continue_to } — a guest only; continue_to
 //          must be on an origin some client registered a redirect URI for
 //          → 201 { url, expires_in }  (single use, 60 s)
+// The platform's mail account (the bootstrapper's /admin/e-mail; MAIL.md):
+//   GET    /admin/mail       → { canStore, active, stored, secret } — never a secret's value
+//   PUT    /admin/mail       { provider, settings{}, keep[]? } — keep: secret
+//          fields to take over from the stored account (same service)
+//   DELETE /admin/mail       → back to MAIL_CONFIG / MAIL_SMTP
+//   POST   /admin/mail/test  { to } → the mailer's answer
 
 function authorized(request: Request, env: Env): boolean {
   const auth = request.headers.get('Authorization') || '';
@@ -130,6 +140,51 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
       .bind(await sha256(token), user.id, target, inSeconds(LOGIN_LINK_SECONDS))
       .run();
     return json({ url: `${env.ISSUER}/login/once?token=${encodeURIComponent(token)}`, expires_in: LOGIN_LINK_SECONDS }, 201);
+  }
+
+  if (path === '/admin/mail' && request.method === 'GET') {
+    const [stored, active] = await Promise.all([readSetting<MailSetting>(env, 'mail'), currentMail(env)]);
+    const secret = mailProvider(env);
+    const { type, ...fromSecret } = secret ?? { type: '' };
+    return json({
+      canStore: !!env.SETTINGS_KEY,
+      active: active?.source ?? null,
+      stored: stored ? { ...mailSummary(stored.value), updatedAt: stored.updatedAt } : null,
+      secret: secret ? mailSummary({ provider: type, ...fromSecret }) : null,
+    });
+  }
+
+  if (path === '/admin/mail' && request.method === 'PUT') {
+    if (!env.SETTINGS_KEY) return json({ error: 'SETTINGS_KEY is not set on arcanum-auth' }, 409);
+    const body = (await request.json().catch(() => null)) as { provider?: unknown; settings?: unknown; keep?: unknown } | null;
+    const provider = typeof body?.provider === 'string' ? body.provider : '';
+    // arcanum-platform-mailer has no send_email binding: no Cloudflare Email Service here.
+    if (!PLATFORM_MAIL_SERVICES.includes(provider)) return json({ error: `provider must be one of ${PLATFORM_MAIL_SERVICES.join(', ')}` }, 400);
+    const settings = body?.settings && typeof body.settings === 'object' ? (body.settings as Record<string, unknown>) : {};
+    const config: MailSetting = { provider };
+    for (const [k, v] of Object.entries(settings)) {
+      if (k === 'provider' || k === 'type') continue;
+      if (typeof v === 'number' && Number.isFinite(v)) config[k] = v;
+      else if (typeof v === 'string' && v.trim()) config[k] = k === 'privateKey' ? v : v.trim();
+    }
+    const previous = (await readSetting<MailSetting>(env, 'mail'))?.value;
+    const keep = Array.isArray(body?.keep) ? body.keep.filter((k): k is string => typeof k === 'string' && SECRET_FIELDS.includes(k)) : [];
+    for (const k of keep) if (config[k] === undefined && previous?.provider === provider && previous[k]) config[k] = previous[k];
+    await writeSetting(env, 'mail', config);
+    return json({ ok: true, ...mailSummary(config) });
+  }
+
+  if (path === '/admin/mail' && request.method === 'DELETE') {
+    await deleteSetting(env, 'mail');
+    return json({ ok: true });
+  }
+
+  if (path === '/admin/mail/test' && request.method === 'POST') {
+    const body = (await request.json().catch(() => ({}))) as { to?: unknown };
+    const to = typeof body.to === 'string' ? body.to.trim() : '';
+    if (!/^[^@\s]+@[^@\s]+$/.test(to)) return json({ error: 'to must be an e-mail address' }, 400);
+    const result = await sendTestMail(env, to, 'Arcanum — testmail', `Deze testmail komt van ${env.ISSUER}: het e-mailaccount van het platform werkt.`);
+    return json(result.body, result.status === 200 ? 200 : result.status);
   }
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
