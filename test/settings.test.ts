@@ -54,7 +54,12 @@ describe('the platform mail account (/admin/mail)', () => {
   });
 
   it('only the services the platform mailer has; a test mail gives the mailer’s answer', async () => {
-    expect((await admin('PUT', '/admin/mail', { provider: 'cloudflare', settings: { fromAddress: 'a@b.test' } })).status).toBe(400);
+    expect((await admin('PUT', '/admin/mail', { provider: 'mailchimp', settings: { fromAddress: 'a@b.test' } })).status).toBe(400);
+    // Cloudflare Email Service: no key, just the sender (the mailer's send_email binding).
+    const cf = await admin('PUT', '/admin/mail', { provider: 'cloudflare', settings: { fromAddress: 'noreply@kaboutersoft.be', fromName: 'Arcanum' } });
+    expect(await cf.json()).toEqual({ ok: true, provider: 'cloudflare', values: { fromAddress: 'noreply@kaboutersoft.be', fromName: 'Arcanum' }, secretsSet: [] });
+    await sendMail(env, 'cf@example.test', 'Code', 'Je code');
+    expect((await mailTo('cf@example.test'))[0].provider).toEqual({ type: 'cloudflare', fromAddress: 'noreply@kaboutersoft.be', fromName: 'Arcanum' });
     await admin('PUT', '/admin/mail', { provider: 'resend', settings: { apiKey: 're_1', fromAddress: 'noreply@kaboutersoft.be' } });
     const test = await admin('POST', '/admin/mail/test', { to: 'bert@example.test' });
     expect(test.status).toBe(200);

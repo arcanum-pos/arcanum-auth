@@ -7,7 +7,8 @@ import { inSeconds, json, newEmailCode, nowIso, randomToken, sha256, timingSafeE
 
 const LOGIN_LINK_SECONDS = 60;
 
-const PLATFORM_MAIL_SERVICES = ['smtp', 'gmail_api', 'brevo', 'resend'];
+// What arcanum-platform-mailer can send with (cloudflare: its send_email binding).
+const PLATFORM_MAIL_SERVICES = ['smtp', 'gmail_api', 'brevo', 'resend', 'cloudflare'];
 
 // Test mails (/admin/mail/test): at most 10 an hour — counted in this
 // isolate's memory, best effort (only the bootstrapper's admins get here).
@@ -169,7 +170,6 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     if (!env.SETTINGS_KEY) return json({ error: 'SETTINGS_KEY is not set on arcanum-auth' }, 409);
     const body = (await request.json().catch(() => null)) as { provider?: unknown; settings?: unknown; keep?: unknown } | null;
     const provider = typeof body?.provider === 'string' ? body.provider : '';
-    // arcanum-platform-mailer has no send_email binding: no Cloudflare Email Service here.
     if (!PLATFORM_MAIL_SERVICES.includes(provider)) return json({ error: `provider must be one of ${PLATFORM_MAIL_SERVICES.join(', ')}` }, 400);
     const settings = body?.settings && typeof body.settings === 'object' ? (body.settings as Record<string, unknown>) : {};
     const config: MailSetting = { provider };
