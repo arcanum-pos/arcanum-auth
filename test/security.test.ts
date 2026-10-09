@@ -15,8 +15,8 @@ const post = (path: string, fields: Record<string, string>, headers: Record<stri
   call(path, { method: 'POST', headers: { ...FORM, 'CF-Connecting-IP': ip(), ...headers }, body: new URLSearchParams(fields) });
 
 async function lastCodeFor(email: string): Promise<string> {
-  const mails = (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as { body: { to: string; text: string } }[];
-  return mails.reverse().find((m) => m.body.to === email)!.body.text.match(/\b(\d{6})\b/)![1];
+  const mails = (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as { body: { message: { to: string; text: string } } }[];
+  return mails.reverse().find((m) => m.body.message.to === email)!.body.message.text.match(/\b(\d{6})\b/)![1];
 }
 
 async function signUp(email: string) {

@@ -2,7 +2,7 @@ import { env, SELF } from 'cloudflare:test';
 import { decodeJwt } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { cleanup } from '../src/cleanup';
-import { sendMail } from '../src/mail';
+import { mailProvider, sendMail } from '../src/mail';
 
 // Guests + one-time sign-in links (the bootstrapper's "Direct proberen"),
 // client self-service (an installation managing its own client), client
@@ -200,12 +200,19 @@ describe('admin: client metadata', () => {
 });
 
 describe('mail providers', () => {
-  it('MAIL_CONFIG picks the provider (here the Gmail API), MAIL_SMTP stays the fallback', async () => {
+  it('MAIL_CONFIG picks the service, in either form; MAIL_SMTP stays the fallback; the mailer gets its one contract', async () => {
     const gmail = { clientEmail: 'svc@proj.iam.gserviceaccount.com', privateKey: 'k', impersonatedUser: 'noreply@kaboutersoft.be' };
     await sendMail({ ...env, MAIL_CONFIG: JSON.stringify({ provider: 'gmail_api', credentials: gmail }) }, 'to@example.test', 'Onderwerp', 'Tekst');
+    await sendMail({ ...env, MAIL_CONFIG: JSON.stringify({ provider: 'brevo', apiKey: 'xkeysib', fromAddress: 'noreply@kaboutersoft.be' }) }, 'to3@example.test', 'Onderwerp', 'Tekst');
     await sendMail(env, 'to2@example.test', 'Onderwerp', 'Tekst');
-    const calls = (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as { body: Record<string, unknown> }[];
-    expect(calls.find((c) => c.body.to === 'to@example.test')!.body).toMatchObject({ provider: 'gmail_api', credentials: gmail });
-    expect(calls.find((c) => c.body.to === 'to2@example.test')!.body).toMatchObject({ provider: 'smtp', credentials: { host: 'smtp.test' } });
+    const calls = (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as { body: { message: { to: string }; provider: Record<string, unknown> } }[];
+    const to = (address: string) => calls.find((c) => c.body.message?.to === address)!.body;
+    expect(to('to@example.test')).toEqual({ message: { to: 'to@example.test', subject: 'Onderwerp', text: 'Tekst' }, provider: { type: 'gmail_api', ...gmail } });
+    expect(to('to3@example.test').provider).toEqual({ type: 'brevo', apiKey: 'xkeysib', fromAddress: 'noreply@kaboutersoft.be' });
+    expect(to('to2@example.test').provider).toMatchObject({ type: 'smtp', host: 'smtp.test' });
+  });
+
+  it('a MAIL_CONFIG without a service is a clear error', () => {
+    expect(() => mailProvider({ ...env, MAIL_CONFIG: JSON.stringify({ apiKey: 'x' }) })).toThrow('MAIL_CONFIG must name its "provider"');
   });
 });

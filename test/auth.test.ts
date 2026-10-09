@@ -36,13 +36,13 @@ async function newClient(name = 'Test installation') {
   return (await res.json()) as { client_id: string; client_secret: string };
 }
 
-async function mails(): Promise<{ body: { to: string; subject: string; text: string } }[]> {
+async function mails(): Promise<{ body: { message: { to: string; subject: string; text: string } } }[]> {
   return (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as never;
 }
 
 async function lastCodeFor(email: string): Promise<string> {
-  const mail = (await mails()).reverse().find((m) => m.body.to === email)!;
-  return mail.body.text.match(/\b(\d{6})\b/)![1];
+  const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!;
+  return mail.body.message.text.match(/\b(\d{6})\b/)![1];
 }
 
 // Sign up with e-mail + password (verified by the mailed code) → session cookie.
@@ -307,8 +307,8 @@ describe('accounts', () => {
     const email = uniqueEmail('pending');
     await post('/signup', { name: 'X', email, password: 'correct horse battery', continue: '/account' });
     expect(await env.DB.prepare('SELECT 1 FROM users WHERE email = ?').bind(email).first()).toBeNull();
-    const mail = (await mails()).reverse().find((m) => m.body.to === email)!;
-    expect(mail.body.subject).toBeTruthy();
+    const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!;
+    expect(mail.body.message.subject).toBeTruthy();
   });
 
   it("accepts its own page's form when the browser sends Origin: null (Sec-Fetch-Site decides)", async () => {

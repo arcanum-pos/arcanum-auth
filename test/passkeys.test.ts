@@ -22,7 +22,7 @@ const postJson = (path: string, body: unknown, headers: Record<string, string> =
   call(path, { method: 'POST', headers: { ...JSON_FROM_HERE, 'CF-Connecting-IP': someIp(), ...headers }, body: JSON.stringify(body) });
 const cookieOf = (res: Response) => (res.headers.get('Set-Cookie') || '').split(';')[0];
 
-async function mails(): Promise<{ body: { to: string; subject: string; text: string } }[]> {
+async function mails(): Promise<{ body: { message: { to: string; subject: string; text: string } } }[]> {
   return (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as never;
 }
 
@@ -30,7 +30,7 @@ async function mails(): Promise<{ body: { to: string; subject: string; text: str
 async function signUp(email: string, continueTo = '/account') {
   const res = await post('/signup', { name: 'Jan Peeters', email, password: 'correct horse battery', continue: continueTo });
   const id = new URL(res.headers.get('Location')!, ISSUER).searchParams.get('id')!;
-  const code = (await mails()).reverse().find((m) => m.body.to === email)!.body.text.match(/\b(\d{6})\b/)![1];
+  const code = (await mails()).reverse().find((m) => m.body.message.to === email)!.body.message.text.match(/\b(\d{6})\b/)![1];
   const verified = await post('/verify', { id, code, continue: continueTo });
   expect(verified.status).toBe(302);
   return { cookie: cookieOf(verified), next: verified.headers.get('Location')! };
@@ -160,9 +160,9 @@ describe('adding a passkey', () => {
     const stored = (await row(auth.id))!;
     expect(stored).toMatchObject({ name: 'Mac van Jan', counter: 0, device_type: 'multiDevice', backed_up: 1 });
     expect(JSON.parse(stored.transports as string)).toEqual(['internal', 'hybrid']);
-    const mail = (await mails()).reverse().find((m) => m.body.to === email)!;
-    expect(mail.body.subject).toMatch(/passkey/i);
-    expect(mail.body.text).toContain(`${ISSUER}/account`);
+    const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!;
+    expect(mail.body.message.subject).toMatch(/passkey/i);
+    expect(mail.body.message.text).toContain(`${ISSUER}/account`);
     const page = await (await call('/account?passkey=added', { headers: { Cookie: cookie } })).text();
     expect(page).toContain('Mac van Jan');
     expect(page).toContain('Passkey toegevoegd.');
