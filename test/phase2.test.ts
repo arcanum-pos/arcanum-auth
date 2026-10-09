@@ -2,7 +2,7 @@ import { env, SELF } from 'cloudflare:test';
 import { decodeJwt } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { cleanup } from '../src/cleanup';
-import { mailProvider, sendMail } from '../src/mail';
+import { htmlOf, mailProvider, sendMail } from '../src/mail';
 
 // Guests + one-time sign-in links (the bootstrapper's "Direct proberen"),
 // client self-service (an installation managing its own client), client
@@ -207,9 +207,15 @@ describe('mail providers', () => {
     await sendMail(env, 'to2@example.test', 'Onderwerp', 'Tekst');
     const calls = (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as { body: { message: { to: string }; provider: Record<string, unknown> } }[];
     const to = (address: string) => calls.find((c) => c.body.message?.to === address)!.body;
-    expect(to('to@example.test')).toEqual({ message: { to: 'to@example.test', subject: 'Onderwerp', text: 'Tekst' }, provider: { type: 'gmail_api', ...gmail } });
+    expect(to('to@example.test')).toEqual({ message: { to: 'to@example.test', subject: 'Onderwerp', text: 'Tekst', html: '<p>Tekst</p>' }, provider: { type: 'gmail_api', ...gmail } });
     expect(to('to3@example.test').provider).toEqual({ type: 'brevo', apiKey: 'xkeysib', fromAddress: 'noreply@kaboutersoft.be' });
     expect(to('to2@example.test').provider).toMatchObject({ type: 'smtp', host: 'smtp.test' });
+  });
+
+  it('every mail goes as text and HTML: paragraphs, line breaks, links, nothing unescaped', () => {
+    expect(htmlOf('Je code: 123456\n\nGeldig 15 minuten.\nNiet gevraagd? Negeer dit.')).toBe('<p>Je code: 123456</p>\n<p>Geldig 15 minuten.<br>Niet gevraagd? Negeer dit.</p>');
+    expect(htmlOf('Beheer: https://login.kaboutersoft.be/account.')).toBe('<p>Beheer: <a href="https://login.kaboutersoft.be/account">https://login.kaboutersoft.be/account</a>.</p>');
+    expect(htmlOf('Naam <script>&"')).toBe('<p>Naam &lt;script&gt;&amp;&quot;</p>');
   });
 
   it('a MAIL_CONFIG without a service is a clear error', () => {

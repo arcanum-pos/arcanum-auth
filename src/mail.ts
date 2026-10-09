@@ -30,11 +30,24 @@ export async function currentMail(env: Env): Promise<{ source: 'settings' | 'sec
   return fromSecret ? { source: 'secret', provider: fromSecret } : null;
 }
 
+// The same mail as HTML: paragraphs on blank lines, line breaks kept, links
+// clickable. Sent next to the text so services that only keep one version
+// (Brevo turns a text-only mail into HTML-only) send both — spam filters
+// mark down an HTML-only mail (MIME_HTML_ONLY, mail-tester.com).
+export function htmlOf(text: string): string {
+  const escape = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const linked = (v: string) => escape(v).replace(/https:\/\/[^\s<]+[^\s<.,:;!?)]/g, (url) => `<a href="${url}">${url}</a>`);
+  return text
+    .split(/\n{2,}/)
+    .map((p) => `<p>${linked(p).replace(/\n/g, '<br>')}</p>`)
+    .join('\n');
+}
+
 async function callMailer(env: Env, provider: { type: string } & Record<string, unknown>, to: string, subject: string, text: string): Promise<Response> {
   return env.MAILER!.fetch('https://arcanum-mailer/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.MAILER_INTERNAL_KEY}` },
-    body: JSON.stringify({ message: { to, subject, text }, provider }),
+    body: JSON.stringify({ message: { to, subject, text, html: htmlOf(text) }, provider }),
   });
 }
 
