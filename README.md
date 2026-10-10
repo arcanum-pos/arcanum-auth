@@ -48,8 +48,10 @@ hourly cron (`triggers.crons`) deletes expired guests with their sessions,
 tokens and links, and purges old protocol state.
 
 **One client per Arcanum installation**, used for both grants. Clients are
-created through the admin API (`/admin/clients`, bearer `ADMIN_API_KEY`) —
-what the installer will call when it sets up a new instance.
+created through the admin API (`/admin/clients`, bearer `ADMIN_API_KEY`,
+only over the bootstrapper's service binding) — by the bootstrapper when it
+sets up an installation, or by hand there for another application
+(`/admin/installaties` → "Andere toepassing koppelen").
 
 ## Security notes
 
@@ -180,12 +182,10 @@ e-mail and password, then the 6-digit code (from the mail, or
 Sign out and in again; try "Wachtwoord vergeten"; try "Aanmelden met Google".
 
 **Authorization code flow**, with https://oidcdebugger.com as the client —
-register it once:
-```sh
-curl -s -X POST https://login.kaboutersoft.be/admin/clients \
-  -H "Authorization: Bearer $ADMIN_API_KEY" -H 'Content-Type: application/json' \
-  -d '{"name":"oidcdebugger","redirect_uris":["https://oidcdebugger.com/debug"]}' | jq
-```
+register it once in the bootstrapper: `/admin/installaties` → "Andere
+toepassing koppelen", redirect URI `https://oidcdebugger.com/debug`. (The
+admin API answers only the bootstrapper's service binding — a call from
+the internet gets a 404, even with the right key.)
 On oidcdebugger.com: Authorize URI `https://login.kaboutersoft.be/authorize`,
 Redirect URI `https://oidcdebugger.com/debug`, your client id, scope
 `openid profile email offline_access`, response type `code`, **Use PKCE**
