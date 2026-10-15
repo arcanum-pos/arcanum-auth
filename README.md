@@ -1,10 +1,12 @@
 # arcanum-auth
 
-Arcanum's own OpenID Connect provider — the default identity provider of
-every installation, at **https://login.kaboutersoft.be**, in place of Auth0.
+A small OpenID Connect provider at **https://login.kaboutersoft.be**, for
+any application that registers a client — the default identity provider of
+the POS installations, among others. Its pages and mails name only
+themselves (the host), never a product: several applications may use it.
 One Cloudflare Worker + one D1 database.
 
-It does exactly what `arcanum-bff` needs:
+It does exactly this:
 
 | | |
 |---|---|
@@ -69,7 +71,8 @@ sets up an installation, or by hand there for another application
 
 ## Security notes
 
-- **Sessions** on the issuer: `__Host-arcanum_auth` (Secure, HttpOnly,
+- **Sessions** on the issuer: `__Host-session` (until 2026-10
+  `__Host-arcanum_auth`, still read; Secure, HttpOnly,
   SameSite=Lax, Path=/, no Domain — no sibling subdomain can plant one).
 - **Form posts and the passkey JSON** only from this exact origin.
 - **Mailed codes** (signing in): 6 digits, 5 tries per code, and per

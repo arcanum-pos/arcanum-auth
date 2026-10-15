@@ -296,7 +296,7 @@ describe('accounts, without passwords', () => {
     const { id } = await askCode(post, email);
     expect(await env.DB.prepare('SELECT 1 FROM users WHERE email = ?').bind(email).first()).toBeNull();
     const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!.body.message;
-    expect(mail.subject).toBe('Je aanmeldcode voor Arcanum');
+    expect(mail.subject).toBe('Je aanmeldcode');
     expect(mail.text).toContain(`${ISSUER}/login/link?id=${id}&t=`);
     const asked = await post('/login/code', { id, code: await lastCodeFor(email) });
     expect(asked.status).toBe(200);
@@ -308,7 +308,7 @@ describe('accounts, without passwords', () => {
     expect((await post('/login/name', { id, finish, name: '  ' })).status).toBe(400);
     const named = await post('/login/name', { id, finish, name: 'Mie Peeters' });
     expect(named.status).toBe(302);
-    expect(cookieOf(named)).toMatch(/^__Host-arcanum_auth=/);
+    expect(cookieOf(named)).toMatch(/^__Host-session=/);
     expect(await env.DB.prepare('SELECT name, email_verified, password_hash FROM users WHERE email = ?').bind(email).first()).toEqual({ name: 'Mie Peeters', email_verified: 1, password_hash: null });
     // Its name step only once.
     expect((await post('/login/name', { id, finish, name: 'Someone else' })).status).toBe(400);
@@ -347,7 +347,7 @@ describe('accounts, without passwords', () => {
     expect((await post('/login/link', { ...fields, t: 'wrong' })).status).toBe(400);
     const signedIn = await post('/login/link', fields);
     expect(signedIn.status).toBe(302);
-    expect(cookieOf(signedIn)).toMatch(/^__Host-arcanum_auth=/);
+    expect(cookieOf(signedIn)).toMatch(/^__Host-session=/);
     // Used: neither the link nor its code works again.
     expect((await call(`${link.pathname}${link.search}`)).status).toBe(400);
     expect((await post('/login/link', fields)).status).toBe(400);
@@ -407,7 +407,7 @@ describe('sign in with Google', () => {
 
     const back = await call(`/callback/google?code=${encodeURIComponent(email)}&state=${target.searchParams.get('state')}`, { headers: { Cookie: cookieOf(start) } });
     expect(back.status).toBe(302);
-    expect(cookieOf(back)).toMatch(/^__Host-arcanum_auth=/);
+    expect(cookieOf(back)).toMatch(/^__Host-session=/);
     const after = await env.DB.prepare('SELECT id, google_sub FROM users WHERE email = ?').bind(email).first<{ id: string; google_sub: string }>();
     expect(after).toEqual({ id: before!.id, google_sub: `google-${email}` });
   });
@@ -425,12 +425,12 @@ describe('sign in with Google', () => {
   it("only finishes in the browser that started it (no login CSRF): someone else's callback link signs nobody in", async () => {
     const start = await call('/google?continue=%2Faccount');
     const stateCookie = start.headers.get('Set-Cookie')!;
-    expect(stateCookie).toMatch(/^__Host-arcanum_google_state=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax/);
+    expect(stateCookie).toMatch(/^__Host-google_state=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax/);
     const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;
     const link = `/callback/google?code=${encodeURIComponent(uniqueEmail('attacker'))}&state=${state}`;
     // The victim's browser: no state cookie, or another login's.
     expect((await call(link)).status).toBe(400);
-    expect((await call(link, { headers: { Cookie: '__Host-arcanum_google_state=someone-elses' } })).status).toBe(400);
+    expect((await call(link, { headers: { Cookie: '__Host-google_state=someone-elses' } })).status).toBe(400);
   });
 });
 
@@ -447,5 +447,26 @@ describe('logout', () => {
     const { challenge } = await pkce();
     const again = await call(authorizeUrl(client.client_id, challenge), { headers: { Cookie: cookie } });
     expect(new URL(again.headers.get('Location')!, ISSUER).pathname).toBe('/login');
+  });
+});
+
+describe('no product name', () => {
+  it('pages and mails name only this sign-in service (any application may use it)', async () => {
+    const html = await (await call('/login')).text();
+    expect(html).toContain('<div class="brand">login.kaboutersoft.be</div>');
+    expect(html.toLowerCase()).not.toContain('arcanum');
+    const email = uniqueEmail('noname');
+    await askCode(post, email);
+    const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!.body.message;
+    expect(`${mail.subject} ${mail.text}`.toLowerCase()).not.toContain('arcanum');
+  });
+
+  it('a session under the old cookie name still counts, and signing out clears both', async () => {
+    const cookie = await signUp(uniqueEmail('oldcookie'));
+    const old = cookie.replace(/^__Host-session=/, '__Host-arcanum_auth=');
+    expect((await call('/account', { headers: { Cookie: old } })).status).toBe(200);
+    const out = await call('/logout', { headers: { Cookie: old } });
+    expect(out.headers.get('Set-Cookie')).toMatch(/__Host-session=;.*__Host-arcanum_auth=;/);
+    expect((await call('/account', { headers: { Cookie: old } })).status).toBe(302);
   });
 });

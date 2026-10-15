@@ -190,7 +190,8 @@ export async function passkeyRegisterOptions(request: Request, env: Env): Promis
   if (!user) return fail(request, 'signInFirst', 401);
   const existing = await passkeysOf(env, user.id);
   const options = await generateRegistrationOptions({
-    rpName: 'Arcanum',
+    // What the browser shows when saving it: this sign-in service's own host.
+    rpName: rp(env).id,
     rpID: rp(env).id,
     userName: user.email,
     userDisplayName: user.name || user.email,

@@ -3,7 +3,7 @@ import type { Env } from './env';
 import { clientById, clientSecretMatches, type Client } from './store';
 import { json, randomToken, sha256 } from './util';
 
-// Client self-service — an Arcanum installation managing its own client
+// Client self-service — an application managing its own client
 // with its own credentials (HTTP Basic: client_id:client_secret), never the
 // admin key. What the installer uses after setting a custom domain:
 //   GET   /clients/self         → its name + URIs

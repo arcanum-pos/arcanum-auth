@@ -113,8 +113,10 @@ export async function authenticateClient(env: Env, request: Request, form: Recor
 // --- Browser sessions on the issuer itself.
 
 // __Host-: only Secure, Path=/ and without a Domain — no sibling subdomain
-// of the issuer's (start., arcanum. …) can plant or overwrite it.
-export const SESSION_COOKIE = '__Host-arcanum_auth';
+// of the issuer's can plant or overwrite it. OLD_SESSION_COOKIE: its name
+// until 2026-10, still read so nobody is signed out by the rename.
+export const SESSION_COOKIE = '__Host-session';
+const OLD_SESSION_COOKIE = '__Host-arcanum_auth';
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
 
 // `until`: a guest's session ends with the guest, not after 14 days.
@@ -138,7 +140,7 @@ export function cookieValue(request: Request, name: string): string | null {
 }
 
 export async function currentSession(env: Env, request: Request): Promise<{ user: User; authTime: number } | null> {
-  const token = cookieValue(request, SESSION_COOKIE);
+  const token = cookieValue(request, SESSION_COOKIE) ?? cookieValue(request, OLD_SESSION_COOKIE);
   if (!token) return null;
   const row = await env.DB.prepare(
     `SELECT users.*, sessions.auth_time AS session_auth_time FROM sessions JOIN users ON users.id = sessions.user_id
@@ -149,10 +151,12 @@ export async function currentSession(env: Env, request: Request): Promise<{ user
   return row ? { user: row, authTime: row.session_auth_time } : null;
 }
 
-export async function endSession(env: Env, request: Request): Promise<string> {
-  const token = cookieValue(request, SESSION_COOKIE);
-  if (token) await env.DB.prepare('DELETE FROM sessions WHERE id_hash = ?').bind(await sha256(token)).run();
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+export async function endSession(env: Env, request: Request): Promise<string[]> {
+  for (const name of [SESSION_COOKIE, OLD_SESSION_COOKIE]) {
+    const token = cookieValue(request, name);
+    if (token) await env.DB.prepare('DELETE FROM sessions WHERE id_hash = ?').bind(await sha256(token)).run();
+  }
+  return [SESSION_COOKIE, OLD_SESSION_COOKIE].map((name) => `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
 }
 
 // --- Rate limiting: at most `max` failures per key in `windowSeconds`.

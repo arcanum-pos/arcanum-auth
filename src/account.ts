@@ -48,7 +48,7 @@ function refuseForeign(request: Request, env: Env): Response | null {
 // an account first answers one question (its name). The page never says
 // whether an address has an account.
 
-const SIGNIN_COOKIE = '__Host-arcanum_signin';
+const SIGNIN_COOKIE = '__Host-signin';
 
 interface EmailCodeRow {
   id: string;
@@ -199,7 +199,7 @@ export async function loginName(request: Request, env: Env): Promise<Response> {
 
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
-const GOOGLE_STATE_COOKIE = '__Host-arcanum_google_state';
+const GOOGLE_STATE_COOKIE = '__Host-google_state';
 
 export async function googleStart(request: Request, env: Env): Promise<Response> {
   if (!googleEnabled(env)) return messagePage(request, texts(request).errors.google, 404);

@@ -19,7 +19,7 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   // Test hook: where Google's token endpoint is (defaults to Google's own).
   GOOGLE_TOKEN_URL?: string;
-  // Verification / reset emails via arcanum-platform-mailer (optional — without it,
+  // The mailed sign-in codes, via the platform's mailer (optional — without it,
   // codes are only logged).
   MAILER?: Fetcher;
   MAILER_INTERNAL_KEY?: string;

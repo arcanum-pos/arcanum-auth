@@ -41,7 +41,7 @@ const T = {
     offerTitle: 'Sneller aanmelden met een passkey?',
     offerText: 'Meld je voortaan aan met je vingerafdruk, je gezicht of de pincode van dit toestel — zonder wachtwoord. Je huidige manier van aanmelden blijft ook werken.',
     notNow: 'Niet nu',
-    mailPasskeySubject: 'Nieuwe passkey voor je Arcanum-account',
+    mailPasskeySubject: 'Nieuwe passkey voor je account',
     mailPasskey: (name: string, accountUrl: string) => `Er werd een passkey ("${name}") aan je account toegevoegd.\n\nWas jij dat niet? Verwijder hem meteen op ${accountUrl}.`,
     securityKey: 'Beveiligingssleutel',
     phone: 'Telefoon',
@@ -58,7 +58,7 @@ const T = {
     linkText: (email: string) => `Aanmelden als ${email}?`,
     linkOtherDevice: 'Je opent deze link op een ander toestel of in een andere browser dan waar je de code vroeg. Typ daar de code uit de mail, of meld je hier aan.',
     signInHere: 'Hier aanmelden',
-    mailCodeSubject: 'Je aanmeldcode voor Arcanum',
+    mailCodeSubject: 'Je aanmeldcode',
     mailCode: (code: string, link: string) => `Je code om je aan te melden: ${code}\n\nOf meld je aan met deze link: ${link}\n\nDe code en de link zijn 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
     errors: {
       tooMany: 'Te veel pogingen. Probeer het over een kwartier opnieuw.',
@@ -115,7 +115,7 @@ const T = {
     offerTitle: 'Vous connecter plus vite avec une clé d’accès ?',
     offerText: 'Connectez-vous désormais avec votre empreinte, votre visage ou le code de cet appareil — sans mot de passe. Votre façon actuelle de vous connecter continue aussi de fonctionner.',
     notNow: 'Pas maintenant',
-    mailPasskeySubject: 'Nouvelle clé d’accès pour votre compte Arcanum',
+    mailPasskeySubject: 'Nouvelle clé d’accès pour votre compte',
     mailPasskey: (name: string, accountUrl: string) => `Une clé d’accès (« ${name} ») a été ajoutée à votre compte.\n\nCe n’était pas vous ? Supprimez-la tout de suite sur ${accountUrl}.`,
     securityKey: 'Clé de sécurité',
     phone: 'Téléphone',
@@ -132,7 +132,7 @@ const T = {
     linkText: (email: string) => `Se connecter en tant que ${email} ?`,
     linkOtherDevice: 'Vous ouvrez ce lien sur un autre appareil ou dans un autre navigateur que celui où vous avez demandé le code. Saisissez-y le code de l’e-mail, ou connectez-vous ici.',
     signInHere: 'Se connecter ici',
-    mailCodeSubject: 'Votre code de connexion pour Arcanum',
+    mailCodeSubject: 'Votre code de connexion',
     mailCode: (code: string, link: string) => `Votre code pour vous connecter : ${code}\n\nOu connectez-vous avec ce lien : ${link}\n\nLe code et le lien sont valables 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
     errors: {
       tooMany: 'Trop de tentatives. Réessayez dans un quart d’heure.',
@@ -189,7 +189,7 @@ const T = {
     offerTitle: 'Sign in faster with a passkey?',
     offerText: 'From now on, sign in with your fingerprint, your face or this device’s PIN — no password. The way you sign in today keeps working too.',
     notNow: 'Not now',
-    mailPasskeySubject: 'New passkey for your Arcanum account',
+    mailPasskeySubject: 'New passkey for your account',
     mailPasskey: (name: string, accountUrl: string) => `A passkey ("${name}") was added to your account.\n\nWasn't you? Remove it straight away at ${accountUrl}.`,
     securityKey: 'Security key',
     phone: 'Phone',
@@ -206,7 +206,7 @@ const T = {
     linkText: (email: string) => `Sign in as ${email}?`,
     linkOtherDevice: 'You’re opening this link on another device or in another browser than where you asked for the code. Enter the code from the email there, or sign in here.',
     signInHere: 'Sign in here',
-    mailCodeSubject: 'Your sign-in code for Arcanum',
+    mailCodeSubject: 'Your sign-in code',
     mailCode: (code: string, link: string) => `Your code to sign in: ${code}\n\nOr sign in with this link: ${link}\n\nThe code and the link are valid for 15 minutes. Didn’t ask for this? Then ignore this email.`,
     errors: {
       tooMany: 'Too many attempts. Try again in a quarter of an hour.',
@@ -270,8 +270,8 @@ ul.keys form{display:flex;gap:8px;margin-top:8px}ul.keys input{height:36px}ul.ke
 export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean } = {}): Response {
   const script = opts.passkeys ? '<script src="/passkey.js" defer></script>' : '';
   const html = `<!doctype html><html lang="${language(request)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${esc(title)} · Arcanum</title><style>${STYLE}</style>${script}</head>
-<body><main><div class="brand">arcanum</div>${body}</main></body></html>`;
+<meta name="robots" content="noindex"><title>${esc(title)} · ${esc(new URL(request.url).host)}</title><style>${STYLE}</style>${script}</head>
+<body><main><div class="brand">${esc(new URL(request.url).host)}</div>${body}</main></body></html>`;
   return new Response(html, {
     status,
     headers: {
@@ -382,7 +382,7 @@ export function deviceConfirmPage(request: Request, opts: { userCode: string; cl
 }
 
 export function messagePage(request: Request, message: string, status = 200, headers: Record<string, string> = {}) {
-  return page(request, 'Arcanum', `<p style="color:var(--fg)">${esc(message)}</p>`, status, headers);
+  return page(request, new URL(request.url).host, `<p style="color:var(--fg)">${esc(message)}</p>`, status, headers);
 }
 
 export interface PasskeyItem {

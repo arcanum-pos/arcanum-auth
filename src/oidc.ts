@@ -264,16 +264,18 @@ export async function userinfo(request: Request, env: Env): Promise<Response> {
 
 export async function logout(request: Request, env: Env): Promise<Response> {
   const p = new URL(request.url).searchParams;
-  const cookie = await endSession(env, request);
+  const cookies = await endSession(env, request);
   const client = await clientById(env, p.get('client_id'));
   const target = p.get('post_logout_redirect_uri');
+  let res: Response;
   if (client && target && client.post_logout_redirect_uris.includes(target)) {
     const url = new URL(target);
     if (p.get('state')) url.searchParams.set('state', p.get('state')!);
-    return redirect(url.toString(), { 'Set-Cookie': cookie });
+    res = redirect(url.toString());
+  } else {
+    res = messagePage(request, texts(request).signedOut);
   }
-  const res = messagePage(request, texts(request).signedOut);
-  res.headers.append('Set-Cookie', cookie);
+  for (const cookie of cookies) res.headers.append('Set-Cookie', cookie);
   return res;
 }
 

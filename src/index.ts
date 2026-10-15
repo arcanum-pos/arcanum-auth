@@ -1,8 +1,7 @@
-// arcanum-auth: a small OpenID Connect provider for Arcanum — the default
-// identity provider of every installation (login.kaboutersoft.be), in place
-// of Auth0. Exactly what arcanum-bff needs, and no more:
-//   - authorization code + PKCE (the console, the chooser)
-//   - device authorization grant, RFC 8628 (the kassa's QR login)
+// A small OpenID Connect provider (login.kaboutersoft.be), for any
+// application that registers a client. Exactly this, and no more:
+//   - authorization code + PKCE
+//   - device authorization grant, RFC 8628 (signing a shared device in from a phone)
 //   - refresh tokens (offline_access), rotated on use
 //   - id_token + /userinfo with sub, email, email_verified, name
 //   - discovery, JWKS, RP-initiated logout
@@ -37,7 +36,7 @@ export default {
 
   // Hourly (triggers.crons): expired guests and old protocol state.
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    console.log(JSON.stringify({ event: 'arcanum-auth cleanup', deleted: await cleanup(env) }));
+    console.log(JSON.stringify({ event: 'auth cleanup', deleted: await cleanup(env) }));
   },
 };
 
@@ -98,7 +97,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/health') return json({ ok: true });
       return messagePage(request, texts(request).errors.request, 404);
     } catch (err) {
-      console.error('arcanum-auth error', err);
+      console.error('auth error', err);
       return json({ error: 'server_error' }, 500);
     }
 }

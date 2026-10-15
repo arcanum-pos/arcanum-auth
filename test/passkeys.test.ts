@@ -140,7 +140,7 @@ describe('adding a passkey', () => {
     const res = await postJson('/passkey/register/options', {}, { Cookie: cookie });
     expect(res.status).toBe(200);
     const o = (await res.json()) as any;
-    expect(o.rp).toEqual({ name: 'Arcanum', id: RP_ID });
+    expect(o.rp).toEqual({ name: RP_ID, id: RP_ID });
     expect(o.user.name).toBe(email);
     expect(new TextDecoder().decode(fromB64u(o.user.id))).toMatch(/^[0-9a-f-]{36}$/); // the user's id (sub)
     expect(o.attestation).toBe('none');
@@ -222,7 +222,7 @@ describe('signing in with a passkey', () => {
     expect(res.status, await res.clone().text()).toBe(200);
     expect(await res.json()).toEqual({ redirect: '/device?user_code=BCDF-GHJK' });
     const session = cookieOf(res);
-    expect(session).toMatch(/^__Host-arcanum_auth=/);
+    expect(session).toMatch(/^__Host-session=/);
     expect(await (await call('/account', { headers: { Cookie: session } })).text()).toContain(email);
     expect((await row(auth.id))!.last_used_at).toBeTruthy();
     // Somewhere else than our own pages: /account.

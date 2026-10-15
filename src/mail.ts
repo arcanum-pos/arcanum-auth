@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { readSetting, type MailSetting } from './settings';
 
-// Sends through arcanum-platform-mailer (its /send, bearer MAILER_INTERNAL_KEY,
+// Sends through the platform's mailer (its /send, bearer MAILER_INTERNAL_KEY,
 // the mailer's one contract — MAIL.md): { message, provider: { type, …settings } }.
 // The account: the one set in the bootstrapper (/admin/e-mail, stored
 // encrypted — settings.ts), else MAIL_CONFIG, either form:
@@ -44,7 +44,7 @@ export function htmlOf(text: string): string {
 }
 
 async function callMailer(env: Env, provider: { type: string } & Record<string, unknown>, to: string, subject: string, text: string): Promise<Response> {
-  return env.MAILER!.fetch('https://arcanum-mailer/send', {
+  return env.MAILER!.fetch('https://mailer/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.MAILER_INTERNAL_KEY}` },
     body: JSON.stringify({ message: { to, subject, text, html: htmlOf(text) }, provider }),
@@ -58,15 +58,15 @@ export async function sendTestMail(env: Env, to: string, subject: string, text: 
   if (!mail) return { status: 409, body: { ok: false, code: 'invalid_config', error: 'No mail account set' } };
   const res = await callMailer(env, mail.provider, to, subject, text);
   const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  return { status: res.status, body: { ...(body ?? { ok: false, code: 'unreachable', error: `arcanum-mailer returned ${res.status}` }), source: mail.source } };
+  return { status: res.status, body: { ...(body ?? { ok: false, code: 'unreachable', error: `the mailer returned ${res.status}` }), source: mail.source } };
 }
 
 export async function sendMail(env: Env, to: string, subject: string, text: string): Promise<void> {
   const provider = (await currentMail(env))?.provider;
   if (!env.MAILER || !env.MAILER_INTERNAL_KEY || !provider) {
-    console.log(`[arcanum-auth] no mailer configured — mail to ${to}: ${subject}\n${text}`);
+    console.log(`[auth] no mailer configured — mail to ${to}: ${subject}\n${text}`);
     return;
   }
   const res = await callMailer(env, provider, to, subject, text);
-  if (!res.ok) throw new Error(`arcanum-mailer returned ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(`the mailer returned ${res.status}: ${await res.text()}`);
 }

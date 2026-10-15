@@ -7,7 +7,7 @@ import { inSeconds, json, newEmailCode, nowIso, randomToken, sha256, timingSafeE
 
 const LOGIN_LINK_SECONDS = 60;
 
-// What arcanum-platform-mailer can send with (cloudflare: its send_email binding).
+// What the platform's mailer can send with (cloudflare: its send_email binding).
 const PLATFORM_MAIL_SERVICES = ['smtp', 'gmail_api', 'brevo', 'resend', 'cloudflare'];
 
 // Test mails (/admin/mail/test): at most 10 an hour — counted in this
@@ -35,7 +35,7 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
   return (results || []).some((c) => (JSON.parse(c.redirect_uris) as string[]).some((uri) => new URL(uri).origin === origin));
 }
 
-// Clients (one per Arcanum installation), managed by the installer with
+// Clients (one per application, e.g. per installation), managed by the bootstrapper with
 // ADMIN_API_KEY:
 //   POST   /admin/clients      { name, redirect_uris[], post_logout_redirect_uris[]? }
 //          → 201 { client_id, client_secret, ... }  (the secret is shown only here)
@@ -167,7 +167,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
   }
 
   if (path === '/admin/mail' && request.method === 'PUT') {
-    if (!env.SETTINGS_KEY) return json({ error: 'SETTINGS_KEY is not set on arcanum-auth' }, 409);
+    if (!env.SETTINGS_KEY) return json({ error: 'SETTINGS_KEY is not set' }, 409);
     const body = (await request.json().catch(() => null)) as { provider?: unknown; settings?: unknown; keep?: unknown } | null;
     const provider = typeof body?.provider === 'string' ? body.provider : '';
     if (!PLATFORM_MAIL_SERVICES.includes(provider)) return json({ error: `provider must be one of ${PLATFORM_MAIL_SERVICES.join(', ')}` }, 400);
