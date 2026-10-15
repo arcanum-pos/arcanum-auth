@@ -32,10 +32,7 @@
 		// Must equal what arcanum's identity_providers.issuer_url (and the BFF's
 		// default IdP) is configured with, character for character — the BFF
 		// compares the id_token's `iss` to it. No trailing slash.
-		"ISSUER": "https://login.kaboutersoft.be",
-		// PBKDF2-SHA256 rounds for new password hashes (stored per hash, so it
-		// can be raised later). See README.md "Password hashing".
-		"PBKDF2_ITERATIONS": "100000"
+		"ISSUER": "https://login.kaboutersoft.be"
 	},
 	"d1_databases": [
 		{
@@ -46,7 +43,7 @@
 			"migrations_dir": "migrations"
 		}
 	],
-	// Verification / password-reset emails go through the platform's own
+	// The mailed sign-in codes go through the platform's own
 	// mailer, arcanum-platform-mailer (same account; same code as
 	// arcanum-mailer, never an installation's). Remove this block to run
 	// without it: codes are then only logged (fine for testing, not for

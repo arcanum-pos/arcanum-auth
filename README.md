@@ -14,17 +14,31 @@ It does exactly what `arcanum-bff` needs:
 | **id_token + /userinfo** | `sub`, `email`, `email_verified`, `name` (RS256, JWKS published) |
 | **Discovery, JWKS, RP-initiated logout** | `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/logout` |
 
-People sign in with **e-mail + password** (the address is proven with a
-6-digit code sent by mail before the account exists) or **with Google**.
-Both lead to the same user — the same `sub` — when the verified e-mail is
-the same, so switching sign-in method never breaks an Arcanum membership.
+**No passwords** (since 2026-10). People sign in with **a mailed code**,
+**a passkey** or **Google**. Every way leads to the same user — the same
+`sub` — for the same verified e-mail, so switching sign-in method never
+breaks an Arcanum membership.
+
+**Signing in with a mailed code** is one flow for signing in and signing
+up (`/login` → `/login/code`): the address gets a 6-digit code and a link,
+both valid 15 minutes. The code typed on the page, or the button behind the
+link, signs in; an address without an account first answers one question,
+its name (`/login/name`), and then exists. The page never says whether an
+address has an account.
+- The link never signs in on opening it (mail scanners open links): it
+  shows a button. Opened in another browser than the one that asked (a
+  `__Host-arcanum_signin` cookie tells), it says so — type the code there,
+  or sign in here.
+- `/signup`, `/verify`, `/reset` lead to `/login`. The `users.password_hash`
+  column stays (no destructive migration) but nothing reads it; it was
+  emptied by hand.
 
 **Passkeys** are one more way into that same user (`src/passkeys.ts`,
 verified with `@simplewebauthn/server`): fingerprint, face or the device's
 PIN, no password, no e-mail to type. Nothing changes for the installations
 — same `sub`, same claims.
 - **Adding one:** on `/account` → *Passkey toevoegen*; and once after
-  signing in another way (password, mailed code, Google), a page offers it
+  signing in another way (mailed code, Google), a page offers it
   (*Niet nu* = not asked again for 30 days; a browser without passkeys
   skips the page). The owner gets a mail whenever one is added.
 - **Signing in:** *Aanmelden met een passkey* on the login page, or the
@@ -32,7 +46,7 @@ PIN, no password, no e-mail to type. Nothing changes for the installations
   webauthn"`). Discoverable credentials, so no e-mail is asked.
 - **Relying party = the ISSUER's host** (`login.kaboutersoft.be`). A passkey
   only works there: changing that host would leave every passkey unusable
-  (people fall back to their password, Google or a reset).
+  (people fall back to a mailed code or Google).
 - User verification required, attestation `none`, single-use challenges
   (5 minutes), the signature counter kept and checked, the user handle
   must match. Guests can't add one. `/account` lists, renames and removes
@@ -58,10 +72,10 @@ sets up an installation, or by hand there for another application
 - **Sessions** on the issuer: `__Host-arcanum_auth` (Secure, HttpOnly,
   SameSite=Lax, Path=/, no Domain — no sibling subdomain can plant one).
 - **Form posts and the passkey JSON** only from this exact origin.
-- **Mailed codes** (sign-up, password reset): 6 digits, 5 tries per code,
-  and per e-mail address at most 5 codes and 10 wrong tries an hour (across
-  all its codes) — on top of the per-IP limits, so many IPs can't guess
-  together. Sign-in: 10 wrong passwords per address per 15 minutes.
+- **Mailed codes** (signing in): 6 digits, 5 tries per code, and per
+  e-mail address at most 5 codes and 10 wrong tries an hour (across all its
+  codes) — on top of the per-IP limits (10 codes an hour), so many IPs
+  can't guess together. Code, link and the name step each work once.
 - **What writes a row without anyone signed in** — a device code (per
   client), a Google sign-in's state and a passkey challenge (per IP) — is
   limited in memory (`PUBLIC_RATE_LIMITER`, 20 a minute), so it can't eat
@@ -176,10 +190,11 @@ recording stand-in for arcanum-mailer and a fake Google token endpoint.
 curl -s https://login.kaboutersoft.be/.well-known/openid-configuration | jq
 curl -s https://login.kaboutersoft.be/.well-known/jwks.json | jq
 ```
-Create an account: open https://login.kaboutersoft.be/signup, enter a name,
-e-mail and password, then the 6-digit code (from the mail, or
-`npx wrangler tail` if no mailer is configured). You end on "Aangemeld als …".
-Sign out and in again; try "Wachtwoord vergeten"; try "Aanmelden met Google".
+Create an account: open https://login.kaboutersoft.be/login, enter an
+e-mail address, then the 6-digit code (from the mail, or `npx wrangler tail`
+if no mailer is configured) and your name. You end on "Aangemeld als …".
+Sign out and in again (the code alone now, or the link in the mail); try
+"Aanmelden met Google".
 
 **Authorization code flow**, with https://oidcdebugger.com as the client —
 register it once in the bootstrapper: `/admin/installaties` → "Andere
@@ -241,14 +256,11 @@ provider").
 
 ## Notes
 
-- **Passwords**: PBKDF2-SHA256 through WebCrypto, 100 000 iterations — the
-  maximum Workers allows. The iteration count is stored with each hash, so
-  it can change later. On the Workers Free plan (10 ms CPU per request) a
-  sign-in or sign-up may occasionally be cut off; lower `PBKDF2_ITERATIONS`
-  only if that actually happens, and watch it in the Worker's metrics.
-- **Rate limits**: 10 wrong passwords per address and 30 per IP per quarter
-  hour; 10 mails per IP per hour; 5 tries per mailed code; 20 wrong device
-  codes per IP per quarter hour.
+- **No passwords** — and so no password hashing on the Workers Free plan's
+  10 ms of CPU either.
+- **Rate limits**: 10 mails per IP and 5 per address per hour; 5 tries per
+  mailed code, 10 wrong codes per address per hour; 20 wrong device codes
+  per IP per quarter hour.
 - **Key rotation**: generate a new key; put the *old* key's public JWK (no
   `d`/`p`/`q`/…) in `PREVIOUS_PUBLIC_KEYS` as a JSON array; replace
   `SIGNING_KEY`. Remove the old one after an hour (the longest access/id

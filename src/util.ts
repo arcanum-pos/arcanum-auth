@@ -1,4 +1,4 @@
-// Small building blocks: random tokens, hashing, passwords, responses.
+// Small building blocks: random tokens, hashing, responses.
 
 const encoder = new TextEncoder();
 
@@ -34,34 +34,6 @@ export function timingSafeEqual(a: string, b: string): boolean {
 export async function pkceMatches(verifier: string, challenge: string): Promise<boolean> {
   if (!/^[A-Za-z0-9\-._~]{43,128}$/.test(verifier)) return false;
   return timingSafeEqual(await sha256(verifier), challenge);
-}
-
-// --- Passwords: PBKDF2-SHA256 via WebCrypto (native, and the one KDF Workers
-// offer without shipping a JS implementation). Workers caps PBKDF2 at 100 000
-// iterations. Format: pbkdf2$sha256$<iterations>$<salt>$<hash>.
-
-async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
-  return new Uint8Array(bits);
-}
-
-export async function hashPassword(password: string, iterations: number): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await pbkdf2(password, salt, iterations);
-  return `pbkdf2$sha256$${iterations}$${base64url(salt)}$${base64url(hash)}`;
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [scheme, digest, iter, salt, hash] = stored.split('$');
-  if (scheme !== 'pbkdf2' || digest !== 'sha256' || !salt || !hash) return false;
-  const actual = await pbkdf2(password, fromBase64url(salt), Number(iter));
-  return timingSafeEqual(base64url(actual), hash);
-}
-
-export function iterations(env: { PBKDF2_ITERATIONS?: string }): number {
-  const n = Number(env.PBKDF2_ITERATIONS || 100_000);
-  return Number.isInteger(n) && n >= 10_000 && n <= 100_000 ? n : 100_000;
 }
 
 // --- Device user codes: 8 letters, no vowels (no accidental words) and no
@@ -102,8 +74,8 @@ export function oauthError(error: string, description: string, status = 400): Re
   return json({ error, error_description: description }, status);
 }
 
-export function redirect(location: string, headers: Record<string, string> = {}): Response {
-  return new Response(null, { status: 302, headers: { Location: location, ...NO_STORE, ...headers } });
+export function redirect(location: string, headers: Record<string, string> = {}, status = 302): Response {
+  return new Response(null, { status, headers: { Location: location, ...NO_STORE, ...headers } });
 }
 
 export function normalizeEmail(email: string): string {

@@ -10,7 +10,7 @@
 // or with Google; both link to one user (and one `sub`) by verified e-mail.
 // A passkey (passkeys.ts) is one more way into that same user.
 // Clients — one per installation — are created by the installer via /admin.
-import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, loginOnce, resetConfirm, resetRequest, signup, verify } from './account';
+import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, loginCode, loginLink, loginName, loginOnce } from './account';
 import { admin } from './admin';
 import { cleanup } from './cleanup';
 import { clientSelf } from './clients';
@@ -19,7 +19,7 @@ import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinf
 import { messagePage, texts } from './pages';
 import { managePasskey, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions } from './passkeys';
 import { PASSKEY_SCRIPT } from './passkey-script';
-import { json, redirect } from './util';
+import { json, redirect, safeContinue } from './util';
 import { tooManyRequests, withinLimit } from './ratelimit';
 
 export type { Env };
@@ -57,10 +57,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/logout' && method === 'GET') return logout(request, env);
 
       if (path === '/login' && (method === 'GET' || method === 'POST')) return login(request, env);
-      if (path === '/signup' && (method === 'GET' || method === 'POST')) return signup(request, env);
-      if (path === '/verify' && (method === 'GET' || method === 'POST')) return verify(request, env);
-      if (path === '/reset' && (method === 'GET' || method === 'POST')) return resetRequest(request, env);
-      if (path === '/reset/confirm' && method === 'POST') return resetConfirm(request, env);
+      if (path === '/login/code' && (method === 'GET' || method === 'POST')) return loginCode(request, env);
+      if (path === '/login/link' && (method === 'GET' || method === 'POST')) return loginLink(request, env);
+      if (path === '/login/name' && method === 'POST') return loginName(request, env);
+      // No passwords anymore: the old sign-up, verify and reset pages lead to sign-in.
+      if (path === '/signup' || path === '/verify' || path === '/reset' || path === '/reset/confirm') {
+        return redirect(`/login?continue=${encodeURIComponent(safeContinue(url.searchParams.get('continue')))}`, {}, 303);
+      }
       if (path === '/google' && method === 'GET') {
         if (!(await withinLimit(env, `google:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`))) return tooMany();
         return googleStart(request, env);

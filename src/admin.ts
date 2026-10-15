@@ -199,7 +199,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     // asker's language — what people get, so a checker scores what matters —
     // marked as a test, so nobody takes it for a real one.
     const t = texts(request);
-    const result = await sendTestMail(env, to, `${t.mailTestSubject} — ${t.mailSignupSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailSignup(newEmailCode())}`);
+    const result = await sendTestMail(env, to, `${t.mailTestSubject} — ${t.mailCodeSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailCode(newEmailCode(), `${env.ISSUER}/login`)}`);
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 

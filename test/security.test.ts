@@ -2,8 +2,9 @@
 // in-memory rate limits on what writes a row without anyone signed in, the
 // admin API only over the bootstrapper's service binding, HSTS everywhere.
 // (The __Host- session cookie and Google's browser-bound state: auth.test.ts.)
-import { env, SELF } from 'cloudflare:test';
+import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
+import { askCode, lastCodeFor, signInWithCode } from './signin';
 
 const ISSUER = 'https://login.kaboutersoft.be';
 const FORM = { 'Content-Type': 'application/x-www-form-urlencoded', Origin: ISSUER };
@@ -14,38 +15,23 @@ const call = (path: string, init: RequestInit = {}) => SELF.fetch(`${ISSUER}${pa
 const post = (path: string, fields: Record<string, string>, headers: Record<string, string> = {}) =>
   call(path, { method: 'POST', headers: { ...FORM, 'CF-Connecting-IP': ip(), ...headers }, body: new URLSearchParams(fields) });
 
-async function lastCodeFor(email: string): Promise<string> {
-  const mails = (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as { body: { message: { to: string; text: string } } }[];
-  return mails.reverse().find((m) => m.body.message.to === email)!.body.message.text.match(/\b(\d{6})\b/)![1];
-}
-
-async function signUp(email: string) {
-  const res = await post('/signup', { name: 'Jan', email, password: 'correct horse battery', continue: '/account' });
-  const id = new URL(res.headers.get('Location')!, ISSUER).searchParams.get('id')!;
-  expect((await post('/verify', { id, code: await lastCodeFor(email), continue: '/account' })).status).toBe(302);
-}
-
-async function resetCode(email: string): Promise<{ id: string; code: string }> {
-  const res = await post('/reset', { email, continue: '/account' });
-  expect(res.status).toBe(200);
-  const id = (await res.text()).match(/name="id" value="([^"]+)"/)![1];
-  return { id, code: await lastCodeFor(email) };
-}
+const signUp = (email: string) => signInWithCode(post, email);
 
 describe('mailed codes: limits per address, not only per IP (many IPs, one address)', () => {
   it('at most 5 codes an hour for one address, from however many IPs', async () => {
     const email = uniqueEmail('codes');
-    for (let i = 0; i < 5; i++) expect((await post('/reset', { email, continue: '/account' })).status).toBe(200);
-    expect((await post('/reset', { email, continue: '/account' })).status).toBe(429);
+    for (let i = 0; i < 5; i++) expect((await post('/login', { email, continue: '/account' })).status).toBe(302);
+    expect((await post('/login', { email, continue: '/account' })).status).toBe(429);
   });
 
   it('10 wrong codes an hour for one address, across all its codes — then even the right one waits', async () => {
     const email = uniqueEmail('guess');
     await signUp(email);
-    const codes = [await resetCode(email), await resetCode(email), await resetCode(email)];
-    const wrong = (c: { id: string; code: string }) => post('/reset/confirm', { id: c.id, code: c.code === '000000' ? '111111' : '000000', password: 'another long password' });
+    const codes: { id: string; code: string }[] = [];
+    for (let i = 0; i < 3; i++) codes.push({ id: (await askCode(post, email)).id, code: await lastCodeFor(email) });
+    const wrong = (c: { id: string; code: string }) => post('/login/code', { id: c.id, code: c.code === '000000' ? '111111' : '000000' });
     for (const [c, times] of [[codes[0], 4], [codes[1], 4], [codes[2], 2]] as const) for (let i = 0; i < times; i++) expect((await wrong(c)).status).toBe(400);
-    const right = await post('/reset/confirm', { id: codes[2].id, code: codes[2].code, password: 'another long password' });
+    const right = await post('/login/code', { id: codes[2].id, code: codes[2].code });
     expect(right.status).toBe(400);
     expect(await right.text()).toMatch(/klopt niet of is verlopen/);
   });

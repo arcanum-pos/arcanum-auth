@@ -1,6 +1,7 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { cleanup } from '../src/cleanup';
+import { signInWithCode } from './signin';
 
 // Passkeys: adding one (signed in), signing in with it, the offer after
 // signing in another way, renaming and removing — against a software
@@ -26,15 +27,8 @@ async function mails(): Promise<{ body: { message: { to: string; subject: string
   return (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as never;
 }
 
-// Sign up (e-mail + password, the mailed code) → the session cookie, and where it went next.
-async function signUp(email: string, continueTo = '/account') {
-  const res = await post('/signup', { name: 'Jan Peeters', email, password: 'correct horse battery', continue: continueTo });
-  const id = new URL(res.headers.get('Location')!, ISSUER).searchParams.get('id')!;
-  const code = (await mails()).reverse().find((m) => m.body.message.to === email)!.body.message.text.match(/\b(\d{6})\b/)![1];
-  const verified = await post('/verify', { id, code, continue: continueTo });
-  expect(verified.status).toBe(302);
-  return { cookie: cookieOf(verified), next: verified.headers.get('Location')! };
-}
+// A new account, signed in with its mailed code → the session cookie, and where it went next.
+const signUp = (email: string, continueTo = '/account') => signInWithCode(post, email, { continueTo });
 
 // --- A software authenticator.
 
@@ -278,11 +272,10 @@ describe('the offer after signing in another way', () => {
     expect(html).toContain('data-skip="/account"'); // a browser without passkeys goes straight on
     const notNow = await post('/passkey/offer', { continue: '/account' }, { Cookie: first.cookie });
     expect(notNow.headers.get('Location')).toBe('/account');
-    const again = await post('/login', { email, password: 'correct horse battery', continue: '/account' });
-    expect(again.headers.get('Location')).toBe('/account');
+    expect((await signUp(email)).next).toBe('/account');
     // 31 days later it's offered again.
     await env.DB.prepare('UPDATE users SET passkey_offer_dismissed_at = ? WHERE email = ?').bind(new Date(Date.now() - 31 * 86_400_000).toISOString(), email).run();
-    expect((await post('/login', { email, password: 'correct horse battery', continue: '/account' })).headers.get('Location')).toBe('/passkey/offer?continue=%2Faccount');
+    expect((await signUp(email)).next).toBe('/passkey/offer?continue=%2Faccount');
 
     const other = await signUp(uniqueEmail('offer-has'));
     await addPasskey(other.cookie);
@@ -318,7 +311,7 @@ describe('the pages', () => {
     expect(html).toContain('<script src="/passkey.js" defer></script>');
     expect(html).toContain('autocomplete="username webauthn"');
     expect(html).toMatch(/<div data-passkey-box hidden>[\s\S]*data-passkey-login/);
-    expect(await (await call('/signup')).text()).not.toContain('<script');
+    expect(await (await call('/device')).text()).not.toContain('<script');
     const script = await call('/passkey.js');
     expect(script.headers.get('Content-Type')).toContain('text/javascript');
     expect(await script.text()).toContain('/passkey/login/options');

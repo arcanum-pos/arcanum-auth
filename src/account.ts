@@ -1,24 +1,12 @@
 import { decodeJwt as decodeJwtPayload } from 'jose';
 import type { Env } from './env';
 import { sendMail } from './mail';
-import {
-  deviceCodePage,
-  deviceConfirmPage,
-  loginPage,
-  messagePage,
-  resetCodePage,
-  resetRequestPage,
-  signupPage,
-  texts,
-  verifyPage,
-} from './pages';
+import { codePage, deviceCodePage, deviceConfirmPage, linkPage, loginPage, messagePage, namePage, texts } from './pages';
 import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
 import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
 import {
-  hashPassword,
   inSeconds,
   isEmail,
-  iterations,
   newEmailCode,
   normalizeEmail,
   normalizeUserCode,
@@ -31,7 +19,6 @@ import {
   sha256,
   timingSafeEqual,
   unixNow,
-  verifyPassword,
 } from './util';
 
 const EMAIL_CODE_SECONDS = 900;
@@ -41,7 +28,7 @@ const MAX_CODE_TRIES_PER_ADDRESS = 10;
 const MAX_CODES_PER_ADDRESS = 5;
 const googleEnabled = (env: Env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
-// Signed in with a password, a mailed code or Google: on to `continueTo` —
+// Signed in with a mailed code or Google: on to `continueTo` —
 // by way of the offer to add a passkey, when that's due (passkeys.ts).
 async function signIn(env: Env, user: User, continueTo: string): Promise<Response> {
   const cookie = await createSession(env, user.id, unixNow());
@@ -55,7 +42,29 @@ function refuseForeign(request: Request, env: Env): Response | null {
   return sameOrigin(request, env.ISSUER) ? null : messagePage(request, texts(request).errors.request, 403);
 }
 
-// --- Sign in with e-mail + password.
+// --- Sign in with a mailed code (no passwords). One flow for signing in
+// and signing up: the address gets a 6-digit code and a link (15 minutes);
+// the code typed here, or the link's button, signs in — an address without
+// an account first answers one question (its name). The page never says
+// whether an address has an account.
+
+const SIGNIN_COOKIE = '__Host-arcanum_signin';
+
+interface EmailCodeRow {
+  id: string;
+  purpose: 'login';
+  email: string;
+  code_hash: string;
+  attempts: number;
+  expires_at: string;
+  used_at: string | null;
+  continue_to: string | null;
+  link_hash: string | null;
+  browser_hash: string | null;
+  finish_hash: string | null;
+}
+
+const codeRow = (env: Env, id: string) => env.DB.prepare("SELECT * FROM email_codes WHERE id = ? AND purpose = 'login'").bind(id).first<EmailCodeRow>();
 
 export async function login(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -66,82 +75,42 @@ export async function login(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
   const continueTo = safeContinue(form.continue);
   const email = normalizeEmail(form.email || '');
-  const again = (error: 'invalid' | 'tooMany') => loginPage(request, { continueTo, email, error, google: googleEnabled(env) }, error === 'tooMany' ? 429 : 401);
-
-  const ipKey = `login-ip:${clientIp(request)}`;
-  const emailKey = `login-email:${email}`;
-  if ((await tooManyAttempts(env, emailKey, 10)) || (await tooManyAttempts(env, ipKey, 30))) return again('tooMany');
-
-  const user = await userByEmail(env, email);
-  const ok = !!user?.password_hash && (await verifyPassword(form.password || '', user.password_hash));
-  if (!user || !ok) {
-    await recordAttempt(env, emailKey);
-    await recordAttempt(env, ipKey);
-    return again('invalid');
-  }
-  return signIn(env, user, continueTo);
-}
-
-// --- Create an account: the name + password wait in email_codes until the
-// address is proven with the mailed code.
-
-export async function signup(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  if (request.method === 'GET') return signupPage(request, { continueTo: safeContinue(url.searchParams.get('continue')), google: googleEnabled(env) });
-  const foreign = refuseForeign(request, env);
-  if (foreign) return foreign;
-
-  const form = await readForm(request);
-  const continueTo = safeContinue(form.continue);
-  const email = normalizeEmail(form.email || '');
-  const name = (form.name || '').trim().slice(0, 100);
-  const again = (error: 'emailInvalid' | 'passwordShort' | 'exists' | 'tooMany' | 'mail') =>
-    signupPage(request, { continueTo, email, name, error, google: googleEnabled(env) }, 400);
-
-  if (!isEmail(email)) return again('emailInvalid');
-  if ((form.password || '').length < 10) return again('passwordShort');
-  if (await userByEmail(env, email)) return again('exists');
+  const again = (error: 'emailInvalid' | 'tooMany' | 'mail', status: number) => loginPage(request, { continueTo, email, error, google: googleEnabled(env) }, status);
+  if (!isEmail(email)) return again('emailInvalid', 400);
+  // Per IP and per address — whether or not it has an account (no enumeration).
   const ipKey = `mail-ip:${clientIp(request)}`;
   const addressKey = `mail-email:${email}`;
-  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) return again('tooMany');
-
-  const t = texts(request);
-  const code = newEmailCode();
-  const id = randomToken(16);
-  await env.DB.prepare(
-    `INSERT INTO email_codes (id, purpose, email, code_hash, pending_name, pending_password_hash, expires_at) VALUES (?, 'signup', ?, ?, ?, ?, ?)`
-  )
-    .bind(id, email, await sha256(code), name || email.split('@')[0], await hashPassword(form.password, iterations(env)), inSeconds(EMAIL_CODE_SECONDS))
-    .run();
+  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) return again('tooMany', 429);
   await recordAttempt(env, ipKey);
   await recordAttempt(env, addressKey);
-  try {
-    await sendMail(env, email, t.mailSignupSubject, t.mailSignup(code));
-  } catch (err) {
-    console.error('signup mail failed', err);
-    return again('mail');
-  }
-  return redirect(`/verify?id=${id}&continue=${encodeURIComponent(continueTo)}`);
-}
 
-interface EmailCodeRow {
-  id: string;
-  purpose: 'signup' | 'reset';
-  email: string;
-  code_hash: string;
-  pending_name: string | null;
-  pending_password_hash: string | null;
-  attempts: number;
-  expires_at: string;
-  used_at: string | null;
+  const id = randomToken(16);
+  const code = newEmailCode();
+  const linkToken = randomToken(24);
+  // The browser that asked: the link signs in directly there, and says
+  // "another device?" elsewhere.
+  const browser = randomToken(24);
+  await env.DB.prepare(
+    `INSERT INTO email_codes (id, purpose, email, code_hash, link_hash, browser_hash, continue_to, expires_at) VALUES (?, 'login', ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(id, email, await sha256(code), await sha256(linkToken), await sha256(browser), continueTo, inSeconds(EMAIL_CODE_SECONDS))
+    .run();
+  const t = texts(request);
+  try {
+    await sendMail(env, email, t.mailCodeSubject, t.mailCode(code, `${env.ISSUER}/login/link?id=${id}&t=${linkToken}`));
+  } catch (err) {
+    console.error('sign-in mail failed', err);
+    return again('mail', 502);
+  }
+  return redirect(`/login/code?id=${id}`, { 'Set-Cookie': `${SIGNIN_COOKIE}=${browser}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${EMAIL_CODE_SECONDS}` });
 }
 
 // A mailed code: right, not expired, not used, fewer than MAX_CODE_TRIES wrong
 // — and, per e-mail address across all its codes, fewer than
 // MAX_CODE_TRIES_PER_ADDRESS wrong in an hour. Per code alone, an attacker
 // with many IP addresses could ask many codes for one address and guess on each.
-async function checkEmailCode(env: Env, id: string, purpose: 'signup' | 'reset', code: string): Promise<EmailCodeRow | 'invalid' | 'unknown'> {
-  const row = await env.DB.prepare('SELECT * FROM email_codes WHERE id = ? AND purpose = ?').bind(id, purpose).first<EmailCodeRow>();
+async function checkEmailCode(env: Env, id: string, code: string): Promise<EmailCodeRow | 'invalid' | 'unknown'> {
+  const row = await codeRow(env, id);
   if (!row || row.used_at || row.expires_at <= nowIso() || row.attempts >= MAX_CODE_TRIES) return 'unknown';
   const addressKey = `code-email:${row.email}`;
   if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS, 3600)) return 'unknown';
@@ -154,87 +123,76 @@ async function checkEmailCode(env: Env, id: string, purpose: 'signup' | 'reset',
   return claimed.meta.changes ? row : 'unknown';
 }
 
-export async function verify(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const lookup = (id: string) => env.DB.prepare("SELECT email FROM email_codes WHERE id = ? AND purpose = 'signup'").bind(id).first<{ email: string }>();
+export async function loginCode(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET') {
-    const id = url.searchParams.get('id') || '';
-    const row = await lookup(id);
-    if (!row) return messagePage(request, texts(request).errors.codeInvalid, 400);
-    return verifyPage(request, { id, email: row.email, continueTo: safeContinue(url.searchParams.get('continue')) });
+    const row = await codeRow(env, new URL(request.url).searchParams.get('id') || '');
+    if (!row || row.used_at || row.expires_at <= nowIso()) return redirect('/login');
+    return codePage(request, { id: row.id, email: row.email, continueTo: safeContinue(row.continue_to) });
   }
   const foreign = refuseForeign(request, env);
   if (foreign) return foreign;
   const form = await readForm(request);
-  const continueTo = safeContinue(form.continue);
-  const result = await checkEmailCode(env, form.id || '', 'signup', form.code || '');
+  const result = await checkEmailCode(env, form.id || '', form.code || '');
   if (typeof result === 'string') {
-    const row = await lookup(form.id || '');
-    return row ? verifyPage(request, { id: form.id, email: row.email, continueTo, error: 'codeInvalid' }, 400) : messagePage(request, texts(request).errors.codeInvalid, 400);
+    const row = await codeRow(env, form.id || '');
+    return row ? codePage(request, { id: row.id, email: row.email, continueTo: safeContinue(row.continue_to), error: 'codeInvalid' }, 400) : messagePage(request, texts(request).errors.codeInvalid, 400);
   }
-  // Signed up with Google in the meantime? Then just add the password.
-  const existing = await userByEmail(env, result.email);
-  const user = existing
-    ? (await env.DB.prepare('UPDATE users SET password_hash = COALESCE(password_hash, ?), updated_at = ? WHERE id = ?').bind(result.pending_password_hash, nowIso(), existing.id).run(), existing)
-    : await createUser(env, { email: result.email, name: result.pending_name || '', passwordHash: result.pending_password_hash });
-  return signIn(env, user, continueTo);
+  return proven(request, env, result);
 }
 
-// --- Password reset. Always the same answer, whether or not the address
-// has an account (no account enumeration).
-
-export async function resetRequest(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  if (request.method === 'GET') return resetRequestPage(request, { continueTo: safeContinue(url.searchParams.get('continue')) });
+// The link in the mail: GET shows a button (mail scanners open links), the
+// button's POST signs in.
+export async function loginLink(request: Request, env: Env): Promise<Response> {
+  const t = texts(request);
+  if (request.method === 'GET') {
+    const p = new URL(request.url).searchParams;
+    const row = await codeRow(env, p.get('id') || '');
+    const valid = !!row && !row.used_at && row.expires_at > nowIso() && !!row.link_hash && timingSafeEqual(await sha256(p.get('t') || ''), row.link_hash);
+    if (!row || !valid) return messagePage(request, t.errors.linkInvalid, 400);
+    const browser = cookieValue(request, SIGNIN_COOKIE);
+    const sameBrowser = !!browser && !!row.browser_hash && timingSafeEqual(await sha256(browser), row.browser_hash);
+    return linkPage(request, { id: row.id, token: p.get('t')!, email: row.email, sameBrowser });
+  }
   const foreign = refuseForeign(request, env);
   if (foreign) return foreign;
   const form = await readForm(request);
-  const continueTo = safeContinue(form.continue);
-  const email = normalizeEmail(form.email || '');
-  if (!isEmail(email)) return resetRequestPage(request, { continueTo, error: 'emailInvalid' }, 400);
-  const ipKey = `mail-ip:${clientIp(request)}`;
-  // Also per address — whether or not it has an account (no enumeration).
-  const addressKey = `mail-email:${email}`;
-  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) {
-    return resetRequestPage(request, { continueTo, error: 'tooMany' }, 429);
-  }
-  await recordAttempt(env, ipKey);
-  await recordAttempt(env, addressKey);
-
-  const id = randomToken(16);
-  const code = newEmailCode();
-  await env.DB.prepare(`INSERT INTO email_codes (id, purpose, email, code_hash, expires_at) VALUES (?, 'reset', ?, ?, ?)`)
-    .bind(id, email, await sha256(code), inSeconds(EMAIL_CODE_SECONDS))
+  const claimed = await env.DB.prepare("UPDATE email_codes SET used_at = ? WHERE id = ? AND purpose = 'login' AND used_at IS NULL AND expires_at > ? AND link_hash = ?")
+    .bind(nowIso(), form.id || '', nowIso(), await sha256(form.t || ''))
     .run();
-  if (await userByEmail(env, email)) {
-    const t = texts(request);
-    try {
-      await sendMail(env, email, t.mailResetSubject, t.mailReset(code));
-    } catch (err) {
-      console.error('reset mail failed', err);
-    }
-  }
-  return resetCodePage(request, { id, email, continueTo });
+  const row = claimed.meta.changes ? await codeRow(env, form.id) : null;
+  if (!row) return messagePage(request, t.errors.linkInvalid, 400);
+  return proven(request, env, row);
 }
 
-export async function resetConfirm(request: Request, env: Env): Promise<Response> {
+// The address is proven (code or link): sign in — or, for an address
+// without an account, ask its name first.
+async function proven(request: Request, env: Env, row: EmailCodeRow): Promise<Response> {
+  const continueTo = safeContinue(row.continue_to);
+  const user = await userByEmail(env, row.email);
+  if (user) {
+    if (!user.email_verified) await env.DB.prepare('UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?').bind(nowIso(), user.id).run();
+    return signIn(env, user, continueTo);
+  }
+  const finish = randomToken(24);
+  await env.DB.prepare('UPDATE email_codes SET finish_hash = ? WHERE id = ?').bind(await sha256(finish), row.id).run();
+  return namePage(request, { id: row.id, finish, email: row.email });
+}
+
+export async function loginName(request: Request, env: Env): Promise<Response> {
   const foreign = refuseForeign(request, env);
   if (foreign) return foreign;
   const form = await readForm(request);
-  const continueTo = safeContinue(form.continue);
-  const row = await env.DB.prepare("SELECT email FROM email_codes WHERE id = ? AND purpose = 'reset'").bind(form.id || '').first<{ email: string }>();
-  if (!row) return messagePage(request, texts(request).errors.codeInvalid, 400);
-  if ((form.password || '').length < 10) return resetCodePage(request, { id: form.id, email: row.email, continueTo, error: 'passwordShort' }, 400);
-  const result = await checkEmailCode(env, form.id, 'reset', form.code || '');
-  const user = typeof result === 'string' ? null : await userByEmail(env, result.email);
-  if (!user) return resetCodePage(request, { id: form.id, email: row.email, continueTo, error: 'codeInvalid' }, 400);
-  await env.DB.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').bind(await hashPassword(form.password, iterations(env)), nowIso(), user.id).run();
-  // A new password ends every other session and refresh token.
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
-    env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').bind(nowIso(), user.id),
-  ]);
-  return signIn(env, user, continueTo);
+  const row = await codeRow(env, form.id || '');
+  const valid = !!row && !!row.used_at && row.expires_at > nowIso() && !!row.finish_hash && timingSafeEqual(await sha256(form.finish || ''), row.finish_hash);
+  if (!row || !valid) return messagePage(request, texts(request).errors.codeInvalid, 400);
+  const name = (form.name || '').trim().slice(0, 100);
+  if (!name) return namePage(request, { id: row.id, finish: form.finish, email: row.email, error: 'nameMissing' }, 400);
+  // Once: the finishing token is spent with the account's creation.
+  const spent = await env.DB.prepare('UPDATE email_codes SET finish_hash = NULL WHERE id = ? AND finish_hash = ?').bind(row.id, row.finish_hash).run();
+  if (!spent.meta.changes) return messagePage(request, texts(request).errors.codeInvalid, 400);
+  // Signed up another way (Google) in the meantime: that account.
+  const user = (await userByEmail(env, row.email)) ?? (await createUser(env, { email: row.email, name }));
+  return signIn(env, user, safeContinue(row.continue_to));
 }
 
 // --- Sign in with Google (OpenID Connect, code flow + PKCE).

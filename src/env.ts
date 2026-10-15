@@ -6,7 +6,6 @@ export interface Env {
   PUBLIC_RATE_LIMITER?: RateLimit;
   // The issuer URL, exactly as clients are configured with (no trailing slash).
   ISSUER: string;
-  PBKDF2_ITERATIONS?: string;
   // Private signing key: a JWK (RSA, alg RS256, with a kid) as JSON. Create
   // one with `npm run generate-key`.
   SIGNING_KEY: string;

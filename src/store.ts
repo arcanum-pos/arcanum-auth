@@ -55,13 +55,13 @@ export async function createGuest(env: Env, name: string, lifetimeHours: number)
   return (await userById(env, id))!;
 }
 
-export async function createUser(env: Env, fields: { email: string; name: string; passwordHash?: string | null; googleSub?: string | null }): Promise<User> {
+export async function createUser(env: Env, fields: { email: string; name: string; googleSub?: string | null }): Promise<User> {
   const id = crypto.randomUUID();
   const now = nowIso();
   await env.DB.prepare(
     'INSERT INTO users (id, email, email_verified, name, password_hash, google_sub, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?, ?, ?)'
   )
-    .bind(id, fields.email, fields.name, fields.passwordHash ?? null, fields.googleSub ?? null, now, now)
+    .bind(id, fields.email, fields.name, null, fields.googleSub ?? null, now, now)
     .run();
   return (await userById(env, id))!;
 }

@@ -1,5 +1,5 @@
-// The issuer's own pages — sign in, create an account, verify an e-mail,
-// reset a password, connect a device, manage passkeys. Server-rendered HTML
+// The issuer's own pages — sign in (a mailed code, a passkey, Google; no
+// passwords), connect a device, manage passkeys. Server-rendered HTML
 // in the browser's language (nl/fr/en), light or dark. The only script is
 // /passkey.js (passkeys need the browser's WebAuthn API), on the pages that
 // offer them.
@@ -10,28 +10,10 @@ const T = {
   nl: {
     signIn: 'Aanmelden',
     email: 'E-mailadres',
-    password: 'Wachtwoord',
     name: 'Naam',
-    submitSignIn: 'Aanmelden',
     withGoogle: 'Aanmelden met Google',
     or: 'of',
-    noAccount: 'Nog geen account?',
-    createAccount: 'Account aanmaken',
-    forgot: 'Wachtwoord vergeten?',
-    haveAccount: 'Al een account?',
-    passwordHint: 'Minstens 10 tekens.',
-    create: 'Account aanmaken',
-    verifyTitle: 'Bevestig je e-mailadres',
-    verifyText: (email: string) => `We stuurden een code van 6 cijfers naar ${email}. Vul ze hier in.`,
     code: 'Code',
-    confirm: 'Bevestigen',
-    resetTitle: 'Wachtwoord vergeten',
-    resetText: 'Vul je e-mailadres in; als er een account bij hoort, sturen we een code om een nieuw wachtwoord te kiezen.',
-    sendCode: 'Code sturen',
-    newPassword: 'Nieuw wachtwoord',
-    resetDoneTitle: 'Nieuw wachtwoord kiezen',
-    resetDoneText: (email: string) => `Als ${email} bij een account hoort, staat er nu een code in je mailbox.`,
-    save: 'Opslaan',
     deviceTitle: 'Toestel koppelen',
     deviceText: 'Vul de code in die op het toestel staat.',
     next: 'Verder',
@@ -60,18 +42,28 @@ const T = {
     offerText: 'Meld je voortaan aan met je vingerafdruk, je gezicht of de pincode van dit toestel — zonder wachtwoord. Je huidige manier van aanmelden blijft ook werken.',
     notNow: 'Niet nu',
     mailPasskeySubject: 'Nieuwe passkey voor je Arcanum-account',
-    mailPasskey: (name: string, accountUrl: string) => `Er werd een passkey ("${name}") aan je account toegevoegd.\n\nWas jij dat niet? Verwijder hem op ${accountUrl} en wijzig je wachtwoord.`,
+    mailPasskey: (name: string, accountUrl: string) => `Er werd een passkey ("${name}") aan je account toegevoegd.\n\nWas jij dat niet? Verwijder hem meteen op ${accountUrl}.`,
     securityKey: 'Beveiligingssleutel',
     phone: 'Telefoon',
     kindSecurityKey: (how: string) => `Beveiligingssleutel${how ? ` · ${how}` : ''}`,
     kindSynced: 'Gesynchroniseerd tussen je toestellen',
     kindDevice: 'Alleen op het toestel waarop hij gemaakt werd',
+    continueEmail: 'Ga verder met e-mail',
+    signInHint: 'We mailen je een code. Nog geen account? Met die code maak je er meteen een.',
+    codeTitle: 'Kijk in je mailbox',
+    codeText: (email: string) => `We stuurden een code van 6 cijfers naar ${email}. Vul ze hier in, of klik op de link in de mail.`,
+    otherAddress: 'Ander e-mailadres',
+    nameTitle: 'Welkom',
+    nameText: (email: string) => `Er is nog geen account voor ${email}. Hoe heet je?`,
+    linkText: (email: string) => `Aanmelden als ${email}?`,
+    linkOtherDevice: 'Je opent deze link op een ander toestel of in een andere browser dan waar je de code vroeg. Typ daar de code uit de mail, of meld je hier aan.',
+    signInHere: 'Hier aanmelden',
+    mailCodeSubject: 'Je aanmeldcode voor Arcanum',
+    mailCode: (code: string, link: string) => `Je code om je aan te melden: ${code}\n\nOf meld je aan met deze link: ${link}\n\nDe code en de link zijn 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
     errors: {
-      invalid: 'E-mailadres of wachtwoord klopt niet.',
       tooMany: 'Te veel pogingen. Probeer het over een kwartier opnieuw.',
       emailInvalid: 'Vul een geldig e-mailadres in.',
-      passwordShort: 'Het wachtwoord moet minstens 10 tekens hebben.',
-      exists: 'Er bestaat al een account met dit e-mailadres. Meld je aan, of kies "Wachtwoord vergeten".',
+      nameMissing: 'Vul je naam in.',
       codeInvalid: 'Deze code klopt niet of is verlopen.',
       deviceCode: 'Deze code klopt niet of is verlopen. Kijk nog eens op het toestel.',
       google: 'Aanmelden met Google is niet gelukt.',
@@ -86,38 +78,16 @@ const T = {
       passkeyAddFailed: 'De passkey kon niet toegevoegd worden. Probeer opnieuw.',
       signInFirst: 'Meld je eerst aan.',
     },
-    mailSignupSubject: 'Je code voor Arcanum',
     mailTestSubject: 'Testmail',
     mailTestNote: (host: string) => `Dit is een testmail van ${host}: zo ziet een mail met een aanmeldcode eruit. De code hieronder opent niets; je hoeft er niets mee te doen.`,
-    mailSignup: (code: string) => `Je code om je account te bevestigen: ${code}\n\nDe code is 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
-    mailResetSubject: 'Nieuw wachtwoord voor Arcanum',
-    mailReset: (code: string) => `Je code om een nieuw wachtwoord te kiezen: ${code}\n\nDe code is 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
   },
   fr: {
     signIn: 'Connexion',
     email: 'Adresse e-mail',
-    password: 'Mot de passe',
     name: 'Nom',
-    submitSignIn: 'Se connecter',
     withGoogle: 'Se connecter avec Google',
     or: 'ou',
-    noAccount: 'Pas encore de compte ?',
-    createAccount: 'Créer un compte',
-    forgot: 'Mot de passe oublié ?',
-    haveAccount: 'Déjà un compte ?',
-    passwordHint: 'Au moins 10 caractères.',
-    create: 'Créer le compte',
-    verifyTitle: 'Confirmez votre adresse e-mail',
-    verifyText: (email: string) => `Nous avons envoyé un code de 6 chiffres à ${email}. Saisissez-le ici.`,
     code: 'Code',
-    confirm: 'Confirmer',
-    resetTitle: 'Mot de passe oublié',
-    resetText: 'Saisissez votre adresse e-mail ; si un compte y est lié, nous envoyons un code pour choisir un nouveau mot de passe.',
-    sendCode: 'Envoyer le code',
-    newPassword: 'Nouveau mot de passe',
-    resetDoneTitle: 'Choisir un nouveau mot de passe',
-    resetDoneText: (email: string) => `Si ${email} est lié à un compte, un code se trouve maintenant dans votre boîte mail.`,
-    save: 'Enregistrer',
     deviceTitle: 'Connecter un appareil',
     deviceText: 'Saisissez le code affiché sur l’appareil.',
     next: 'Continuer',
@@ -146,18 +116,28 @@ const T = {
     offerText: 'Connectez-vous désormais avec votre empreinte, votre visage ou le code de cet appareil — sans mot de passe. Votre façon actuelle de vous connecter continue aussi de fonctionner.',
     notNow: 'Pas maintenant',
     mailPasskeySubject: 'Nouvelle clé d’accès pour votre compte Arcanum',
-    mailPasskey: (name: string, accountUrl: string) => `Une clé d’accès (« ${name} ») a été ajoutée à votre compte.\n\nCe n’était pas vous ? Supprimez-la sur ${accountUrl} et changez votre mot de passe.`,
+    mailPasskey: (name: string, accountUrl: string) => `Une clé d’accès (« ${name} ») a été ajoutée à votre compte.\n\nCe n’était pas vous ? Supprimez-la tout de suite sur ${accountUrl}.`,
     securityKey: 'Clé de sécurité',
     phone: 'Téléphone',
     kindSecurityKey: (how: string) => `Clé de sécurité${how ? ` · ${how}` : ''}`,
     kindSynced: 'Synchronisée entre vos appareils',
     kindDevice: 'Uniquement sur l’appareil où elle a été créée',
+    continueEmail: 'Continuer avec l’e-mail',
+    signInHint: 'Nous vous envoyons un code par e-mail. Pas encore de compte ? Ce code en crée un tout de suite.',
+    codeTitle: 'Consultez votre boîte mail',
+    codeText: (email: string) => `Nous avons envoyé un code à 6 chiffres à ${email}. Saisissez-le ici, ou cliquez sur le lien dans l’e-mail.`,
+    otherAddress: 'Autre adresse e-mail',
+    nameTitle: 'Bienvenue',
+    nameText: (email: string) => `Il n’y a pas encore de compte pour ${email}. Comment vous appelez-vous ?`,
+    linkText: (email: string) => `Se connecter en tant que ${email} ?`,
+    linkOtherDevice: 'Vous ouvrez ce lien sur un autre appareil ou dans un autre navigateur que celui où vous avez demandé le code. Saisissez-y le code de l’e-mail, ou connectez-vous ici.',
+    signInHere: 'Se connecter ici',
+    mailCodeSubject: 'Votre code de connexion pour Arcanum',
+    mailCode: (code: string, link: string) => `Votre code pour vous connecter : ${code}\n\nOu connectez-vous avec ce lien : ${link}\n\nLe code et le lien sont valables 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
     errors: {
-      invalid: 'Adresse e-mail ou mot de passe incorrect.',
       tooMany: 'Trop de tentatives. Réessayez dans un quart d’heure.',
       emailInvalid: 'Saisissez une adresse e-mail valable.',
-      passwordShort: 'Le mot de passe doit contenir au moins 10 caractères.',
-      exists: 'Un compte existe déjà avec cette adresse. Connectez-vous, ou choisissez « Mot de passe oublié ».',
+      nameMissing: 'Saisissez votre nom.',
       codeInvalid: 'Ce code est incorrect ou expiré.',
       deviceCode: 'Ce code est incorrect ou expiré. Vérifiez l’appareil.',
       google: 'La connexion avec Google a échoué.',
@@ -172,38 +152,16 @@ const T = {
       passkeyAddFailed: 'La clé d’accès n’a pas pu être ajoutée. Réessayez.',
       signInFirst: 'Connectez-vous d’abord.',
     },
-    mailSignupSubject: 'Votre code pour Arcanum',
     mailTestSubject: 'E-mail de test',
     mailTestNote: (host: string) => `Ceci est un e-mail de test de ${host} : voici à quoi ressemble un e-mail avec un code de connexion. Le code ci-dessous n’ouvre rien ; vous n’avez rien à faire.`,
-    mailSignup: (code: string) => `Votre code pour confirmer votre compte : ${code}\n\nLe code est valable 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
-    mailResetSubject: 'Nouveau mot de passe pour Arcanum',
-    mailReset: (code: string) => `Votre code pour choisir un nouveau mot de passe : ${code}\n\nLe code est valable 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
   },
   en: {
     signIn: 'Sign in',
     email: 'Email address',
-    password: 'Password',
     name: 'Name',
-    submitSignIn: 'Sign in',
     withGoogle: 'Sign in with Google',
     or: 'or',
-    noAccount: 'No account yet?',
-    createAccount: 'Create an account',
-    forgot: 'Forgot your password?',
-    haveAccount: 'Already have an account?',
-    passwordHint: 'At least 10 characters.',
-    create: 'Create account',
-    verifyTitle: 'Confirm your email address',
-    verifyText: (email: string) => `We sent a 6-digit code to ${email}. Enter it here.`,
     code: 'Code',
-    confirm: 'Confirm',
-    resetTitle: 'Forgot your password',
-    resetText: 'Enter your email address; if an account belongs to it, we send a code to choose a new password.',
-    sendCode: 'Send code',
-    newPassword: 'New password',
-    resetDoneTitle: 'Choose a new password',
-    resetDoneText: (email: string) => `If ${email} belongs to an account, there is now a code in your mailbox.`,
-    save: 'Save',
     deviceTitle: 'Connect a device',
     deviceText: 'Enter the code shown on the device.',
     next: 'Continue',
@@ -232,18 +190,28 @@ const T = {
     offerText: 'From now on, sign in with your fingerprint, your face or this device’s PIN — no password. The way you sign in today keeps working too.',
     notNow: 'Not now',
     mailPasskeySubject: 'New passkey for your Arcanum account',
-    mailPasskey: (name: string, accountUrl: string) => `A passkey ("${name}") was added to your account.\n\nWasn't you? Remove it at ${accountUrl} and change your password.`,
+    mailPasskey: (name: string, accountUrl: string) => `A passkey ("${name}") was added to your account.\n\nWasn't you? Remove it straight away at ${accountUrl}.`,
     securityKey: 'Security key',
     phone: 'Phone',
     kindSecurityKey: (how: string) => `Security key${how ? ` · ${how}` : ''}`,
     kindSynced: 'Synced across your devices',
     kindDevice: 'Only on the device it was made on',
+    continueEmail: 'Continue with email',
+    signInHint: 'We email you a code. No account yet? That code creates one straight away.',
+    codeTitle: 'Check your mailbox',
+    codeText: (email: string) => `We sent a 6-digit code to ${email}. Enter it here, or click the link in the email.`,
+    otherAddress: 'Another email address',
+    nameTitle: 'Welcome',
+    nameText: (email: string) => `There’s no account for ${email} yet. What’s your name?`,
+    linkText: (email: string) => `Sign in as ${email}?`,
+    linkOtherDevice: 'You’re opening this link on another device or in another browser than where you asked for the code. Enter the code from the email there, or sign in here.',
+    signInHere: 'Sign in here',
+    mailCodeSubject: 'Your sign-in code for Arcanum',
+    mailCode: (code: string, link: string) => `Your code to sign in: ${code}\n\nOr sign in with this link: ${link}\n\nThe code and the link are valid for 15 minutes. Didn’t ask for this? Then ignore this email.`,
     errors: {
-      invalid: 'Email address or password is incorrect.',
       tooMany: 'Too many attempts. Try again in a quarter of an hour.',
       emailInvalid: 'Enter a valid email address.',
-      passwordShort: 'The password must be at least 10 characters.',
-      exists: 'An account with this email address already exists. Sign in, or choose "Forgot your password".',
+      nameMissing: 'Enter your name.',
       codeInvalid: 'This code is incorrect or has expired.',
       deviceCode: 'This code is incorrect or has expired. Check the device again.',
       google: 'Signing in with Google failed.',
@@ -258,12 +226,8 @@ const T = {
       passkeyAddFailed: 'The passkey could not be added. Try again.',
       signInFirst: 'Sign in first.',
     },
-    mailSignupSubject: 'Your code for Arcanum',
     mailTestSubject: 'Test mail',
     mailTestNote: (host: string) => `This is a test mail from ${host}: this is what an e-mail with a sign-in code looks like. The code below opens nothing; there is nothing you need to do.`,
-    mailSignup: (code: string) => `Your code to confirm your account: ${code}\n\nThe code is valid for 15 minutes. Didn't ask for this? Then ignore this email.`,
-    mailResetSubject: 'New password for Arcanum',
-    mailReset: (code: string) => `Your code to choose a new password: ${code}\n\nThe code is valid for 15 minutes. Didn't ask for this? Then ignore this email.`,
   },
 } satisfies Record<Lang, unknown>;
 
@@ -329,82 +293,66 @@ export function page(request: Request, title: string, body: string, status = 200
 const hidden = (name: string, value: string) => `<input type="hidden" name="${name}" value="${esc(value)}">`;
 const error = (t: Texts, key?: ErrorKey | null) => (key ? `<p class="error" role="alert">${esc(t.errors[key])}</p>` : '');
 
+// Sign in without a password: an e-mail address (a mailed code follows), a
+// passkey (the browser also offers it in the e-mail field) or Google. An
+// address without an account gets one after its code (namePage).
 export function loginPage(request: Request, opts: { continueTo: string; email?: string; error?: ErrorKey | null; google: boolean }, status = 200) {
   const t = texts(request);
   const q = `?continue=${encodeURIComponent(opts.continueTo)}`;
   return page(
     request,
     t.signIn,
-    `<h1>${t.signIn}</h1>
+    `<h1>${t.signIn}</h1><p>${t.signInHint}</p>
 <form method="post" action="/login">${hidden('continue', opts.continueTo)}
 <label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="username webauthn" required value="${esc(opts.email ?? '')}">
-<label for="password">${t.password}</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-${error(t, opts.error)}<button type="submit">${t.submitSignIn}</button></form>
+${error(t, opts.error)}<button type="submit">${t.continueEmail}</button></form>
 <div data-passkey-box hidden><p class="or">${t.or}</p><button type="button" class="secondary" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button></div>
 <p class="error" role="alert" data-passkey-error hidden></p>
-${opts.google ? `<p class="or">${t.or}</p><a class="button secondary" href="/google${q}">${t.withGoogle}</a>` : ''}
-<div class="links"><span>${t.noAccount} <a href="/signup${q}">${t.createAccount}</a></span><a href="/reset${q}">${t.forgot}</a></div>`,
+${opts.google ? `<p class="or">${t.or}</p><a class="button secondary" href="/google${q}">${t.withGoogle}</a>` : ''}`,
     status,
     {},
     { passkeys: true }
   );
 }
 
-export function signupPage(request: Request, opts: { continueTo: string; email?: string; name?: string; error?: ErrorKey | null; google: boolean }, status = 200) {
+export function codePage(request: Request, opts: { id: string; email: string; continueTo: string; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
-  const q = `?continue=${encodeURIComponent(opts.continueTo)}`;
   return page(
     request,
-    t.createAccount,
-    `<h1>${t.createAccount}</h1>
-<form method="post" action="/signup">${hidden('continue', opts.continueTo)}
-<label for="name">${t.name}</label><input id="name" name="name" autocomplete="name" required maxlength="100" value="${esc(opts.name ?? '')}">
-<label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="email" required value="${esc(opts.email ?? '')}">
-<label for="password">${t.password}</label><input id="password" name="password" type="password" autocomplete="new-password" required minlength="10">
-<p class="hint">${t.passwordHint}</p>${error(t, opts.error)}<button type="submit">${t.create}</button></form>
-${opts.google ? `<p class="or">${t.or}</p><a class="button secondary" href="/google${q}">${t.withGoogle}</a>` : ''}
-<div class="links"><span>${t.haveAccount} <a href="/login${q}">${t.signIn}</a></span></div>`,
+    t.codeTitle,
+    `<h1>${t.codeTitle}</h1><p>${esc(t.codeText(opts.email))}</p>
+<form method="post" action="/login/code">${hidden('id', opts.id)}
+<label for="code">${t.code}</label><input id="code" class="code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="6" autofocus>
+${error(t, opts.error)}<button type="submit">${t.signIn}</button></form>
+<div class="links"><a href="/login?continue=${encodeURIComponent(opts.continueTo)}">${t.otherAddress}</a></div>`,
     status
   );
 }
 
-export function verifyPage(request: Request, opts: { id: string; email: string; continueTo: string; error?: ErrorKey | null }, status = 200) {
+// A new address, proven by its code: one question, then the account exists.
+export function namePage(request: Request, opts: { id: string; finish: string; email: string; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
   return page(
     request,
-    t.verifyTitle,
-    `<h1>${t.verifyTitle}</h1><p>${esc(t.verifyText(opts.email))}</p>
-<form method="post" action="/verify">${hidden('id', opts.id)}${hidden('continue', opts.continueTo)}
-<label for="code">${t.code}</label><input id="code" class="code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="6">
-${error(t, opts.error)}<button type="submit">${t.confirm}</button></form>`,
+    t.nameTitle,
+    `<h1>${t.nameTitle}</h1><p>${esc(t.nameText(opts.email))}</p>
+<form method="post" action="/login/name">${hidden('id', opts.id)}${hidden('finish', opts.finish)}
+<label for="name">${t.name}</label><input id="name" name="name" autocomplete="name" required maxlength="100" autofocus>
+${error(t, opts.error)}<button type="submit">${t.signIn}</button></form>`,
     status
   );
 }
 
-export function resetRequestPage(request: Request, opts: { continueTo: string; error?: ErrorKey | null }, status = 200) {
+// The link in the mail: a button, never signing in on the GET itself (mail
+// scanners open links). In another browser than the one that asked: say so.
+export function linkPage(request: Request, opts: { id: string; token: string; email: string; sameBrowser: boolean }) {
   const t = texts(request);
   return page(
     request,
-    t.resetTitle,
-    `<h1>${t.resetTitle}</h1><p>${t.resetText}</p>
-<form method="post" action="/reset">${hidden('continue', opts.continueTo)}
-<label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="email" required>
-${error(t, opts.error)}<button type="submit">${t.sendCode}</button></form>`,
-    status
-  );
-}
-
-export function resetCodePage(request: Request, opts: { id: string; email: string; continueTo: string; error?: ErrorKey | null }, status = 200) {
-  const t = texts(request);
-  return page(
-    request,
-    t.resetDoneTitle,
-    `<h1>${t.resetDoneTitle}</h1><p>${esc(t.resetDoneText(opts.email))}</p>
-<form method="post" action="/reset/confirm">${hidden('id', opts.id)}${hidden('continue', opts.continueTo)}
-<label for="code">${t.code}</label><input id="code" class="code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="6">
-<label for="password">${t.newPassword}</label><input id="password" name="password" type="password" autocomplete="new-password" required minlength="10">
-<p class="hint">${t.passwordHint}</p>${error(t, opts.error)}<button type="submit">${t.save}</button></form>`,
-    status
+    t.signIn,
+    `<h1>${esc(t.linkText(opts.email))}</h1>${opts.sameBrowser ? '' : `<p>${t.linkOtherDevice}</p>`}
+<form method="post" action="/login/link">${hidden('id', opts.id)}${hidden('t', opts.token)}
+<button type="submit"${opts.sameBrowser ? '' : ' class="secondary"'}>${opts.sameBrowser ? t.signIn : t.signInHere}</button></form>`
   );
 }
 

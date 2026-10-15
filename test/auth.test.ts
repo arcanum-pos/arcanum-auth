@@ -1,6 +1,7 @@
 import { env, SELF } from 'cloudflare:test';
 import { createLocalJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { describe, expect, it } from 'vitest';
+import { askCode, cookieOf, lastCodeFor, lastLinkFor, signInWithCode } from './signin';
 
 const ISSUER = 'https://login.kaboutersoft.be';
 const APP = 'https://arcanum.test';
@@ -21,10 +22,6 @@ function post(path: string, fields: Record<string, string>, headers: Record<stri
   return call(path, { method: 'POST', headers: { ...FORM, 'CF-Connecting-IP': someIp(), ...headers }, body: new URLSearchParams(fields) });
 }
 
-function cookieOf(res: Response): string {
-  const set = res.headers.get('Set-Cookie') || '';
-  return set.split(';')[0];
-}
 
 async function newClient(name = 'Test installation') {
   const res = await call('/admin/clients', {
@@ -40,19 +37,9 @@ async function mails(): Promise<{ body: { message: { to: string; subject: string
   return (await (await env.MAILER!.fetch('https://mailer/__calls')).json()) as never;
 }
 
-async function lastCodeFor(email: string): Promise<string> {
-  const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!;
-  return mail.body.message.text.match(/\b(\d{6})\b/)![1];
-}
-
-// Sign up with e-mail + password (verified by the mailed code) → session cookie.
-async function signUp(email: string, password = 'correct horse battery', name = 'Jan Peeters'): Promise<string> {
-  const res = await post('/signup', { name, email, password, continue: '/account' });
-  expect(res.status).toBe(302);
-  const id = new URL(res.headers.get('Location')!, ISSUER).searchParams.get('id')!;
-  const verified = await post('/verify', { id, code: await lastCodeFor(email), continue: '/account' });
-  expect(verified.status).toBe(302);
-  return cookieOf(verified);
+// A new account, signed in with its mailed code → session cookie.
+async function signUp(email: string, name = 'Jan Peeters'): Promise<string> {
+  return (await signInWithCode(post, email, { name })).cookie;
 }
 
 async function pkce() {
@@ -185,16 +172,17 @@ describe('authorization code flow (the console)', () => {
     const continueTo = loginUrl.searchParams.get('continue')!;
     expect(continueTo.startsWith('/authorize?')).toBe(true);
 
-    const wrong = await post('/login', { email, password: 'wrong password!', continue: continueTo });
-    expect(wrong.status).toBe(401);
-    const ok = await post('/login', { email, password: 'correct horse battery', continue: continueTo });
+    const { id } = await askCode(post, email, continueTo);
+    const wrong = await post('/login/code', { id, code: (await lastCodeFor(email)) === '000000' ? '111111' : '000000' });
+    expect(wrong.status).toBe(400);
+    const ok = await post('/login/code', { id, code: await lastCodeFor(email) });
     expect(ok.status).toBe(302);
     // No passkey yet: once by way of the offer to add one, then on.
     expect(ok.headers.get('Location')).toBe(`/passkey/offer?continue=${encodeURIComponent(continueTo)}`);
     const notNow = await post('/passkey/offer', { continue: continueTo }, { Cookie: cookieOf(ok) });
     expect(notNow.headers.get('Location')).toBe(continueTo);
-    const again = await post('/login', { email, password: 'correct horse battery', continue: continueTo });
-    expect(again.headers.get('Location')).toBe(continueTo);
+    const again = await signInWithCode(post, email, { continueTo });
+    expect(again.next).toBe(continueTo);
   });
 
   it('never redirects to an unregistered redirect_uri, and requires PKCE', async () => {
@@ -233,14 +221,14 @@ describe('refresh tokens', () => {
     expect(((await (await refresh(second)).json()) as Record<string, string>).error).toBe('invalid_grant');
   });
 
-  it('the grace window ends at a revocation: after a new password, an old token gets nothing', async () => {
+  it('the grace window ends at a revocation: an old token gets nothing', async () => {
     const client = await newClient();
     const email = uniqueEmail('refresh-reset');
     const { tokenRes } = await codeFlow(client, await signUp(email));
     const first = ((await tokenRes.json()) as Record<string, string>).refresh_token;
     const refresh = (token: string) => post('/token', { grant_type: 'refresh_token', refresh_token: token, client_id: client.client_id, client_secret: client.client_secret });
     expect((await refresh(first)).status).toBe(200);
-    // Everything of this user revoked (what a new password does), within the window.
+    // Everything of this user revoked, within the window.
     const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>())!;
     await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').bind(new Date(Date.now() + 1000).toISOString(), user.id).run();
     expect(((await (await refresh(first)).json()) as Record<string, string>).error).toBe('invalid_grant');
@@ -302,57 +290,112 @@ describe('device authorization grant (the kassa)', () => {
   });
 });
 
-describe('accounts', () => {
-  it('needs a verified e-mail: no user exists before the code is entered', async () => {
-    const email = uniqueEmail('pending');
-    await post('/signup', { name: 'X', email, password: 'correct horse battery', continue: '/account' });
+describe('accounts, without passwords', () => {
+  it('one flow: a new address gets its account after its code and its name; next time the code alone', async () => {
+    const email = uniqueEmail('new');
+    const { id } = await askCode(post, email);
     expect(await env.DB.prepare('SELECT 1 FROM users WHERE email = ?').bind(email).first()).toBeNull();
-    const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!;
-    expect(mail.body.message.subject).toBeTruthy();
+    const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!.body.message;
+    expect(mail.subject).toBe('Je aanmeldcode voor Arcanum');
+    expect(mail.text).toContain(`${ISSUER}/login/link?id=${id}&t=`);
+    const asked = await post('/login/code', { id, code: await lastCodeFor(email) });
+    expect(asked.status).toBe(200);
+    const html = await asked.text();
+    expect(html).toContain('Hoe heet je?');
+    // Proven, but not yet an account: that takes the name.
+    expect(await env.DB.prepare('SELECT 1 FROM users WHERE email = ?').bind(email).first()).toBeNull();
+    const finish = html.match(/name="finish" value="([^"]+)"/)![1];
+    expect((await post('/login/name', { id, finish, name: '  ' })).status).toBe(400);
+    const named = await post('/login/name', { id, finish, name: 'Mie Peeters' });
+    expect(named.status).toBe(302);
+    expect(cookieOf(named)).toMatch(/^__Host-arcanum_auth=/);
+    expect(await env.DB.prepare('SELECT name, email_verified, password_hash FROM users WHERE email = ?').bind(email).first()).toEqual({ name: 'Mie Peeters', email_verified: 1, password_hash: null });
+    // Its name step only once.
+    expect((await post('/login/name', { id, finish, name: 'Someone else' })).status).toBe(400);
+    // The next time: the code alone.
+    const next = await askCode(post, email);
+    expect((await post('/login/code', { id: next.id, code: await lastCodeFor(email) })).status).toBe(302);
+  });
+
+  it("never says whether an address has an account, and a code only works once", async () => {
+    const known = uniqueEmail('known');
+    await signUp(known);
+    const a = await post('/login', { email: known, continue: '/account' });
+    const b = await post('/login', { email: uniqueEmail('unknown'), continue: '/account' });
+    expect([a.status, b.status]).toEqual([302, 302]);
+    expect(new URL(a.headers.get('Location')!, ISSUER).pathname).toBe(new URL(b.headers.get('Location')!, ISSUER).pathname);
+    const id = new URL(a.headers.get('Location')!, ISSUER).searchParams.get('id')!;
+    const code = await lastCodeFor(known);
+    expect((await post('/login/code', { id, code })).status).toBe(302);
+    expect((await post('/login/code', { id, code })).status).toBe(400);
+  });
+
+  it('the link: a button, never a sign-in on opening it; in the browser that asked directly, elsewhere it says so; once', async () => {
+    const email = uniqueEmail('link');
+    await signUp(email);
+    const { browser } = await askCode(post, email);
+    const link = new URL(await lastLinkFor(email));
+    const elsewhere = await call(`${link.pathname}${link.search}`);
+    expect(elsewhere.status).toBe(200);
+    expect(elsewhere.headers.get('Set-Cookie')).toBeNull();
+    expect(await elsewhere.text()).toContain('ander toestel');
+    const here = await call(`${link.pathname}${link.search}`, { headers: { Cookie: browser } });
+    const html = await here.text();
+    expect(html).not.toContain('ander toestel');
+    expect(html).toContain(`Aanmelden als ${email}?`);
+    const fields = { id: link.searchParams.get('id')!, t: link.searchParams.get('t')! };
+    expect((await post('/login/link', { ...fields, t: 'wrong' })).status).toBe(400);
+    const signedIn = await post('/login/link', fields);
+    expect(signedIn.status).toBe(302);
+    expect(cookieOf(signedIn)).toMatch(/^__Host-arcanum_auth=/);
+    // Used: neither the link nor its code works again.
+    expect((await call(`${link.pathname}${link.search}`)).status).toBe(400);
+    expect((await post('/login/link', fields)).status).toBe(400);
+  });
+
+  it('a new address through the link: also asked its name', async () => {
+    const email = uniqueEmail('link-new');
+    await askCode(post, email);
+    const link = new URL(await lastLinkFor(email));
+    const res = await post('/login/link', { id: link.searchParams.get('id')!, t: link.searchParams.get('t')! });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('Hoe heet je?');
+  });
+
+  it('the old pages (sign-up, verify, password reset) lead to sign-in', async () => {
+    for (const path of ['/signup?continue=%2Faccount', '/reset', '/verify?id=x']) {
+      const res = await call(path);
+      expect(res.status).toBe(303);
+      expect(res.headers.get('Location')).toBe('/login?continue=%2Faccount');
+    }
+    expect((await post('/signup', { email: uniqueEmail('old'), password: 'correct horse battery' })).status).toBe(303);
+    // A password sent along is ignored: it's just a request for a code.
+    expect((await call('/login')).status).toBe(200);
+    expect(await (await call('/login')).text()).not.toContain('type="password"');
   });
 
   it("accepts its own page's form when the browser sends Origin: null (Sec-Fetch-Site decides)", async () => {
-    const email = uniqueEmail('nullorigin');
-    const own = await post('/signup', { name: 'N', email, password: 'correct horse battery', continue: '/account' }, { Origin: 'null', 'Sec-Fetch-Site': 'same-origin' });
+    const own = await post('/login', { email: uniqueEmail('nullorigin'), continue: '/account' }, { Origin: 'null', 'Sec-Fetch-Site': 'same-origin' });
     expect(own.status).toBe(302);
-    const unknown = await post('/signup', { name: 'N', email: uniqueEmail('nullorigin2'), password: 'correct horse battery' }, { Origin: 'null' });
+    const unknown = await post('/login', { email: uniqueEmail('nullorigin2') }, { Origin: 'null' });
     expect(unknown.status).toBe(403);
-    const crossSite = await post('/login', { email, password: 'x' }, { Origin: 'null', 'Sec-Fetch-Site': 'cross-site' });
+    const crossSite = await post('/login', { email: uniqueEmail('nullorigin3') }, { Origin: 'null', 'Sec-Fetch-Site': 'cross-site' });
     expect(crossSite.status).toBe(403);
   });
 
   it('pages send a referrer policy that keeps Origin on their own form posts', async () => {
-    const res = await call('/signup')
+    const res = await call('/login');
     expect(res.headers.get('Referrer-Policy')).toBe('same-origin');
   });
 
   it('refuses a form post from another site (CSRF)', async () => {
-    const res = await call('/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://evil.test' }, body: 'email=a@b.c&password=x' });
+    const res = await call('/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://evil.test' }, body: 'email=a@b.c' });
     expect(res.status).toBe(403);
-  });
-
-  it('limits wrong passwords per address (whatever the IP)', async () => {
-    const email = uniqueEmail('brute');
-    await signUp(email);
-    for (let i = 0; i < 10; i++) await post('/login', { email, password: `wrong-${i}-password`, continue: '/account' });
-    const res = await post('/login', { email, password: 'correct horse battery', continue: '/account' });
-    expect(res.status).toBe(429);
-  });
-
-  it('resets a password with a mailed code, and the old one stops working', async () => {
-    const email = uniqueEmail('reset');
-    await signUp(email);
-    const req = await post('/reset', { email, continue: '/account' });
-    const id = (await req.text()).match(/name="id" value="([^"]+)"/)![1];
-    const done = await post('/reset/confirm', { id, code: await lastCodeFor(email), password: 'a brand new password', continue: '/account' });
-    expect(done.status).toBe(302);
-    expect((await post('/login', { email, password: 'correct horse battery', continue: '/account' })).status).toBe(401);
-    expect((await post('/login', { email, password: 'a brand new password', continue: '/account' })).status).toBe(302);
   });
 });
 
 describe('sign in with Google', () => {
-  it('starts at Google, and links to the password account with the same e-mail (same sub)', async () => {
+  it('starts at Google, and links to the account with the same e-mail (same sub)', async () => {
     const email = uniqueEmail('google');
     await signUp(email);
     const before = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>();
