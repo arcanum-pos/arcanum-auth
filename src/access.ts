@@ -24,6 +24,8 @@ export interface AccessRow {
   role: 'member' | 'admin';
   source: string;
   decided_by: string | null;
+  // Made admin by the application (clients.ts), so it may take that back.
+  app_admin: number;
   created_at: string;
   updated_at: string;
 }
@@ -176,7 +178,8 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
     case 'member':
       if (row?.status !== 'assigned') return back('none');
       if (form.action === 'member' && (await lastAdmin())) return adminView(request, env, client, user, { error: 'lastAdmin' }, 409);
-      await env.DB.prepare('UPDATE client_access SET role = ?, updated_at = ? WHERE client_id = ? AND email = ?').bind(form.action, nowIso(), client.id, email).run();
+      // An admin's choice: from now on not the application's to undo.
+      await env.DB.prepare('UPDATE client_access SET role = ?, app_admin = 0, updated_at = ? WHERE client_id = ? AND email = ?').bind(form.action, nowIso(), client.id, email).run();
       return back('role');
     case 'add':
       if (!isEmail(email)) return adminView(request, env, client, user, { error: 'emailInvalid' }, 400);

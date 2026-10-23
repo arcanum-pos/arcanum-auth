@@ -55,7 +55,7 @@ export default defineConfig({
         bindings: {
           TEST_SCHEMA: JSON.stringify(sqlStatements('./migrations/0001_initial.sql')),
           // Later migrations, run once per test file after the schema (ALTERs aren't idempotent).
-          TEST_MIGRATIONS: JSON.stringify(['./migrations/0002_guests_and_client_metadata.sql', './migrations/0003_passkeys.sql', './migrations/0004_passkey_aaguid.sql', './migrations/0005_refresh_rotated_at.sql', './migrations/0006_settings.sql', './migrations/0007_passwordless.sql', './migrations/0008_client_access.sql'].flatMap((f) => sqlStatements(f))),
+          TEST_MIGRATIONS: JSON.stringify(['./migrations/0002_guests_and_client_metadata.sql', './migrations/0003_passkeys.sql', './migrations/0004_passkey_aaguid.sql', './migrations/0005_refresh_rotated_at.sql', './migrations/0006_settings.sql', './migrations/0007_passwordless.sql', './migrations/0008_client_access.sql', './migrations/0009_client_access_app_admin.sql'].flatMap((f) => sqlStatements(f))),
           SIGNING_KEY: signingKey,
           ADMIN_API_KEY: 'test-admin-key',
           CODE_HASH_KEY: 'test-code-hash-key',

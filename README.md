@@ -114,7 +114,13 @@ has an account. Guests never get into a restricted client.
   tokens for that client; an access token runs out within the hour. An
   admin of the client is never unassigned by the application.
 - **Admins** — the owner (`owner_email`) is a client's first admin; there is
-  always at least one. `/account` links to the clients you manage.
+  always at least one. `/account` links to the clients you manage. The
+  application can name admins too (`role: "admin"` on `/clients/self/users`
+  — Arcanum: whoever is an admin of one of its organisations) and take that
+  back (`role: "member"`, or unassigning), but only for admins it made
+  itself (`client_access.app_admin`, migration 0009): never the owner, and
+  never someone an admin made admin or member on `/access/:clientId`. On an
+  open client the application names no admins.
 
 ## Endpoints
 
@@ -138,7 +144,7 @@ has an account. Guests never get into a restricted client.
 | `POST /admin/login-links` | a **one-time sign-in link** for a guest (single use, 60 s) that continues to an address on an origin some client registered |
 | `GET /login/once?token=…` | where that link leads: starts the guest's session, then continues |
 | `GET/POST /access/:clientId`, `POST /access/:clientId/request` | a restricted client's admin page; asking for access (see Restricted clients) |
-| `GET/POST /clients/self/users`, `PUT/DELETE /clients/self/users/:email` | who may use a restricted client — the application itself, HTTP Basic with its id + secret (bulk: up to 500 addresses) |
+| `GET/POST /clients/self/users`, `PUT/DELETE /clients/self/users/:email` | who may use a restricted client, and who manages it (`role`) — the application itself, HTTP Basic with its id + secret (bulk: up to 500 `{ email, role? }`) |
 | `GET/PATCH /clients/self`, `POST /clients/self/secret` | **client self-service** with the client's own id + secret (HTTP Basic): read/replace its redirect and logout URIs, rotate its secret — what an installation's installer uses after setting a custom domain |
 
 ## Deploy (Cloudflare, your account)

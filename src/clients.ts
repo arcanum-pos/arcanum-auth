@@ -1,4 +1,4 @@
-import { assign, unassign, accessRow } from './access';
+import { unassign, accessRow } from './access';
 import { validUris } from './admin';
 import type { Env } from './env';
 import { clientById, clientSecretMatches, type Client } from './store';
@@ -13,13 +13,60 @@ import { isEmail, json, normalizeEmail, nowIso, randomToken, sha256 } from './ut
 // Who may use it (a restricted client, access.ts) — Arcanum assigns whoever
 // it invites, and unassigns them when they leave:
 //   GET    /clients/self/users          → { restricted, users: [{ email, status, role }] }
-//   POST   /clients/self/users          { emails[] } (up to 500) → assigns each, { assigned }
-//   PUT    /clients/self/users/:email   → assigns it (a request becomes an assignment)
+//   POST   /clients/self/users          { users: [{ email, role? }] } or { emails[] } (up to 500) → assigns each, { assigned }
+//   PUT    /clients/self/users/:email   { role? } → assigns it (a request becomes an assignment)
 //   DELETE /clients/self/users/:email   → unassigns it and revokes its refresh tokens;
-//          never an admin of the client ({ removed: false, reason: 'admin' })
+//          never an admin it didn't make ({ removed: false, reason: 'admin' })
+// role 'admin' makes someone an admin of the client (Arcanum: an admin of
+// one of its organisations); 'member' (the default) takes that back — only
+// from admins the application made (app_admin), never the owner or one an
+// admin chose on /access/:clientId. On an open client, nobody becomes admin
+// through the application (its admins would see every address on its list).
 
 const MAX_URIS = 10;
 const MAX_BULK = 500;
+
+interface AppUser {
+  email: string;
+  role: 'admin' | 'member';
+}
+
+// [{ email, role? }] → normalized, one per address (the last wins); null when any is wrong.
+function usersOf(given: unknown[]): AppUser[] | null {
+  const out = new Map<string, AppUser>();
+  for (const u of given) {
+    const email = typeof (u as { email?: unknown })?.email === 'string' ? normalizeEmail((u as { email: string }).email) : '';
+    const role = (u as { role?: unknown }).role ?? 'member';
+    if (!isEmail(email) || (role !== 'admin' && role !== 'member')) return null;
+    out.set(email, { email, role });
+  }
+  return [...out.values()];
+}
+
+// One statement for all of them (json_each: D1's per-query limits). An
+// assignment either way; the role as the application says — but only an
+// admin it made itself goes back to member, and on an open client nobody
+// becomes admin this way.
+async function assignFromApp(env: Env, client: Client, users: AppUser[]): Promise<void> {
+  if (!users.length) return;
+  const now = nowIso();
+  const rows = users.map((u) => ({ email: u.email, role: client.restricted ? u.role : 'member' }));
+  await env.DB.prepare(
+    `INSERT INTO client_access (client_id, email, status, role, source, app_admin, created_at, updated_at)
+     SELECT ?, json_extract(value, '$.email'), 'assigned', json_extract(value, '$.role'), 'app', json_extract(value, '$.role') = 'admin', ?, ? FROM json_each(?)
+     WHERE true ON CONFLICT (client_id, email) DO UPDATE SET
+       status = 'assigned',
+       source = CASE WHEN client_access.status = 'requested' THEN 'app' ELSE client_access.source END,
+       role = CASE WHEN excluded.role = 'admin' THEN 'admin' WHEN client_access.app_admin = 1 THEN 'member' ELSE client_access.role END,
+       app_admin = CASE
+         WHEN excluded.role = 'admin' AND (client_access.role != 'admin' OR client_access.status != 'assigned') THEN 1
+         WHEN excluded.role = 'admin' THEN client_access.app_admin
+         ELSE 0 END,
+       updated_at = excluded.updated_at`
+  )
+    .bind(client.id, now, now, JSON.stringify(rows))
+    .run();
+}
 
 async function authenticated(request: Request, env: Env): Promise<Client | null> {
   const auth = request.headers.get('Authorization') || '';
@@ -67,19 +114,12 @@ export async function clientSelf(request: Request, env: Env, path: string): Prom
   }
 
   if (path === '/clients/self/users' && request.method === 'POST') {
-    const body = (await request.json().catch(() => null)) as { emails?: unknown } | null;
-    const emails = Array.isArray(body?.emails) ? [...new Set(body.emails.filter((e): e is string => typeof e === 'string').map(normalizeEmail))] : null;
-    if (!emails || emails.length > MAX_BULK || emails.some((e) => !isEmail(e))) return json({ error: `emails: up to ${MAX_BULK} e-mail addresses` }, 400);
-    // One statement for all of them (json_each): D1's per-query limits.
-    const now = nowIso();
-    await env.DB.prepare(
-      `INSERT INTO client_access (client_id, email, status, role, source, created_at, updated_at)
-       SELECT ?, value, 'assigned', 'member', 'app', ?, ? FROM json_each(?)
-       WHERE true ON CONFLICT (client_id, email) DO UPDATE SET status = 'assigned', source = 'app', updated_at = excluded.updated_at WHERE client_access.status != 'assigned'`
-    )
-      .bind(client.id, now, now, JSON.stringify(emails))
-      .run();
-    return json({ assigned: emails.length });
+    const body = (await request.json().catch(() => null)) as { users?: unknown; emails?: unknown } | null;
+    const given = Array.isArray(body?.users) ? body.users : Array.isArray(body?.emails) ? body.emails.map((email) => ({ email })) : null;
+    const users = given ? usersOf(given) : null;
+    if (!users || users.length > MAX_BULK) return json({ error: `users: up to ${MAX_BULK} of { email, role? } (role admin or member)` }, 400);
+    await assignFromApp(env, client, users);
+    return json({ assigned: users.length });
   }
 
   const one = path.match(/^\/clients\/self\/users\/([^/]+)$/);
@@ -92,13 +132,16 @@ export async function clientSelf(request: Request, env: Env, path: string): Prom
     }
     if (!isEmail(email)) return json({ error: 'not an e-mail address' }, 400);
     if (request.method === 'PUT') {
-      await assign(env, client.id, email, 'app', null);
+      const body = (await request.json().catch(() => ({}))) as { role?: unknown } | null;
+      const users = usersOf([{ email, role: body?.role }]);
+      if (!users) return json({ error: 'role must be admin or member' }, 400);
+      await assignFromApp(env, client, users);
       const row = await accessRow(env, client.id, email);
       return json({ email, status: row!.status, role: row!.role });
     }
     if (request.method === 'DELETE') {
       const row = await accessRow(env, client.id, email);
-      if (row?.role === 'admin' && row.status === 'assigned') return json({ email, removed: false, reason: 'admin' });
+      if (row?.role === 'admin' && row.status === 'assigned' && !row.app_admin) return json({ email, removed: false, reason: 'admin' });
       if (row) await unassign(env, client.id, email);
       return json({ email, removed: !!row });
     }

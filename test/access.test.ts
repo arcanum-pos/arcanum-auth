@@ -202,6 +202,59 @@ describe('the application assigns (/clients/self/users)', () => {
   });
 });
 
+describe('client admins named by the application', () => {
+  const put = (client: { client_id: string; client_secret: string }, email: string, role?: string) =>
+    call(`/clients/self/users/${encodeURIComponent(email)}`, { method: 'PUT', headers: { ...basic(client), 'Content-Type': 'application/json' }, body: JSON.stringify(role ? { role } : {}) });
+  const rowOf = (clientId: string, email: string) =>
+    env.DB.prepare('SELECT status, role, app_admin FROM client_access WHERE client_id = ? AND email = ?').bind(clientId, email).first<{ status: string; role: string; app_admin: number }>();
+
+  it('an admin it names manages the client; it takes that back and can remove them — never the owner or a manual admin', async () => {
+    const owner = uniqueEmail('owner');
+    const client = await newClient({ owner_email: owner });
+    const orgAdmin = uniqueEmail('orgadmin');
+    expect(await (await put(client, orgAdmin, 'admin')).json()).toEqual({ email: orgAdmin, status: 'assigned', role: 'admin' });
+    expect((await call(`/access/${client.client_id}`, { headers: { Cookie: await signUp(orgAdmin) } })).status).toBe(200);
+
+    await put(client, orgAdmin, 'member');
+    expect(await rowOf(client.client_id, orgAdmin)).toEqual({ status: 'assigned', role: 'member', app_admin: 0 });
+    await put(client, orgAdmin, 'admin');
+    expect(await call(`/clients/self/users/${encodeURIComponent(orgAdmin)}`, { method: 'DELETE', headers: basic(client) }).then((r) => r.json())).toEqual({ email: orgAdmin, removed: true });
+
+    // The owner, and someone made admin by hand, stay admins whatever the application says.
+    await put(client, owner, 'member');
+    expect((await rowOf(client.client_id, owner))!.role).toBe('admin');
+    const manual = uniqueEmail('manual');
+    await put(client, manual, 'admin');
+    await post(`/access/${client.client_id}`, { action: 'member', email: manual }, { Cookie: await signUp(owner) });
+    await post(`/access/${client.client_id}`, { action: 'admin', email: manual }, { Cookie: await signUp(owner) });
+    expect(await rowOf(client.client_id, manual)).toEqual({ status: 'assigned', role: 'admin', app_admin: 0 });
+    await put(client, manual, 'member');
+    expect((await rowOf(client.client_id, manual))!.role).toBe('admin');
+    expect(await call(`/clients/self/users/${encodeURIComponent(manual)}`, { method: 'DELETE', headers: basic(client) }).then((r) => r.json())).toEqual({ email: manual, removed: false, reason: 'admin' });
+  });
+
+  it('bulk with roles; a request becomes an app-made admin; an open client gets no admins this way; a wrong role is refused', async () => {
+    const client = await newClient({ owner_email: uniqueEmail('owner') });
+    const asker = uniqueEmail('asker');
+    await post(`/access/${client.client_id}/request`, {}, { Cookie: await signUp(asker) });
+    const cashier = uniqueEmail('cashier');
+    const bulk = await call('/clients/self/users', {
+      method: 'POST',
+      headers: { ...basic(client), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ users: [{ email: asker.toUpperCase(), role: 'admin' }, { email: cashier }] }),
+    });
+    expect(await bulk.json()).toEqual({ assigned: 2 });
+    expect(await rowOf(client.client_id, asker)).toEqual({ status: 'assigned', role: 'admin', app_admin: 1 });
+    expect(await rowOf(client.client_id, cashier)).toEqual({ status: 'assigned', role: 'member', app_admin: 0 });
+    expect((await put(client, cashier, 'owner')).status).toBe(400);
+
+    const open = await newClient({ restricted: false });
+    const visitor = uniqueEmail('visitor');
+    await put(open, visitor, 'admin');
+    expect(await rowOf(open.client_id, visitor)).toEqual({ status: 'assigned', role: 'member', app_admin: 0 });
+  });
+});
+
 describe('a kassa (device grant) on a restricted client', () => {
   it('an unassigned phone sees the access page and cannot approve; assigned, it can', async () => {
     const client = await newClient();
