@@ -87,6 +87,21 @@ export function redirect(location: string, headers: Record<string, string> = {},
   return new Response(null, { status, headers: { Location: location, ...NO_STORE, ...headers } });
 }
 
+// The distinct host names in a client's addresses (e.g. its custom domain) —
+// what tells one installation of an application from another.
+export function hostsOf(uris: string[]): string[] {
+  const hosts: string[] = [];
+  for (const uri of uris) {
+    try {
+      const host = new URL(uri).host;
+      if (!hosts.includes(host)) hosts.push(host);
+    } catch {
+      // not a URL — left out
+    }
+  }
+  return hosts;
+}
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

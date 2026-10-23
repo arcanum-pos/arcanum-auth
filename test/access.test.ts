@@ -272,3 +272,45 @@ describe('a kassa (device grant) on a restricted client', () => {
     expect(tokens.status).toBe(200);
   });
 });
+
+describe("a client's addresses on its access page", () => {
+  it("an application's admin edits them (each list replaced); the other admins get a mail; a wrong one is refused", async () => {
+    const owner = uniqueEmail('owner');
+    const client = await newClient({ owner_email: owner, instance_url: null, redirect_uris: ['https://editor.example.test/auth/callback'] });
+    const other = uniqueEmail('other');
+    await call(`/clients/self/users/${encodeURIComponent(other)}`, { method: 'PUT', headers: { ...basic(client), 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'admin' }) });
+    const cookie = await signUp(owner);
+
+    const page = await (await call(`/access/${client.client_id}`, { headers: { Cookie: cookie } })).text();
+    expect(page).toContain('data-testid="client-hosts">editor.example.test<');
+    expect(page).toContain('name="redirect_uris"');
+    expect(await (await call('/account', { headers: { Cookie: cookie } })).text()).toContain('editor.example.test');
+
+    const saved = await post(`/access/${client.client_id}`, { action: 'uris', redirect_uris: 'https://editor.example.test/auth/callback\nhttps://editor.example.test/oauth2/callback', post_logout_redirect_uris: '' }, { Cookie: cookie });
+    expect(saved.headers.get('Location')).toBe(`/access/${client.client_id}?done=uris`);
+    const row = await env.DB.prepare('SELECT redirect_uris, post_logout_redirect_uris FROM clients WHERE id = ?').bind(client.client_id).first<{ redirect_uris: string; post_logout_redirect_uris: string }>();
+    expect(JSON.parse(row!.redirect_uris)).toEqual(['https://editor.example.test/auth/callback', 'https://editor.example.test/oauth2/callback']);
+    expect(JSON.parse(row!.post_logout_redirect_uris)).toEqual([]);
+    const mail = (await mailsTo(other)).find((m) => m.subject === 'Adressen van Scouts Elewijt gewijzigd')!;
+    expect(mail.text).toContain(`${owner} wijzigde`);
+    expect(mail.text).toContain('https://editor.example.test/oauth2/callback');
+    expect(await mailsTo(owner).then((list) => list.some((m) => m.subject.startsWith('Adressen van')))).toBe(false);
+
+    const refused = await post(`/access/${client.client_id}`, { action: 'uris', redirect_uris: 'http://evil.test/cb' }, { Cookie: cookie });
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain('Geef 1 tot 10 https-adressen');
+    expect((await post(`/access/${client.client_id}`, { action: 'uris', redirect_uris: '' }, { Cookie: cookie })).status).toBe(400);
+  });
+
+  it("an installation's are shown, not edited — its installer keeps them; posting changes nothing", async () => {
+    const owner = uniqueEmail('owner');
+    const client = await newClient({ owner_email: owner });
+    const cookie = await signUp(owner);
+    const page = await (await call(`/access/${client.client_id}`, { headers: { Cookie: cookie } })).text();
+    expect(page).toContain('Deze adressen beheert de installatie zelf');
+    expect(page).not.toContain('name="redirect_uris"');
+    await post(`/access/${client.client_id}`, { action: 'uris', redirect_uris: 'https://other.test/cb' }, { Cookie: cookie });
+    const row = await env.DB.prepare('SELECT redirect_uris FROM clients WHERE id = ?').bind(client.client_id).first<{ redirect_uris: string }>();
+    expect(JSON.parse(row!.redirect_uris)).toEqual([REDIRECT]);
+  });
+});

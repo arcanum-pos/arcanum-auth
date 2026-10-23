@@ -113,6 +113,12 @@ has an account. Guests never get into a restricted client.
   their last membership goes. Unassigning revokes the person's refresh
   tokens for that client; an access token runs out within the hour. An
   admin of the client is never unassigned by the application.
+- **Its addresses** — `/access/:clientId` shows the host names of a
+  client's redirect URIs (which installation it is) under its name, here
+  and on `/account`. For an application's own client its admins edit the
+  redirect and logout URIs there (https, 1–10, exact); every change mails
+  the other admins. An installation's (`instance_url` set) are shown
+  read-only: its installer keeps them up to date.
 - **Admins** — the owner (`owner_email`) is a client's first admin; there is
   always at least one. `/account` links to the clients you manage. The
   application can name admins too (`role: "admin"` on `/clients/self/users`

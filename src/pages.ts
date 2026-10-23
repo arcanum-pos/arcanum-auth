@@ -75,9 +75,17 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `Je hebt toegang tot ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `Een beheerder gaf je toegang tot ${client}.` + (url ? `\n\nMeld je aan op ${url}` : ''),
     manageTitle: (client: string) => `Toegang tot ${client}`,
+    addressesTitle: "Adressen",
+    redirectLabel: "Redirect-URI’s — één per regel, https",
+    logoutLabel: "Adres na afmelden (optioneel)",
+    saveUris: "Adressen opslaan",
+    urisHint: "Waar deze toepassing na het aanmelden naartoe mag — precies zoals ze het gebruikt. De andere beheerders krijgen een e-mail bij elke wijziging.",
+    urisByInstaller: "Deze adressen beheert de installatie zelf (haar installer voegt bv. een eigen domein toe).",
+    mailUrisSubject: (client: string) => `Adressen van ${client} gewijzigd`,
+    mailUris: (client: string, by: string, uris: string[], url: string) => `${by} wijzigde de adressen waar ${client} na het aanmelden naartoe mag:\n\n${uris.join('\n')}\n\nWas dat niet de bedoeling? Kijk het na op ${url}`,
     notAdminAs: (email: string, client: string) => `Je bent aangemeld als ${email}, en dat account beheert ${client} niet. Kreeg je een e-mail met een aanvraag? Meld je dan aan met het adres waarop je die kreeg.`,
     switchAccount: "Aanmelden met een ander account",
-    accessDone: { approved: "Toegestaan. De persoon krijgt een e-mail.", refused: "Aanvraag geweigerd.", removed: "Verwijderd.", role: "Aangepast.", added: "Toegevoegd.", none: "Niets veranderd." },
+    accessDone: { approved: "Toegestaan. De persoon krijgt een e-mail.", refused: "Aanvraag geweigerd.", removed: "Verwijderd.", role: "Aangepast.", added: "Toegevoegd.", none: "Niets veranderd.", uris: "Adressen opgeslagen." },
     securityKey: 'Beveiligingssleutel',
     phone: 'Telefoon',
     kindSecurityKey: (how: string) => `Beveiligingssleutel${how ? ` · ${how}` : ''}`,
@@ -96,6 +104,7 @@ const T = {
     mailCodeSubject: 'Je aanmeldcode',
     mailCode: (code: string, link: string) => `Je code om je aan te melden: ${code}\n\nOf meld je aan met deze link: ${link}\n\nDe code en de link zijn 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
     errors: {
+      urisInvalid: "Geef 1 tot 10 https-adressen, één per regel, zonder #.",
       notAdmin: "Je beheert deze toepassing niet.",
       lastAdmin: "Er moet minstens één beheerder overblijven.",
       tooMany: 'Te veel pogingen. Probeer het over een kwartier opnieuw.',
@@ -186,9 +195,17 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `Vous avez accès à ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `Un administrateur vous a donné accès à ${client}.` + (url ? `\n\nConnectez-vous sur ${url}` : ''),
     manageTitle: (client: string) => `Accès à ${client}`,
+    addressesTitle: "Adresses",
+    redirectLabel: "URI de redirection — une par ligne, https",
+    logoutLabel: "Adresse après déconnexion (facultatif)",
+    saveUris: "Enregistrer les adresses",
+    urisHint: "Où cette application peut aller après la connexion — exactement comme elle l’utilise. Les autres administrateurs reçoivent un e-mail à chaque modification.",
+    urisByInstaller: "Ces adresses sont gérées par l’installation elle-même (son installateur ajoute p. ex. un domaine propre).",
+    mailUrisSubject: (client: string) => `Adresses de ${client} modifiées`,
+    mailUris: (client: string, by: string, uris: string[], url: string) => `${by} a modifié les adresses où ${client} peut aller après la connexion :\n\n${uris.join('\n')}\n\nCe n’était pas voulu ? Vérifiez sur ${url}`,
     notAdminAs: (email: string, client: string) => `Vous êtes connecté en tant que ${email}, et ce compte ne gère pas ${client}. Vous avez reçu un e-mail avec une demande ? Connectez-vous avec l’adresse sur laquelle vous l’avez reçu.`,
     switchAccount: "Se connecter avec un autre compte",
-    accessDone: { approved: "Accepté. La personne reçoit un e-mail.", refused: "Demande refusée.", removed: "Retiré.", role: "Modifié.", added: "Ajouté.", none: "Rien n’a changé." },
+    accessDone: { approved: "Accepté. La personne reçoit un e-mail.", refused: "Demande refusée.", removed: "Retiré.", role: "Modifié.", added: "Ajouté.", none: "Rien n’a changé.", uris: "Adresses enregistrées." },
     securityKey: 'Clé de sécurité',
     phone: 'Téléphone',
     kindSecurityKey: (how: string) => `Clé de sécurité${how ? ` · ${how}` : ''}`,
@@ -207,6 +224,7 @@ const T = {
     mailCodeSubject: 'Votre code de connexion',
     mailCode: (code: string, link: string) => `Votre code pour vous connecter : ${code}\n\nOu connectez-vous avec ce lien : ${link}\n\nLe code et le lien sont valables 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
     errors: {
+      urisInvalid: "Indiquez 1 à 10 adresses https, une par ligne, sans #.",
       notAdmin: "Vous ne gérez pas cette application.",
       lastAdmin: "Il doit rester au moins un administrateur.",
       tooMany: 'Trop de tentatives. Réessayez dans un quart d’heure.',
@@ -297,9 +315,17 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `You have access to ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `An administrator gave you access to ${client}.` + (url ? `\n\nSign in at ${url}` : ''),
     manageTitle: (client: string) => `Access to ${client}`,
+    addressesTitle: "Addresses",
+    redirectLabel: "Redirect URIs — one per line, https",
+    logoutLabel: "Address after signing out (optional)",
+    saveUris: "Save addresses",
+    urisHint: "Where this application may go after signing in — exactly as it uses them. The other admins get an email on every change.",
+    urisByInstaller: "The installation manages these addresses itself (its installer adds e.g. a custom domain).",
+    mailUrisSubject: (client: string) => `Addresses of ${client} changed`,
+    mailUris: (client: string, by: string, uris: string[], url: string) => `${by} changed where ${client} may go after signing in:\n\n${uris.join('\n')}\n\nNot intended? Check it at ${url}`,
     notAdminAs: (email: string, client: string) => `You're signed in as ${email}, and that account doesn't manage ${client}. Got an email with a request? Sign in with the address it was sent to.`,
     switchAccount: "Sign in with another account",
-    accessDone: { approved: "Approved. They get an email.", refused: "Request refused.", removed: "Removed.", role: "Changed.", added: "Added.", none: "Nothing changed." },
+    accessDone: { approved: "Approved. They get an email.", refused: "Request refused.", removed: "Removed.", role: "Changed.", added: "Added.", none: "Nothing changed.", uris: "Addresses saved." },
     securityKey: 'Security key',
     phone: 'Phone',
     kindSecurityKey: (how: string) => `Security key${how ? ` · ${how}` : ''}`,
@@ -318,6 +344,7 @@ const T = {
     mailCodeSubject: 'Your sign-in code',
     mailCode: (code: string, link: string) => `Your code to sign in: ${code}\n\nOr sign in with this link: ${link}\n\nThe code and the link are valid for 15 minutes. Didn’t ask for this? Then ignore this email.`,
     errors: {
+      urisInvalid: "Give 1 to 10 https addresses, one per line, without #.",
       notAdmin: "You don't manage this application.",
       lastAdmin: "At least one admin has to remain.",
       tooMany: 'Too many attempts. Try again in a quarter of an hour.',
@@ -375,7 +402,8 @@ button,.button{display:flex;align-items:center;justify-content:center;width:100%
 a{color:var(--fg)}.or{text-align:center;color:var(--muted);font-size:13px;margin:16px 0 0}
 .ok{color:var(--fg);font-size:14px}h2{font-size:16px;margin:22px 0 6px}ul.keys{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}
 ul.keys li{border:1px solid var(--border);border-radius:10px;padding:10px 12px}.key-name{font-weight:600}.key-meta{font-size:12.5px;color:var(--muted)}
-ul.keys form{display:flex;gap:8px;margin-top:8px}ul.keys input{height:36px}ul.keys button{width:auto;height:36px;margin:0;padding:0 12px;font-size:13.5px}
+ul.keys form{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}ul.keys input{height:36px;flex:1 1 100%}
+textarea{width:100%;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:8px 12px;font:13px/1.5 ui-monospace,monospace;resize:vertical}code{font:12.5px ui-monospace,monospace;word-break:break-all}ul.keys button{width:auto;height:36px;margin:0;padding:0 12px;font-size:13.5px}
 [hidden]{display:none!important}`;
 
 export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean } = {}): Response {
@@ -518,7 +546,7 @@ const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
   `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
 <p class="error" role="alert" data-passkey-error hidden></p>`;
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string }[]; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[] }[]; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
   const items = opts.passkeys
     .map(
@@ -537,7 +565,13 @@ ${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidd
 ${opts.googleUnlinked ? `<p class="ok" role="status">${t.googleUnlinked}</p>` : ''}${
       opts.google ? `<h2>${t.googleTitle}</h2><p>${t.googleLinkedText}</p><form method="post" action="/account/google"><button type="submit" name="action" value="unlink" class="secondary">${t.unlinkGoogle}</button></form>` : ''
     }
-${opts.managed.length ? `<h2>${t.manageApps}</h2><ul class="keys">${opts.managed.map((c) => `<li><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join('')}</ul>` : ''}
+${
+      opts.managed.length
+        ? `<h2>${t.manageApps}</h2><ul class="keys">${opts.managed
+            .map((c) => `<li><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a>${c.hosts.length ? `<div class="key-meta">${esc(c.hosts.join(' · '))}</div>` : ''}</li>`)
+            .join('')}</ul>`
+        : ''
+    }
 <a class="button secondary" href="/logout">${t.signOut}</a>`,
     status,
     {},
@@ -588,7 +622,22 @@ export interface AccessItem {
 // A client's admins: open requests, who has access, add someone.
 export function accessAdminPage(
   request: Request,
-  opts: { clientId: string; clientName: string; restricted: boolean; me: string; items: AccessItem[]; notice?: string; error?: ErrorKey | null },
+  opts: {
+    clientId: string;
+    clientName: string;
+    // Its addresses' host names (which installation it is), and the addresses themselves.
+    hosts: string[];
+    redirectUris: string[];
+    logoutUris: string[];
+    // An installation's: its installer keeps the addresses up to date — shown, not edited here.
+    byInstaller: boolean;
+    restricted: boolean;
+    me: string;
+    items: AccessItem[];
+    notice?: string;
+    error?: ErrorKey | null;
+    tried?: { redirect: string; logout: string };
+  },
   status = 200
 ) {
   const t = texts(request);
@@ -611,11 +660,19 @@ export function accessAdminPage(
   return page(
     request,
     t.manageTitle(opts.clientName),
-    `<h1>${esc(t.manageTitle(opts.clientName))}</h1><p>${opts.restricted ? t.manageIntro : t.manageOpen}</p>
+    `<h1>${esc(t.manageTitle(opts.clientName))}</h1>${opts.hosts.length ? `<p class="hint" data-testid="client-hosts">${esc(opts.hosts.join(' · '))}</p>` : ''}<p>${opts.restricted ? t.manageIntro : t.manageOpen}</p>
 ${opts.notice ? `<p class="ok" role="status">${esc(opts.notice)}</p>` : ''}${error(t, opts.error)}
 <h2>${t.requestsTitle}</h2>${requestItems ? `<ul class="keys">${requestItems}</ul>` : `<p>${t.noRequests}</p>`}
 <h2>${t.assignedTitle}</h2><ul class="keys">${assignedItems}</ul>
 <h2>${t.addTitle}</h2><form method="post" action="${action}">${hidden('action', 'add')}<label for="email">${t.email}</label><input id="email" name="email" type="email" required autocomplete="off"><button type="submit">${t.add}</button></form>
+<h2>${t.addressesTitle}</h2>${
+      opts.byInstaller
+        ? `<p>${t.urisByInstaller}</p><ul class="keys" data-testid="client-uris">${opts.redirectUris.map((u) => `<li><code>${esc(u)}</code></li>`).join('')}</ul>`
+        : `<form method="post" action="${action}" data-testid="client-uris">${hidden('action', 'uris')}<p>${t.urisHint}</p>
+<label for="redirect_uris">${t.redirectLabel}</label><textarea id="redirect_uris" name="redirect_uris" rows="3" required>${esc(opts.tried?.redirect ?? opts.redirectUris.join('\n'))}</textarea>
+<label for="post_logout_redirect_uris">${t.logoutLabel}</label><textarea id="post_logout_redirect_uris" name="post_logout_redirect_uris" rows="2">${esc(opts.tried?.logout ?? opts.logoutUris.join('\n'))}</textarea>
+<button type="submit">${t.saveUris}</button></form>`
+    }
 <div class="links"><a href="/account">${t.accountTitle}</a></div>`,
     status
   );

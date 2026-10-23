@@ -2,7 +2,8 @@ import type { Env } from './env';
 import { sendMail } from './mail';
 import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
 import { clientById, currentSession, recordAttempt, tooManyAttempts, type Client, type User } from './store';
-import { isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
+import { validUris } from './admin';
+import { hostsOf, isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
 
 // Restricted clients: only the people assigned to one may sign in to it
 // (every grant checks, not only /authorize). Assigned by
@@ -14,7 +15,10 @@ import { isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from 
 // account yet. Admins are assigned too (role 'admin'); the client's owner is
 // its first one. Guests never get into a restricted client.
 //   GET  /access/:clientId           the client's admins: requests and who's assigned
-//   POST /access/:clientId           { action, email } approve | refuse | remove | admin | member | add
+//   POST /access/:clientId           { action, email } approve | refuse | remove | admin | member | add;
+//                                    { action: 'uris', redirect_uris, post_logout_redirect_uris } (one per line)
+//                                    — its addresses, for an application's own client only: an
+//                                    installation's (instance_url) are its installer's
 //   POST /access/:clientId/request   the signed-in user asks to be added
 
 export interface AccessRow {
@@ -131,7 +135,7 @@ async function asAdmin(request: Request, env: Env, clientId: string): Promise<{ 
   return { client, user: session.user };
 }
 
-async function adminView(request: Request, env: Env, client: Client, user: User, opts: { notice?: string; error?: 'emailInvalid' | 'lastAdmin' } = {}, status = 200) {
+async function adminView(request: Request, env: Env, client: Client, user: User, opts: { notice?: string; error?: 'emailInvalid' | 'lastAdmin' | 'urisInvalid'; tried?: { redirect: string; logout: string } } = {}, status = 200) {
   const { results } = await env.DB.prepare(
     `SELECT client_access.email, client_access.status, client_access.role, client_access.created_at, users.name FROM client_access
      LEFT JOIN users ON users.email = client_access.email AND users.guest = 0
@@ -139,7 +143,22 @@ async function adminView(request: Request, env: Env, client: Client, user: User,
   )
     .bind(client.id)
     .all<AccessItem>();
-  return accessAdminPage(request, { clientId: client.id, clientName: client.name, restricted: !!client.restricted, me: user.email, items: results || [], ...opts }, status);
+  return accessAdminPage(
+    request,
+    {
+      clientId: client.id,
+      clientName: client.name,
+      hosts: hostsOf(client.redirect_uris),
+      redirectUris: client.redirect_uris,
+      logoutUris: client.post_logout_redirect_uris,
+      byInstaller: !!client.instance_url,
+      restricted: !!client.restricted,
+      me: user.email,
+      items: results || [],
+      ...opts,
+    },
+    status
+  );
 }
 
 export async function manageAccess(request: Request, env: Env, clientId: string): Promise<Response> {
@@ -185,19 +204,36 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
       if (!isEmail(email)) return adminView(request, env, client, user, { error: 'emailInvalid' }, 400);
       await assign(env, client.id, email, 'admin', user.email);
       return back('added');
+    case 'uris': {
+      // An installation's addresses are its installer's (it adds a custom domain itself).
+      if (client.instance_url) return back('none');
+      const lines = (text: string | undefined) => (text || '').split(/\s+/).map((l) => l.trim()).filter(Boolean);
+      const redirects = validUris(lines(form.redirect_uris));
+      const logouts = validUris(lines(form.post_logout_redirect_uris));
+      if (!redirects || !logouts || redirects.length < 1 || redirects.length > 10 || logouts.length > 10) {
+        return adminView(request, env, client, user, { error: 'urisInvalid', tried: { redirect: form.redirect_uris || '', logout: form.post_logout_redirect_uris || '' } }, 400);
+      }
+      await env.DB.prepare('UPDATE clients SET redirect_uris = ?, post_logout_redirect_uris = ? WHERE id = ?').bind(JSON.stringify(redirects), JSON.stringify(logouts), client.id).run();
+      // The other admins hear of it: these addresses decide where a sign-in may go.
+      const manage = `${env.ISSUER}/access/${encodeURIComponent(client.id)}`;
+      for (const admin of (await adminsOf(env, client)).filter((a) => a !== user.email)) {
+        await sendMail(env, admin, t.mailUrisSubject(client.name), t.mailUris(client.name, user.email, redirects, manage)).catch((err) => console.error('uris mail failed', err));
+      }
+      return back('uris');
+    }
     default:
       return back('none');
   }
 }
 
 // The clients someone manages (a link on /account).
-export async function managedClients(env: Env, user: User): Promise<{ id: string; name: string }[]> {
+export async function managedClients(env: Env, user: User): Promise<{ id: string; name: string; hosts: string[] }[]> {
   if (user.guest) return [];
   const { results } = await env.DB.prepare(
-    `SELECT clients.id, clients.name FROM client_access JOIN clients ON clients.id = client_access.client_id
+    `SELECT clients.id, clients.name, clients.redirect_uris FROM client_access JOIN clients ON clients.id = client_access.client_id
      WHERE client_access.email = ? AND client_access.role = 'admin' AND client_access.status = 'assigned' AND clients.disabled_at IS NULL ORDER BY clients.name`
   )
     .bind(user.email)
-    .all<{ id: string; name: string }>();
-  return results || [];
+    .all<{ id: string; name: string; redirect_uris: string }>();
+  return (results || []).map((c) => ({ id: c.id, name: c.name, hosts: hostsOf(JSON.parse(c.redirect_uris) as string[]) }));
 }
