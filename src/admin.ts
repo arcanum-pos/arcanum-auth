@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { currentMail, mailProvider, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
-import { createGuest, userById } from './store';
+import { clientById, createGuest, userById } from './store';
 import { texts } from './pages';
 import { inSeconds, json, newEmailCode, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
@@ -41,7 +41,8 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 //          → 201 { client_id, client_secret, ... }  (the secret is shown only here)
 //          The owner becomes the client's first admin (access.ts).
 //   GET    /admin/clients      → [{ client_id, name, redirect_uris, restricted, ... }]
-//   PATCH  /admin/clients/:id  { restricted } → open it to anyone with an account, or restrict it
+//   PATCH  /admin/clients/:id  { restricted?, redirect_uris?, post_logout_redirect_uris? } → open or restrict
+//          it; each URI list given replaces the old one (the bootstrapper's Applicaties)
 //   DELETE /admin/clients/:id  → disables it (tokens it issued simply expire)
 // Demo visitors without an account (the bootstrapper's "Direct proberen"):
 //   POST   /admin/guests       { name?, lifetime_hours? (default 5, max 24) }
@@ -221,10 +222,27 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
   if (one && request.method === 'PATCH') {
-    const body = (await request.json().catch(() => null)) as { restricted?: unknown } | null;
-    if (typeof body?.restricted !== 'boolean') return json({ error: 'restricted (true or false) is required' }, 400);
-    const res = await env.DB.prepare('UPDATE clients SET restricted = ? WHERE id = ? AND disabled_at IS NULL').bind(body.restricted ? 1 : 0, decodeURIComponent(one[1])).run();
-    return res.meta.changes ? json({ ok: true, restricted: body.restricted }) : json({ error: 'Not found' }, 404);
+    const body = (await request.json().catch(() => null)) as { restricted?: unknown; redirect_uris?: unknown; post_logout_redirect_uris?: unknown } | null;
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if (body?.restricted !== undefined) {
+      if (typeof body.restricted !== 'boolean') return json({ error: 'restricted must be true or false' }, 400);
+      sets.push('restricted = ?');
+      params.push(body.restricted ? 1 : 0);
+    }
+    // Each list given replaces the old one (exact URIs, https — as at creation).
+    for (const [field, min] of [['redirect_uris', 1], ['post_logout_redirect_uris', 0]] as const) {
+      if (body?.[field] === undefined) continue;
+      const uris = validUris(body[field]);
+      if (!uris || uris.length < min || uris.length > 10) return json({ error: `${field}: ${min}–10 https URLs` }, 400);
+      sets.push(`${field} = ?`);
+      params.push(JSON.stringify(uris));
+    }
+    if (!sets.length) return json({ error: 'restricted, redirect_uris or post_logout_redirect_uris is required' }, 400);
+    const res = await env.DB.prepare(`UPDATE clients SET ${sets.join(', ')} WHERE id = ? AND disabled_at IS NULL`).bind(...params, decodeURIComponent(one[1])).run();
+    if (!res.meta.changes) return json({ error: 'Not found' }, 404);
+    const client = await clientById(env, decodeURIComponent(one[1]));
+    return json({ ok: true, restricted: !!client!.restricted, redirect_uris: client!.redirect_uris, post_logout_redirect_uris: client!.post_logout_redirect_uris });
   }
   if (one && request.method === 'DELETE') {
     const res = await env.DB.prepare('UPDATE clients SET disabled_at = ? WHERE id = ? AND disabled_at IS NULL').bind(nowIso(), decodeURIComponent(one[1])).run();

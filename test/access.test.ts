@@ -65,9 +65,22 @@ describe('restricted clients', () => {
     expect(discovery.client_users_endpoint).toBe(`${ISSUER}/clients/self/users`);
     // Opened (and closed again) by the platform's admins.
     const open = await call(`/admin/clients/${client.client_id}`, { method: 'PATCH', headers: ADMIN, body: JSON.stringify({ restricted: false }) });
-    expect(await open.json()).toEqual({ ok: true, restricted: false });
+    expect(await open.json()).toMatchObject({ ok: true, restricted: false, redirect_uris: [REDIRECT] });
     const list = (await (await call('/admin/clients', { headers: ADMIN })).json()) as { client_id: string; restricted: boolean }[];
     expect(list.find((c) => c.client_id === client.client_id)!.restricted).toBe(false);
+  });
+
+  it('PATCH /admin/clients/:id replaces the URI lists (exact https URLs), never on a disabled client', async () => {
+    const client = await newClient();
+    const patch = (body: unknown) => call(`/admin/clients/${client.client_id}`, { method: 'PATCH', headers: ADMIN, body: JSON.stringify(body) });
+    const res = await patch({ redirect_uris: [REDIRECT, `${APP}/oauth2/callback`] });
+    expect(await res.json()).toMatchObject({ ok: true, restricted: true, redirect_uris: [REDIRECT, `${APP}/oauth2/callback`], post_logout_redirect_uris: [] });
+    expect((await patch({ redirect_uris: [] })).status).toBe(400);
+    expect((await patch({ redirect_uris: ['http://evil.test/cb'] })).status).toBe(400);
+    expect((await patch({ post_logout_redirect_uris: ['https://x.test/#frag'] })).status).toBe(400);
+    expect((await patch({})).status).toBe(400);
+    await call(`/admin/clients/${client.client_id}`, { method: 'DELETE', headers: ADMIN });
+    expect((await patch({ redirect_uris: [REDIRECT] })).status).toBe(404);
   });
 
   it('flow 1: no access → a request → the admins get a mail → approved → signed in', async () => {
