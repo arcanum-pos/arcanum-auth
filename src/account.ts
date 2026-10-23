@@ -368,5 +368,6 @@ export async function loginOnce(request: Request, env: Env): Promise<Response> {
 export async function account(request: Request, env: Env): Promise<Response> {
   const session = await currentSession(env, request);
   if (!session) return redirect('/login?continue=%2Faccount');
-  return accountWithPasskeys(request, env, session.user, { added: new URL(request.url).searchParams.get('passkey') === 'added' });
+  const q = new URL(request.url).searchParams;
+  return accountWithPasskeys(request, env, session.user, { added: q.get('passkey') === 'added', googleUnlinked: q.get('google') === 'unlinked' });
 }

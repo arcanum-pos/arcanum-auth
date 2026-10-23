@@ -31,6 +31,10 @@ const T = {
     passkeysTitle: 'Passkeys',
     passkeysIntro: 'Met een passkey meld je je aan met je vingerafdruk, je gezicht of de pincode van je toestel — zonder wachtwoord.',
     noPasskeys: 'Nog geen passkeys.',
+    googleTitle: 'Google',
+    googleLinkedText: 'Je kunt je ook aanmelden met je Google-account.',
+    unlinkGoogle: 'Google ontkoppelen',
+    googleUnlinked: 'Google is ontkoppeld. Je meldt je nog aan met een code per e-mail of een passkey.',
     addPasskey: 'Passkey toevoegen',
     passkeyAdded: 'Passkey toegevoegd.',
     passkeyMeta: (created: string, used: string | null) => `Toegevoegd op ${created}` + (used ? ` · laatst gebruikt op ${used}` : ''),
@@ -107,6 +111,10 @@ const T = {
     passkeysTitle: 'Clés d’accès',
     passkeysIntro: 'Avec une clé d’accès, vous vous connectez avec votre empreinte, votre visage ou le code de votre appareil — sans mot de passe.',
     noPasskeys: 'Aucune clé d’accès pour l’instant.',
+    googleTitle: 'Google',
+    googleLinkedText: 'Vous pouvez aussi vous connecter avec votre compte Google.',
+    unlinkGoogle: 'Délier Google',
+    googleUnlinked: 'Google est délié. Vous vous connectez toujours avec un code par e-mail ou une clé d’accès.',
     addPasskey: 'Ajouter une clé d’accès',
     passkeyAdded: 'Clé d’accès ajoutée.',
     passkeyMeta: (created: string, used: string | null) => `Ajoutée le ${created}` + (used ? ` · utilisée pour la dernière fois le ${used}` : ''),
@@ -183,6 +191,10 @@ const T = {
     passkeysTitle: 'Passkeys',
     passkeysIntro: 'With a passkey you sign in with your fingerprint, your face or your device’s PIN — no password.',
     noPasskeys: 'No passkeys yet.',
+    googleTitle: 'Google',
+    googleLinkedText: 'You can also sign in with your Google account.',
+    unlinkGoogle: 'Unlink Google',
+    googleUnlinked: 'Google is unlinked. You still sign in with a code by email or a passkey.',
     addPasskey: 'Add a passkey',
     passkeyAdded: 'Passkey added.',
     passkeyMeta: (created: string, used: string | null) => `Added on ${created}` + (used ? ` · last used on ${used}` : ''),
@@ -413,7 +425,7 @@ const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
   `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
 <p class="error" role="alert" data-passkey-error hidden></p>`;
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; added?: boolean; error?: ErrorKey | null }, status = 200) {
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
   const items = opts.passkeys
     .map(
@@ -429,6 +441,9 @@ export function accountPage(request: Request, opts: { email: string; passkeys: P
 ${opts.added ? `<p class="ok" role="status">${t.passkeyAdded}</p>` : ''}${error(t, opts.error)}
 ${items ? `<ul class="keys">${items}</ul>` : `<p>${t.noPasskeys}</p>`}
 ${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidden>${t.passkeyUnsupported}</p>
+${opts.googleUnlinked ? `<p class="ok" role="status">${t.googleUnlinked}</p>` : ''}${
+      opts.google ? `<h2>${t.googleTitle}</h2><p>${t.googleLinkedText}</p><form method="post" action="/account/google"><button type="submit" name="action" value="unlink" class="secondary">${t.unlinkGoogle}</button></form>` : ''
+    }
 <a class="button secondary" href="/logout">${t.signOut}</a>`,
     status,
     {},

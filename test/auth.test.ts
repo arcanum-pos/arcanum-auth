@@ -440,6 +440,28 @@ describe('sign in with Google', () => {
     expect((await mails()).some((m) => m.body.message.to === fresh)).toBe(false);
   });
 
+  it('/account shows a linked Google and unlinks it (same-origin only); signing in by code still works', async () => {
+    const email = uniqueEmail('unlink');
+    await signUp(email);
+    const start = await call('/google?continue=%2Faccount');
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state');
+    const back = await call(`/callback/google?code=${encodeURIComponent(email)}&state=${state}`, { headers: { Cookie: cookieOf(start) } });
+    const session = cookieOf(back);
+    expect(await (await call('/account', { headers: { Cookie: session } })).text()).toContain('Google ontkoppelen');
+
+    const foreign = await post('/account/google', { action: 'unlink' }, { Cookie: session, Origin: 'https://evil.test', 'Sec-Fetch-Site': 'cross-site' });
+    expect(foreign.status).toBe(403);
+    expect((await env.DB.prepare('SELECT google_sub FROM users WHERE email = ?').bind(email).first<{ google_sub: string | null }>())!.google_sub).not.toBeNull();
+
+    const unlinked = await post('/account/google', { action: 'unlink' }, { Cookie: session });
+    expect(unlinked.headers.get('Location')).toBe('/account?google=unlinked');
+    expect((await env.DB.prepare('SELECT google_sub FROM users WHERE email = ?').bind(email).first<{ google_sub: string | null }>())!.google_sub).toBeNull();
+    const page = await (await call('/account?google=unlinked', { headers: { Cookie: session } })).text();
+    expect(page).toContain('Google is ontkoppeld');
+    expect(page).not.toContain('Google ontkoppelen');
+    expect((await signInWithCode(post, email)).cookie).toMatch(/^__Host-session=/);
+  });
+
   it('refuses an unverified Google address and a replayed state', async () => {
     const start = await call('/google?continue=%2Faccount');
     const state = new URL(start.headers.get('Location')!).searchParams.get('state')!;

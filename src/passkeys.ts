@@ -275,7 +275,7 @@ export async function passkeyOffer(request: Request, env: Env): Promise<Response
 
 // --- /account: the list, rename, remove.
 
-export async function accountWithPasskeys(request: Request, env: Env, user: User, opts: { added?: boolean; error?: ErrorKey | null } = {}, status = 200) {
+export async function accountWithPasskeys(request: Request, env: Env, user: User, opts: { added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null } = {}, status = 200) {
   const passkeys: PasskeyItem[] = (await passkeysOf(env, user.id)).map((k) => {
     const transports = JSON.parse(k.transports) as string[];
     return {
@@ -287,7 +287,7 @@ export async function accountWithPasskeys(request: Request, env: Env, user: User
       transports: transports.filter((t) => t === 'usb' || t === 'nfc' || t === 'ble'),
     };
   });
-  return accountPage(request, { email: user.email, passkeys, ...opts }, status);
+  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, ...opts }, status);
 }
 
 export async function managePasskey(request: Request, env: Env): Promise<Response> {
@@ -302,4 +302,15 @@ export async function managePasskey(request: Request, env: Env): Promise<Respons
     if (name) await env.DB.prepare('UPDATE passkeys SET name = ? WHERE id = ? AND user_id = ?').bind(name, form.id || '', session.user.id).run();
   }
   return redirect('/account');
+}
+
+// Unlink Google (a form on /account): signing in goes on by mailed code or passkey.
+export async function manageGoogle(request: Request, env: Env): Promise<Response> {
+  const session = await currentSession(env, request);
+  if (!session) return redirect('/login?continue=%2Faccount');
+  if (!sameOrigin(request, env.ISSUER)) return accountWithPasskeys(request, env, session.user, { error: 'request' }, 403);
+  const form = await readForm(request);
+  if (form.action !== 'unlink') return redirect('/account');
+  await env.DB.prepare('UPDATE users SET google_sub = NULL, updated_at = ? WHERE id = ?').bind(nowIso(), session.user.id).run();
+  return redirect('/account?google=unlinked');
 }

@@ -16,7 +16,7 @@ import { clientSelf } from './clients';
 import type { Env } from './env';
 import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
 import { messagePage, texts } from './pages';
-import { managePasskey, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions } from './passkeys';
+import { manageGoogle, managePasskey, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions } from './passkeys';
 import { PASSKEY_SCRIPT } from './passkey-script';
 import { json, redirect, safeContinue } from './util';
 import { tooManyRequests, withinLimit } from './ratelimit';
@@ -81,6 +81,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/passkey/register' && method === 'POST') return passkeyRegister(request, env);
       if (path === '/passkey/offer' && (method === 'GET' || method === 'POST')) return passkeyOffer(request, env);
       if (path === '/account/passkeys' && method === 'POST') return managePasskey(request, env);
+      if (path === '/account/google' && method === 'POST') return manageGoogle(request, env);
       if (path === '/passkey.js' && method === 'GET') {
         return new Response(PASSKEY_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' } });
       }
