@@ -235,5 +235,7 @@ export async function managedClients(env: Env, user: User): Promise<{ id: string
   )
     .bind(user.email)
     .all<{ id: string; name: string; redirect_uris: string }>();
-  return (results || []).map((c) => ({ id: c.id, name: c.name, hosts: hostsOf(JSON.parse(c.redirect_uris) as string[]) }));
+  // Only the addresses that tell one installation from another: its own
+  // domains, not the *.workers.dev ones every Cloudflare installation has.
+  return (results || []).map((c) => ({ id: c.id, name: c.name, hosts: hostsOf(JSON.parse(c.redirect_uris) as string[]).filter((h) => !h.endsWith('.workers.dev')) }));
 }

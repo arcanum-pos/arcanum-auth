@@ -285,6 +285,12 @@ describe("a client's addresses on its access page", () => {
     expect(page).toContain('data-testid="client-hosts">editor.example.test<');
     expect(page).toContain('name="redirect_uris"');
     expect(await (await call('/account', { headers: { Cookie: cookie } })).text()).toContain('editor.example.test');
+    // On /account only its own domains: no *.workers.dev addresses.
+    const installation = await newClient({ owner_email: owner, redirect_uris: ['https://arcanum-bff.someone.workers.dev/callback', 'https://kassa.club.test/callback'] });
+    const account = await (await call('/account', { headers: { Cookie: cookie } })).text();
+    expect(account).toContain(`href="/access/${installation.client_id}"`);
+    expect(account).toContain('kassa.club.test');
+    expect(account).not.toContain('someone.workers.dev');
 
     const saved = await post(`/access/${client.client_id}`, { action: 'uris', redirect_uris: 'https://editor.example.test/auth/callback\nhttps://editor.example.test/oauth2/callback', post_logout_redirect_uris: '' }, { Cookie: cookie });
     expect(saved.headers.get('Location')).toBe(`/access/${client.client_id}?done=uris`);
