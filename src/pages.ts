@@ -75,6 +75,8 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `Je hebt toegang tot ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `Een beheerder gaf je toegang tot ${client}.` + (url ? `\n\nMeld je aan op ${url}` : ''),
     manageTitle: (client: string) => `Toegang tot ${client}`,
+    notAdminAs: (email: string, client: string) => `Je bent aangemeld als ${email}, en dat account beheert ${client} niet. Kreeg je een e-mail met een aanvraag? Meld je dan aan met het adres waarop je die kreeg.`,
+    switchAccount: "Aanmelden met een ander account",
     accessDone: { approved: "Toegestaan. De persoon krijgt een e-mail.", refused: "Aanvraag geweigerd.", removed: "Verwijderd.", role: "Aangepast.", added: "Toegevoegd.", none: "Niets veranderd." },
     securityKey: 'Beveiligingssleutel',
     phone: 'Telefoon',
@@ -184,6 +186,8 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `Vous avez accès à ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `Un administrateur vous a donné accès à ${client}.` + (url ? `\n\nConnectez-vous sur ${url}` : ''),
     manageTitle: (client: string) => `Accès à ${client}`,
+    notAdminAs: (email: string, client: string) => `Vous êtes connecté en tant que ${email}, et ce compte ne gère pas ${client}. Vous avez reçu un e-mail avec une demande ? Connectez-vous avec l’adresse sur laquelle vous l’avez reçu.`,
+    switchAccount: "Se connecter avec un autre compte",
     accessDone: { approved: "Accepté. La personne reçoit un e-mail.", refused: "Demande refusée.", removed: "Retiré.", role: "Modifié.", added: "Ajouté.", none: "Rien n’a changé." },
     securityKey: 'Clé de sécurité',
     phone: 'Téléphone',
@@ -293,6 +297,8 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `You have access to ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `An administrator gave you access to ${client}.` + (url ? `\n\nSign in at ${url}` : ''),
     manageTitle: (client: string) => `Access to ${client}`,
+    notAdminAs: (email: string, client: string) => `You're signed in as ${email}, and that account doesn't manage ${client}. Got an email with a request? Sign in with the address it was sent to.`,
+    switchAccount: "Sign in with another account",
     accessDone: { approved: "Approved. They get an email.", refused: "Request refused.", removed: "Removed.", role: "Changed.", added: "Added.", none: "Nothing changed." },
     securityKey: 'Security key',
     phone: 'Phone',
@@ -612,5 +618,19 @@ ${opts.notice ? `<p class="ok" role="status">${esc(opts.notice)}</p>` : ''}${err
 <h2>${t.addTitle}</h2><form method="post" action="${action}">${hidden('action', 'add')}<label for="email">${t.email}</label><input id="email" name="email" type="email" required autocomplete="off"><button type="submit">${t.add}</button></form>
 <div class="links"><a href="/account">${t.accountTitle}</a></div>`,
     status
+  );
+}
+
+// Signed in, but not as one of the client's admins (often: another account
+// than the one the request mail went to) — say who, and offer to switch.
+export function notAdminPage(request: Request, opts: { clientId: string; clientName: string; email: string }) {
+  const t = texts(request);
+  const back = `/access/${encodeURIComponent(opts.clientId)}`;
+  return page(
+    request,
+    t.manageTitle(opts.clientName),
+    `<h1>${esc(t.manageTitle(opts.clientName))}</h1><p>${esc(t.notAdminAs(opts.email, opts.clientName))}</p>
+<a class="button" href="/login?continue=${encodeURIComponent(back)}">${t.switchAccount}</a>`,
+    403
   );
 }

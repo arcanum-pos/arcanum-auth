@@ -1,6 +1,6 @@
 import type { Env } from './env';
 import { sendMail } from './mail';
-import { accessAdminPage, accessPage, messagePage, texts, type AccessItem } from './pages';
+import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
 import { clientById, currentSession, recordAttempt, tooManyAttempts, type Client, type User } from './store';
 import { isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
 
@@ -124,7 +124,8 @@ async function asAdmin(request: Request, env: Env, clientId: string): Promise<{ 
   if (!session) return redirect(`/login?continue=${encodeURIComponent(`/access/${clientId}`)}`);
   const client = await clientById(env, clientId);
   const row = client && !session.user.guest ? await accessRow(env, client.id, session.user.email) : null;
-  if (!client || row?.status !== 'assigned' || row.role !== 'admin') return messagePage(request, texts(request).errors.notAdmin, 403);
+  if (!client) return messagePage(request, texts(request).errors.notAdmin, 403);
+  if (row?.status !== 'assigned' || row.role !== 'admin') return notAdminPage(request, { clientId: client.id, clientName: client.name, email: session.user.email });
   return { client, user: session.user };
 }
 

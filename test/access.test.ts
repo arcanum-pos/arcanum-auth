@@ -108,7 +108,11 @@ describe('restricted clients', () => {
     expect(await (await signInTo(client, cookie)).page!.text()).toContain('is verstuurd');
 
     // Someone who isn't its admin can't see or decide.
-    expect((await call(`/access/${client.client_id}`, { headers: { Cookie: cookie } })).status).toBe(403);
+    const notAdmin = await call(`/access/${client.client_id}`, { headers: { Cookie: cookie } });
+    expect(notAdmin.status).toBe(403);
+    const notAdminHtml = await notAdmin.text();
+    expect(notAdminHtml).toContain(`Je bent aangemeld als ${email}`);
+    expect(notAdminHtml).toContain(`href="/login?continue=${encodeURIComponent(`/access/${client.client_id}`)}"`);
     const ownerCookie = await signUp(owner);
     const admin = await call(`/access/${client.client_id}`, { headers: { Cookie: ownerCookie } });
     expect(admin.status).toBe(200);
