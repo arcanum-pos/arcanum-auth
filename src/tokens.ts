@@ -19,6 +19,11 @@ export async function issueTokens(
 ): Promise<Record<string, unknown>> {
   const { key, kid } = await signingKey(env);
   const now = unixNow();
+  // The client is in use (the platform's overview, an owner's /account) — at most one write an hour.
+  const nowText = new Date(now * 1000).toISOString();
+  await env.DB.prepare('UPDATE clients SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)')
+    .bind(nowText, params.clientId, new Date((now - 3600) * 1000).toISOString())
+    .run();
   const accessToken = await new SignJWT({ scope: params.scope, client_id: params.clientId })
     .setProtectedHeader({ alg: 'RS256', kid, typ: 'at+jwt' })
     .setIssuer(env.ISSUER)

@@ -66,6 +66,8 @@ const T = {
     addTitle: "Iemand toevoegen",
     add: "Toevoegen",
     manageApps: "Toepassingen die je beheert",
+    lastUsed: (when: string) => `Laatst gebruikt op ${when}`,
+    neverUsed: 'Nog niet gebruikt',
     accessText: (client: string) => `Je hebt nog geen toegang tot ${client}. Vraag de beheerder om je toe te voegen.`,
     accessRequested: (client: string) => `Je aanvraag voor ${client} is verstuurd. Je krijgt een e-mail zodra een beheerder je toegang geeft.`,
     accessGuest: (client: string) => `Met een gastaccount heb je geen toegang tot ${client}.`,
@@ -75,6 +77,8 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `Je hebt toegang tot ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `Een beheerder gaf je toegang tot ${client}.` + (url ? `\n\nMeld je aan op ${url}` : ''),
     manageTitle: (client: string) => `Toegang tot ${client}`,
+    mailClientDisabledSubject: (client: string) => `${client} is uitgeschakeld`,
+    mailClientDisabled: (client: string, by: string) => `${by}, beheerder van login.kaboutersoft.be, schakelde ${client} uit: aanmelden kan er niet meer.\n\nWordt het nog gebruikt? Neem dan contact op met de beheerder, dan zetten we het terug aan.`,
     addressesTitle: "Adressen",
     redirectLabel: "Redirect-URI’s — één per regel, https",
     logoutLabel: "Adres na afmelden (optioneel)",
@@ -186,6 +190,8 @@ const T = {
     addTitle: "Ajouter quelqu’un",
     add: "Ajouter",
     manageApps: "Applications que vous gérez",
+    lastUsed: (when: string) => `Utilisée pour la dernière fois le ${when}`,
+    neverUsed: 'Pas encore utilisée',
     accessText: (client: string) => `Vous n’avez pas encore accès à ${client}. Demandez à l’administrateur de vous ajouter.`,
     accessRequested: (client: string) => `Votre demande pour ${client} a été envoyée. Vous recevrez un e-mail dès qu’un administrateur vous donne accès.`,
     accessGuest: (client: string) => `Un compte invité n’a pas accès à ${client}.`,
@@ -195,6 +201,8 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `Vous avez accès à ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `Un administrateur vous a donné accès à ${client}.` + (url ? `\n\nConnectez-vous sur ${url}` : ''),
     manageTitle: (client: string) => `Accès à ${client}`,
+    mailClientDisabledSubject: (client: string) => `${client} a été désactivé`,
+    mailClientDisabled: (client: string, by: string) => `${by}, administrateur de login.kaboutersoft.be, a désactivé ${client} : la connexion n’y est plus possible.\n\nEncore utilisé ? Contactez l’administrateur, il le réactivera.`,
     addressesTitle: "Adresses",
     redirectLabel: "URI de redirection — une par ligne, https",
     logoutLabel: "Adresse après déconnexion (facultatif)",
@@ -306,6 +314,8 @@ const T = {
     addTitle: "Add someone",
     add: "Add",
     manageApps: "Applications you manage",
+    lastUsed: (when: string) => `Last used on ${when}`,
+    neverUsed: 'Not used yet',
     accessText: (client: string) => `You don't have access to ${client} yet. Ask its administrator to add you.`,
     accessRequested: (client: string) => `Your request for ${client} was sent. You'll get an email as soon as an administrator gives you access.`,
     accessGuest: (client: string) => `A guest account has no access to ${client}.`,
@@ -315,6 +325,8 @@ const T = {
     mailAccessGrantedSubject: (client: string) => `You have access to ${client}`,
     mailAccessGranted: (client: string, url: string | null) => `An administrator gave you access to ${client}.` + (url ? `\n\nSign in at ${url}` : ''),
     manageTitle: (client: string) => `Access to ${client}`,
+    mailClientDisabledSubject: (client: string) => `${client} was disabled`,
+    mailClientDisabled: (client: string, by: string) => `${by}, the administrator of login.kaboutersoft.be, disabled ${client}: signing in there is no longer possible.\n\nStill in use? Contact the administrator and it will be switched back on.`,
     addressesTitle: "Addresses",
     redirectLabel: "Redirect URIs — one per line, https",
     logoutLabel: "Address after signing out (optional)",
@@ -553,7 +565,7 @@ const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
   `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
 <p class="error" role="alert" data-passkey-error hidden></p>`;
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[] }[]; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
   const items = opts.passkeys
     .map(
@@ -578,7 +590,8 @@ ${
             .map((c) => {
               // Its domains, unless the name already says them ("Arcanum — kassa.club.be").
               const hosts = c.hosts.filter((h) => !c.name.includes(h));
-              return `<li><div><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a>${hosts.length ? `<div class="key-meta">${esc(hosts.join(' · '))}</div>` : ''}</div></li>`;
+              const used = c.lastUsedAt ? t.lastUsed(when(request, c.lastUsedAt)) : t.neverUsed;
+              return `<li><div><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a><div class="key-meta">${esc([...hosts, used].join(' · '))}</div></div></li>`;
             })
             .join('')}</ul>`
         : ''

@@ -227,18 +227,18 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
 }
 
 // The clients someone manages (a link on /account).
-export async function managedClients(env: Env, user: User): Promise<{ id: string; name: string; hosts: string[] }[]> {
+export async function managedClients(env: Env, user: User): Promise<{ id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]> {
   if (user.guest) return [];
   const { results } = await env.DB.prepare(
-    `SELECT clients.id, clients.name, clients.instance_url, clients.redirect_uris FROM client_access JOIN clients ON clients.id = client_access.client_id
+    `SELECT clients.id, clients.name, clients.instance_url, clients.redirect_uris, clients.last_used_at FROM client_access JOIN clients ON clients.id = client_access.client_id
      WHERE client_access.email = ? AND client_access.role = 'admin' AND client_access.status = 'assigned' AND clients.disabled_at IS NULL ORDER BY clients.name`
   )
     .bind(user.email)
-    .all<{ id: string; name: string; instance_url: string | null; redirect_uris: string }>();
+    .all<{ id: string; name: string; instance_url: string | null; redirect_uris: string; last_used_at: string | null }>();
   // Only the addresses that tell one installation from another: its own
   // domains, not the *.workers.dev ones every Cloudflare installation has.
   return (results || []).map((c) => {
     const redirects = JSON.parse(c.redirect_uris) as string[];
-    return { id: c.id, name: shownName(c.name, c.instance_url, redirects), hosts: hostsOf(redirects).filter((h) => !h.endsWith('.workers.dev')) };
+    return { id: c.id, name: shownName(c.name, c.instance_url, redirects), hosts: hostsOf(redirects).filter((h) => !h.endsWith('.workers.dev')), lastUsedAt: c.last_used_at };
   });
 }

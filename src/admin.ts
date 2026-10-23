@@ -1,5 +1,5 @@
 import type { Env } from './env';
-import { currentMail, mailProvider, sendTestMail } from './mail';
+import { currentMail, mailProvider, sendMail, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
 import { clientById, createGuest, userById } from './store';
 import { texts } from './pages';
@@ -43,7 +43,11 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 //   GET    /admin/clients      → [{ client_id, name, redirect_uris, restricted, ... }]
 //   PATCH  /admin/clients/:id  { restricted?, redirect_uris?, post_logout_redirect_uris? } → open or restrict
 //          it; each URI list given replaces the old one (the bootstrapper's Applicaties)
-//   DELETE /admin/clients/:id  → disables it (tokens it issued simply expire)
+//   DELETE /admin/clients/:id[?by=<email>]  → disables it (tokens it issued simply expire);
+//          its owner gets a mail when someone else (by) did it
+//   DELETE /admin/clients/:id?hard=1        → a disabled client gone for good: its
+//          access list and protocol state too (409 while it isn't disabled)
+//   GET lists each with last_used_at and active_users (signed in through it in the last 30 days)
 // Demo visitors without an account (the bootstrapper's "Direct proberen"):
 //   POST   /admin/guests       { name?, lifetime_hours? (default 5, max 24) }
 //          → 201 { sub, email, name, expires_at }
@@ -119,8 +123,12 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
 
   if (path === '/admin/clients' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
-      'SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, created_at, disabled_at FROM clients ORDER BY created_at'
-    ).all<{
+      `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, created_at, disabled_at, last_used_at,
+         (SELECT COUNT(DISTINCT user_id) FROM refresh_tokens WHERE refresh_tokens.client_id = clients.id AND refresh_tokens.created_at > ?) AS active_users
+       FROM clients ORDER BY created_at`
+    )
+      .bind(new Date(Date.now() - 30 * 86400_000).toISOString())
+      .all<{
       id: string;
       name: string;
       redirect_uris: string;
@@ -131,6 +139,8 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
       restricted: number;
       created_at: string;
       disabled_at: string | null;
+      last_used_at: string | null;
+      active_users: number;
     }>();
     return json(
       (results || []).map((c) => ({
@@ -142,6 +152,8 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
         owner_email: c.owner_email,
         owner_sub: c.owner_sub,
         restricted: !!c.restricted,
+        last_used_at: c.last_used_at,
+        active_users: c.active_users,
         created_at: c.created_at,
         disabled_at: c.disabled_at,
       }))
@@ -245,8 +257,31 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     return json({ ok: true, restricted: !!client!.restricted, redirect_uris: client!.redirect_uris, post_logout_redirect_uris: client!.post_logout_redirect_uris });
   }
   if (one && request.method === 'DELETE') {
-    const res = await env.DB.prepare('UPDATE clients SET disabled_at = ? WHERE id = ? AND disabled_at IS NULL').bind(nowIso(), decodeURIComponent(one[1])).run();
-    return res.meta.changes ? json({ ok: true }) : json({ error: 'Not found' }, 404);
+    const id = decodeURIComponent(one[1]);
+    const query = new URL(request.url).searchParams;
+    const row = await env.DB.prepare('SELECT name, owner_email, disabled_at FROM clients WHERE id = ?').bind(id).first<{ name: string; owner_email: string | null; disabled_at: string | null }>();
+    if (!row) return json({ error: 'Not found' }, 404);
+    if (query.get('hard') === '1') {
+      // Two steps: only a client that's disabled already can go for good.
+      if (!row.disabled_at) return json({ error: 'Disable the client first' }, 409);
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM refresh_tokens WHERE client_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM auth_codes WHERE client_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM device_codes WHERE client_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM client_access WHERE client_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM clients WHERE id = ?').bind(id),
+      ]);
+      return json({ ok: true, deleted: true });
+    }
+    const res = await env.DB.prepare('UPDATE clients SET disabled_at = ? WHERE id = ? AND disabled_at IS NULL').bind(nowIso(), id).run();
+    if (!res.meta.changes) return json({ error: 'Not found' }, 404);
+    // Someone else's: its owner hears of it — a client never disappears silently.
+    const by = (query.get('by') || '').trim().toLowerCase();
+    if (row.owner_email && by && row.owner_email.toLowerCase() !== by) {
+      const t = texts(request);
+      await sendMail(env, row.owner_email, t.mailClientDisabledSubject(row.name), t.mailClientDisabled(row.name, by)).catch((err) => console.error('client disabled mail failed', err));
+    }
+    return json({ ok: true });
   }
   return json({ error: 'Not found' }, 404);
 }

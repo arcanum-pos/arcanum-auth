@@ -145,7 +145,7 @@ has an account. Guests never get into a restricted client.
 | `GET/POST /passkey/offer` | the one-time offer after signing in another way (POST = "not now") |
 | `POST /account/passkeys` | rename (`action=rename`) or remove (`action=delete`) one of your own |
 | `GET /passkey.js` | the pages' one script (WebAuthn in the browser) |
-| `POST/GET /admin/clients`, `PATCH/DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`); a client can carry `instance_url`, `owner_email`, `owner_sub`, `restricted` (default true; PATCH changes only that) |
+| `POST/GET /admin/clients`, `PATCH/DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`); a client can carry `instance_url`, `owner_email`, `owner_sub`, `restricted` (default true); the list says each one's `last_used_at` (tokens handed out, at most hourly — migration 0010) and `active_users` (last 30 days). DELETE disables (`?by=` mails the owner when it's someone else); `?hard=1` deletes a disabled one for good |
 | `POST /admin/guests` | a **guest** — a demo visitor without an account: no password, `guest-…@guest.invalid` (unverified), gone after `lifetime_hours` (default 5, max 24) |
 | `POST /admin/login-links` | a **one-time sign-in link** for a guest (single use, 60 s) that continues to an address on an origin some client registered |
 | `GET /login/once?token=…` | where that link leads: starts the guest's session, then continues |

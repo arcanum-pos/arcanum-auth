@@ -787,3 +787,96 @@ describe("shownName", () => {
     ).toBe("Arcanum — x.workers.dev");
   });
 });
+
+describe("cleaning up clients (the platform admins, /admin/clients)", () => {
+  it("a sign-in marks the client used; the list says when, and how many signed in lately; /account shows it to its owner", async () => {
+    const owner = uniqueEmail("owner");
+    const client = await newClient({ owner_email: owner, restricted: false });
+    const listed = async () =>
+      (
+        (await (await call("/admin/clients", { headers: ADMIN })).json()) as {
+          client_id: string;
+          last_used_at: string | null;
+          active_users: number;
+        }[]
+      ).find((c) => c.client_id === client.client_id)!;
+    expect(await listed()).toMatchObject({
+      last_used_at: null,
+      active_users: 0,
+    });
+    const cookie = await signUp(owner);
+    expect(
+      await (await call("/account", { headers: { Cookie: cookie } })).text(),
+    ).toContain("Nog niet gebruikt");
+    expect((await signInTo(client, cookie)).tokens!.refresh_token).toBeTruthy();
+    const after = await listed();
+    expect(after.last_used_at).toEqual(expect.any(String));
+    expect(after.active_users).toBe(1);
+    expect(
+      await (await call("/account", { headers: { Cookie: cookie } })).text(),
+    ).toContain("Laatst gebruikt op");
+  });
+
+  it("disabling someone else’s client mails its owner (not when it was theirs); deleting only once disabled, and then for good", async () => {
+    const owner = uniqueEmail("owner");
+    const client = await newClient({ owner_email: owner });
+    expect(
+      (
+        await call(`/admin/clients/${client.client_id}?hard=1`, {
+          method: "DELETE",
+          headers: ADMIN,
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await call(`/admin/clients/${client.client_id}?by=boss@platform.test`, {
+          method: "DELETE",
+          headers: ADMIN,
+        })
+      ).status,
+    ).toBe(200);
+    const mail = (await mailsTo(owner)).find(
+      (m) => m.subject === "Scouts Elewijt is uitgeschakeld",
+    )!;
+    expect(mail.text).toContain("boss@platform.test");
+
+    const own = await newClient({ owner_email: "boss@platform.test" });
+    await call(`/admin/clients/${own.client_id}?by=boss@platform.test`, {
+      method: "DELETE",
+      headers: ADMIN,
+    });
+    expect(
+      (await mailsTo("boss@platform.test")).some((m) =>
+        m.subject.endsWith("is uitgeschakeld"),
+      ),
+    ).toBe(false);
+
+    expect(
+      await (
+        await call(`/admin/clients/${client.client_id}?hard=1`, {
+          method: "DELETE",
+          headers: ADMIN,
+        })
+      ).json(),
+    ).toEqual({ ok: true, deleted: true });
+    expect(
+      await env.DB.prepare("SELECT 1 FROM clients WHERE id = ?")
+        .bind(client.client_id)
+        .first(),
+    ).toBeNull();
+    expect(
+      await env.DB.prepare("SELECT 1 FROM client_access WHERE client_id = ?")
+        .bind(client.client_id)
+        .first(),
+    ).toBeNull();
+    expect(
+      (
+        await call(`/admin/clients/${client.client_id}?hard=1`, {
+          method: "DELETE",
+          headers: ADMIN,
+        })
+      ).status,
+    ).toBe(404);
+  });
+});
