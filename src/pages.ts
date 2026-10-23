@@ -393,6 +393,7 @@ const STYLE = `
 @media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--card:#171717;--fg:#fafafa;--muted:#a3a3a3;--border:#262626;--primary:#fafafa;--on-primary:#0a0a0a;--danger:#f87171}}
 *{box-sizing:border-box}body{margin:0;min-height:100svh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px}
 main{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px}
+main.wide{max-width:720px}main.wide ul.keys li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}main.wide ul.keys li>div:first-child{flex:1 1 220px;min-width:0}main.wide ul.keys li form{margin-top:0}main.wide form button[type=submit]:only-of-type{width:auto;padding:0 20px}textarea.uris{white-space:pre;overflow-x:auto}
 .brand{font-weight:700;letter-spacing:-.02em;margin-bottom:18px}h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}p{margin:0 0 14px;color:var(--muted)}
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}input{width:100%;height:42px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:0 12px;font:inherit}
 input.code{letter-spacing:.3em;text-align:center;font-size:20px;font-family:ui-monospace,monospace;text-transform:uppercase}
@@ -406,11 +407,12 @@ ul.keys form{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}ul.keys input{he
 textarea{width:100%;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:8px 12px;font:13px/1.5 ui-monospace,monospace;resize:vertical}code{font:12.5px ui-monospace,monospace;word-break:break-all}ul.keys button{width:auto;height:36px;margin:0;padding:0 12px;font-size:13.5px}
 [hidden]{display:none!important}`;
 
-export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean } = {}): Response {
+// `wide`: a page to manage something (a client's access), not a sign-in form.
+export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean; wide?: boolean } = {}): Response {
   const script = opts.passkeys ? '<script src="/passkey.js" defer></script>' : '';
   const html = `<!doctype html><html lang="${language(request)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title>${esc(title)} · ${esc(new URL(request.url).host)}</title><style>${STYLE}</style>${script}</head>
-<body><main><div class="brand">${esc(new URL(request.url).host)}</div>${body}</main></body></html>`;
+<body><main${opts.wide ? ' class="wide"' : ''}><div class="brand">${esc(new URL(request.url).host)}</div>${body}</main></body></html>`;
   return new Response(html, {
     status,
     headers: {
@@ -642,16 +644,20 @@ export function accessAdminPage(
 ) {
   const t = texts(request);
   const action = `/access/${encodeURIComponent(opts.clientId)}`;
-  const who = (i: AccessItem) => `<div class="key-name">${esc(i.name || i.email)}${i.email === opts.me ? ` (${t.you})` : ''}</div>${i.name ? `<div class="key-meta">${esc(i.email)}</div>` : ''}`;
+  // Who, in one block on the left (name, then address and what else); the buttons on the right.
+  const who = (i: AccessItem, extra: string[] = []) =>
+    `<div><div class="key-name">${esc(i.name || i.email)}${i.email === opts.me ? ` (${t.you})` : ''}</div>${
+      i.name || extra.length ? `<div class="key-meta">${esc([...(i.name ? [i.email] : []), ...extra].join(' · '))}</div>` : ''
+    }</div>`;
   const buttons = (i: AccessItem, list: [string, string][]) =>
     `<form method="post" action="${action}">${hidden('email', i.email)}${list.map(([value, label]) => `<button type="submit" name="action" value="${value}" class="secondary">${label}</button>`).join('')}</form>`;
   const requests = opts.items.filter((i) => i.status === 'requested');
   const assigned = opts.items.filter((i) => i.status === 'assigned');
-  const requestItems = requests.map((i) => `<li>${who(i)}<div class="key-meta">${esc(when(request, i.created_at))}</div>${buttons(i, [['approve', t.approve], ['refuse', t.refuse]])}</li>`).join('');
+  const requestItems = requests.map((i) => `<li>${who(i, [when(request, i.created_at)])}${buttons(i, [['approve', t.approve], ['refuse', t.refuse]])}</li>`).join('');
   const assignedItems = assigned
     .map(
       (i) =>
-        `<li>${who(i)}${i.role === 'admin' ? `<div class="key-meta">${t.adminBadge}</div>` : ''}${buttons(i, [
+        `<li>${who(i, i.role === 'admin' ? [t.adminBadge] : [])}${buttons(i, [
           i.role === 'admin' ? ['member', t.makeMember] : ['admin', t.makeAdmin],
           ['remove', t.removeAccess],
         ])}</li>`
@@ -669,12 +675,14 @@ ${opts.notice ? `<p class="ok" role="status">${esc(opts.notice)}</p>` : ''}${err
       opts.byInstaller
         ? `<p>${t.urisByInstaller}</p><ul class="keys" data-testid="client-uris">${opts.redirectUris.map((u) => `<li><code>${esc(u)}</code></li>`).join('')}</ul>`
         : `<form method="post" action="${action}" data-testid="client-uris">${hidden('action', 'uris')}<p>${t.urisHint}</p>
-<label for="redirect_uris">${t.redirectLabel}</label><textarea id="redirect_uris" name="redirect_uris" rows="3" required>${esc(opts.tried?.redirect ?? opts.redirectUris.join('\n'))}</textarea>
-<label for="post_logout_redirect_uris">${t.logoutLabel}</label><textarea id="post_logout_redirect_uris" name="post_logout_redirect_uris" rows="2">${esc(opts.tried?.logout ?? opts.logoutUris.join('\n'))}</textarea>
+<label for="redirect_uris">${t.redirectLabel}</label><textarea id="redirect_uris" name="redirect_uris" class="uris" wrap="off" rows="${Math.max(2, opts.redirectUris.length + 1)}" required>${esc(opts.tried?.redirect ?? opts.redirectUris.join('\n'))}</textarea>
+<label for="post_logout_redirect_uris">${t.logoutLabel}</label><textarea id="post_logout_redirect_uris" name="post_logout_redirect_uris" class="uris" wrap="off" rows="${Math.max(2, opts.logoutUris.length + 1)}">${esc(opts.tried?.logout ?? opts.logoutUris.join('\n'))}</textarea>
 <button type="submit">${t.saveUris}</button></form>`
     }
 <div class="links"><a href="/account">${t.accountTitle}</a></div>`,
-    status
+    status,
+    {},
+    { wide: true }
   );
 }
 
