@@ -41,7 +41,7 @@ export const PASSKEY_SCRIPT = String.raw`(function () {
       });
   }
 
-  // A rough name for the passkey list ("iPhone", "Mac" …) — renamable there.
+  // A rough name for the passkey list ("iPhone", "Mac" …) - renamable there.
   function deviceName() {
     var ua = navigator.userAgent;
     if (/iPhone/.test(ua)) return 'iPhone';

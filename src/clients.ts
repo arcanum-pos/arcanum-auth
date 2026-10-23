@@ -100,7 +100,7 @@ export async function clientSelf(request: Request, env: Env, path: string): Prom
     const redirects = body.redirect_uris === undefined ? client.redirect_uris : validUris(body.redirect_uris);
     const logouts = body.post_logout_redirect_uris === undefined ? client.post_logout_redirect_uris : validUris(body.post_logout_redirect_uris);
     if (!redirects || !logouts || redirects.length === 0 || redirects.length > MAX_URIS || logouts.length > MAX_URIS) {
-      return json({ error: `redirect_uris: 1–${MAX_URIS} https URLs; post_logout_redirect_uris: up to ${MAX_URIS}` }, 400);
+      return json({ error: `redirect_uris: 1-${MAX_URIS} https URLs; post_logout_redirect_uris: up to ${MAX_URIS}` }, 400);
     }
     await env.DB.prepare('UPDATE clients SET redirect_uris = ?, post_logout_redirect_uris = ? WHERE id = ?')
       .bind(JSON.stringify(redirects), JSON.stringify(logouts), client.id)

@@ -483,7 +483,7 @@ describe("client admins named by the application", () => {
       .bind(clientId, email)
       .first<{ status: string; role: string; app_admin: number }>();
 
-  it("an admin it names manages the client; it takes that back and can remove them — never the owner or a manual admin", async () => {
+  it("an admin it names manages the client; it takes that back and can remove them - never the owner or a manual admin", async () => {
     const owner = uniqueEmail("owner");
     const client = await newClient({ owner_email: owner });
     const orgAdmin = uniqueEmail("orgadmin");
@@ -663,7 +663,7 @@ describe("a client's addresses on its access page", () => {
     // On /account only its own domains: no *.workers.dev addresses — and an
     // installation named after its workers.dev address shows its own domain instead.
     const installation = await newClient({
-      name: "Arcanum — someone.workers.dev",
+      name: "Arcanum - someone.workers.dev",
       owner_email: owner,
       redirect_uris: [
         "https://arcanum-bff.someone.workers.dev/callback",
@@ -676,7 +676,7 @@ describe("a client's addresses on its access page", () => {
     expect(account).toContain(`href="/access/${installation.client_id}"`);
     expect(account).toContain("kassa.club.test");
     expect(account).not.toContain("someone.workers.dev");
-    expect(account).toContain("Arcanum — kassa.club.test");
+    expect(account).toContain("Arcanum - kassa.club.test");
 
     const saved = await post(
       `/access/${client.client_id}`,
@@ -730,7 +730,7 @@ describe("a client's addresses on its access page", () => {
     ).toBe(400);
   });
 
-  it("an installation's are shown, not edited — its installer keeps them; posting changes nothing", async () => {
+  it("an installation's are shown, not edited - its installer keeps them; posting changes nothing", async () => {
     const owner = uniqueEmail("owner");
     const client = await newClient({ owner_email: owner });
     const cookie = await signUp(owner);
@@ -758,7 +758,7 @@ describe("shownName", () => {
     const { shownName } = await import("../src/store");
     expect(
       shownName(
-        "Arcanum — throbbing-mouse-73a8.workers.dev",
+        "Arcanum - throbbing-mouse-73a8.workers.dev",
         "https://arcanum-bff.throbbing-mouse-73a8.workers.dev",
         [
           "https://arcanum-bff.throbbing-mouse-73a8.workers.dev/callback",
@@ -766,25 +766,25 @@ describe("shownName", () => {
           "https://arcanum.esvvzw.be/callback",
         ],
       ),
-    ).toBe("Arcanum — arcanum.esvvzw.be");
+    ).toBe("Arcanum - arcanum.esvvzw.be");
     expect(
       shownName(
-        "Arcanum — x.workers.dev",
+        "Arcanum - x.workers.dev",
         "https://arcanum-bff.x.workers.dev",
         ["https://arcanum-bff.x.workers.dev/callback"],
       ),
-    ).toBe("Arcanum — x.workers.dev");
+    ).toBe("Arcanum - x.workers.dev");
     expect(
-      shownName("tresjr on Docker — a@b.test", "docker", [
+      shownName("tresjr on Docker - a@b.test", "docker", [
         "http://localhost:8080/auth/callback",
       ]),
-    ).toBe("tresjr on Docker — a@b.test");
+    ).toBe("tresjr on Docker - a@b.test");
     expect(
       shownName("Webstudio", null, ["https://editor.kaboutersoft.be/cb"]),
     ).toBe("Webstudio");
     expect(
-      shownName("Arcanum — x.workers.dev", null, ["https://own.test/cb"]),
-    ).toBe("Arcanum — x.workers.dev");
+      shownName("Arcanum - x.workers.dev", null, ["https://own.test/cb"]),
+    ).toBe("Arcanum - x.workers.dev");
   });
 });
 

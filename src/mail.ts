@@ -64,7 +64,7 @@ export async function sendTestMail(env: Env, to: string, subject: string, text: 
 export async function sendMail(env: Env, to: string, subject: string, text: string): Promise<void> {
   const provider = (await currentMail(env))?.provider;
   if (!env.MAILER || !env.MAILER_INTERNAL_KEY || !provider) {
-    console.log(`[auth] no mailer configured — mail to ${to}: ${subject}\n${text}`);
+    console.log(`[auth] no mailer configured - mail to ${to}: ${subject}\n${text}`);
     return;
   }
   const res = await callMailer(env, provider, to, subject, text);

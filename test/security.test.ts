@@ -24,7 +24,7 @@ describe('mailed codes: limits per address, not only per IP (many IPs, one addre
     expect((await post('/login', { email, continue: '/account' })).status).toBe(429);
   });
 
-  it('10 wrong codes an hour for one address, across all its codes — then even the right one waits', async () => {
+  it('10 wrong codes an hour for one address, across all its codes - then even the right one waits', async () => {
     const email = uniqueEmail('guess');
     await signUp(email);
     const codes: { id: string; code: string }[] = [];
@@ -51,7 +51,7 @@ describe('what writes a row without anyone signed in is rate-limited in memory',
     expect(passkey).toBeGreaterThan(0);
   });
 
-  it('device codes: per client (the kassas come through their bff — shared addresses)', async () => {
+  it('device codes: per client (the kassas come through their bff - shared addresses)', async () => {
     const created = await call('/admin/clients', {
       method: 'POST',
       headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' },
@@ -68,7 +68,7 @@ describe('what writes a row without anyone signed in is rate-limited in memory',
 });
 
 describe('the admin API', () => {
-  it('only over a service binding — from the internet (CF-Connecting-IP) not even with the right key', async () => {
+  it('only over a service binding - from the internet (CF-Connecting-IP) not even with the right key', async () => {
     const body = JSON.stringify({ name: 'X', redirect_uris: ['https://x.test/callback'] });
     const headers = { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' };
     expect((await call('/admin/clients', { method: 'POST', headers: { ...headers, 'CF-Connecting-IP': '203.0.113.9' }, body })).status).toBe(404);

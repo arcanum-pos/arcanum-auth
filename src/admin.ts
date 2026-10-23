@@ -228,7 +228,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     // asker's language — what people get, so a checker scores what matters —
     // marked as a test, so nobody takes it for a real one.
     const t = texts(request);
-    const result = await sendTestMail(env, to, `${t.mailTestSubject} — ${t.mailCodeSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailCode(newEmailCode(), `${env.ISSUER}/login`)}`);
+    const result = await sendTestMail(env, to, `${t.mailTestSubject} - ${t.mailCodeSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailCode(newEmailCode(), `${env.ISSUER}/login`)}`);
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 
@@ -246,7 +246,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     for (const [field, min] of [['redirect_uris', 1], ['post_logout_redirect_uris', 0]] as const) {
       if (body?.[field] === undefined) continue;
       const uris = validUris(body[field]);
-      if (!uris || uris.length < min || uris.length > 10) return json({ error: `${field}: ${min}–10 https URLs` }, 400);
+      if (!uris || uris.length < min || uris.length > 10) return json({ error: `${field}: ${min}-10 https URLs` }, 400);
       sets.push(`${field} = ?`);
       params.push(JSON.stringify(uris));
     }

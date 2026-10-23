@@ -182,7 +182,7 @@ describe('adding a passkey', () => {
     expect(await row(auth.id)).toBeNull();
   });
 
-  it('names it by what it is: a known model, a security key, a phone — else the device; the list shows which kind and when', async () => {
+  it('names it by what it is: a known model, a security key, a phone - else the device; the list shows which kind and when', async () => {
     const { cookie } = await signUp(uniqueEmail('names'));
     const add = async (create: Record<string, unknown>, browserName = 'Mac') => {
       const auth = await new Authenticator().init();
@@ -214,7 +214,7 @@ describe('adding a passkey', () => {
 });
 
 describe('signing in with a passkey', () => {
-  it('needs no e-mail: the passkey says who it is — a session, then on to where it was going', async () => {
+  it('needs no e-mail: the passkey says who it is - a session, then on to where it was going', async () => {
     const email = uniqueEmail('signin');
     const { cookie } = await signUp(email);
     const auth = await addPasskey(cookie);
@@ -284,7 +284,7 @@ describe('the offer after signing in another way', () => {
 });
 
 describe('/account', () => {
-  it('renames and removes passkeys — only one\'s own', async () => {
+  it('renames and removes passkeys - only one\'s own', async () => {
     const a = await signUp(uniqueEmail('manage-a'));
     const b = await signUp(uniqueEmail('manage-b'));
     const key = await addPasskey(a.cookie, 'Oud');
