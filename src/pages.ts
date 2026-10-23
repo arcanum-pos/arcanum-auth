@@ -393,7 +393,7 @@ const STYLE = `
 @media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--card:#171717;--fg:#fafafa;--muted:#a3a3a3;--border:#262626;--primary:#fafafa;--on-primary:#0a0a0a;--danger:#f87171}}
 *{box-sizing:border-box}body{margin:0;min-height:100svh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px}
 main{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px}
-main.wide{max-width:720px}main.wide ul.keys li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}main.wide ul.keys li>div:first-child{flex:1 1 220px;min-width:0}main.wide ul.keys li form{margin-top:0}main.wide form button[type=submit]:only-of-type{width:auto;padding:0 20px}textarea.uris{white-space:pre;overflow-x:auto}
+main.wide{max-width:720px}main.wide ul.keys li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}main.wide ul.keys li>div:first-child{flex:1 1 220px;min-width:0}main.wide ul.keys li form{margin-top:0}main.wide form button[type=submit]:only-of-type,main.wide>button,main.wide>a.button{width:auto;display:inline-flex;padding:0 20px}main.wide ul.keys li.stack{display:block}main.wide ul.keys li.stack form{margin-top:8px}main.wide ul.keys li.stack input{flex:1 1 200px}textarea.uris{white-space:pre;overflow-x:auto}
 .brand{font-weight:700;letter-spacing:-.02em;margin-bottom:18px}h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}p{margin:0 0 14px;color:var(--muted)}
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}input{width:100%;height:42px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:0 12px;font:inherit}
 input.code{letter-spacing:.3em;text-align:center;font-size:20px;font-family:ui-monospace,monospace;text-transform:uppercase}
@@ -443,13 +443,18 @@ export function loginPage(request: Request, opts: { continueTo: string; email?: 
   return page(
     request,
     t.signIn,
-    `<h1>${t.signIn}</h1><p>${t.signInHint}</p>
+    // A passkey and Google first, the e-mail field last: the browser's autofill
+    // (which offers the passkeys too) opens below the field and would cover
+    // whatever comes after it. The passkey button stays for browsers without
+    // that autofill, security keys and a passkey on another phone.
+    `<h1>${t.signIn}</h1>
+<div data-passkey-box hidden><button type="button" class="secondary" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button>${opts.google ? '' : `<p class="or">${t.or}</p>`}</div>
+<p class="error" role="alert" data-passkey-error hidden></p>
+${opts.google ? `<a class="button secondary" href="/google${q}">${t.withGoogle}</a><p class="or">${t.or}</p>` : ''}
 <form method="post" action="/login">${hidden('continue', opts.continueTo)}
 <label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="username webauthn" required value="${esc(opts.email ?? '')}">
-${error(t, opts.error)}<button type="submit">${t.continueEmail}</button></form>
-<div data-passkey-box hidden><p class="or">${t.or}</p><button type="button" class="secondary" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button></div>
-<p class="error" role="alert" data-passkey-error hidden></p>
-${opts.google ? `<p class="or">${t.or}</p><a class="button secondary" href="/google${q}">${t.withGoogle}</a>` : ''}`,
+<p class="hint">${t.signInHint}</p>
+${error(t, opts.error)}<button type="submit">${t.continueEmail}</button></form>`,
     status,
     {},
     { passkeys: true }
@@ -552,7 +557,7 @@ export function accountPage(request: Request, opts: { email: string; passkeys: P
   const t = texts(request);
   const items = opts.passkeys
     .map(
-      (k) => `<li><div class="key-name">${esc(k.name)}</div><div class="key-meta">${esc(kindOf(t, k))}</div><div class="key-meta">${esc(t.passkeyMeta(when(request, k.created_at), k.last_used_at ? when(request, k.last_used_at) : null))}</div>
+      (k) => `<li class="stack"><div><div class="key-name">${esc(k.name)}</div><div class="key-meta">${esc(kindOf(t, k))}</div><div class="key-meta">${esc(t.passkeyMeta(when(request, k.created_at), k.last_used_at ? when(request, k.last_used_at) : null))}</div></div>
 <form method="post" action="/account/passkeys">${hidden('id', k.id)}<input name="name" aria-label="${t.passkeyName}" maxlength="60" required value="${esc(k.name)}"><button type="submit" name="action" value="rename" class="secondary">${t.rename}</button><button type="submit" name="action" value="delete" class="secondary">${t.remove}</button></form></li>`
     )
     .join('');
@@ -570,14 +575,18 @@ ${opts.googleUnlinked ? `<p class="ok" role="status">${t.googleUnlinked}</p>` : 
 ${
       opts.managed.length
         ? `<h2>${t.manageApps}</h2><ul class="keys">${opts.managed
-            .map((c) => `<li><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a>${c.hosts.length ? `<div class="key-meta">${esc(c.hosts.join(' · '))}</div>` : ''}</li>`)
+            .map((c) => {
+              // Its domains, unless the name already says them ("Arcanum — kassa.club.be").
+              const hosts = c.hosts.filter((h) => !c.name.includes(h));
+              return `<li><div><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a>${hosts.length ? `<div class="key-meta">${esc(hosts.join(' · '))}</div>` : ''}</div></li>`;
+            })
             .join('')}</ul>`
         : ''
     }
 <a class="button secondary" href="/logout">${t.signOut}</a>`,
     status,
     {},
-    { passkeys: true }
+    { passkeys: true, wide: true }
   );
 }
 
