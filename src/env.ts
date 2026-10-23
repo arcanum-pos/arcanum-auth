@@ -12,6 +12,9 @@ export interface Env {
   // Public JWKs (JSON array) still published after a key rotation, so tokens
   // signed with the previous key keep verifying until they expire.
   PREVIOUS_PUBLIC_KEYS?: string;
+  // Keys the hashes of the mailed 6-digit codes (util.ts codeHash): 32
+  // random bytes, base64.
+  CODE_HASH_KEY: string;
   // Bearer key for /admin/* (creating clients — the installer uses this).
   ADMIN_API_KEY: string;
   // Sign in with Google (optional — the button only shows when both are set).

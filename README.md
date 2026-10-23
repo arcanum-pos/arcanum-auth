@@ -127,7 +127,11 @@ sets up an installation, or by hand there for another application
    ```sh
    npm run generate-key --silent | npx wrangler secret put SIGNING_KEY
    openssl rand -base64 32 | npx wrangler secret put ADMIN_API_KEY   # note it down for the installer
+   openssl rand -base64 32 | npx wrangler secret put CODE_HASH_KEY   # keys the mailed codes' hashes
    ```
+   `CODE_HASH_KEY` keeps a copy of the database from giving away the
+   6-digit codes (a plain hash of one of a million is reversed at once).
+   Changing it only spoils the codes mailed in the last 15 minutes.
    Optional, for **Sign in with Google**: create an OAuth client ("Web
    application") in Google Cloud Console with redirect URI
    `https://login.kaboutersoft.be/callback/google`, then

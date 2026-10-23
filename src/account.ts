@@ -5,6 +5,7 @@ import { codePage, deviceCodePage, deviceConfirmPage, linkPage, loginPage, messa
 import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
 import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
 import {
+  codeHash,
   inSeconds,
   isEmail,
   newEmailCode,
@@ -93,7 +94,7 @@ export async function login(request: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     `INSERT INTO email_codes (id, purpose, email, code_hash, link_hash, browser_hash, continue_to, expires_at) VALUES (?, 'login', ?, ?, ?, ?, ?, ?)`
   )
-    .bind(id, email, await sha256(code), await sha256(linkToken), await sha256(browser), continueTo, inSeconds(EMAIL_CODE_SECONDS))
+    .bind(id, email, await codeHash(env.CODE_HASH_KEY, code), await sha256(linkToken), await sha256(browser), continueTo, inSeconds(EMAIL_CODE_SECONDS))
     .run();
   const t = texts(request);
   try {
@@ -114,7 +115,7 @@ async function checkEmailCode(env: Env, id: string, code: string): Promise<Email
   if (!row || row.used_at || row.expires_at <= nowIso() || row.attempts >= MAX_CODE_TRIES) return 'unknown';
   const addressKey = `code-email:${row.email}`;
   if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS, 3600)) return 'unknown';
-  if (!timingSafeEqual(await sha256(code.trim()), row.code_hash)) {
+  if (!timingSafeEqual(await codeHash(env.CODE_HASH_KEY, code.trim()), row.code_hash)) {
     await env.DB.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE id = ?').bind(id).run();
     await recordAttempt(env, addressKey);
     return 'invalid';
@@ -270,6 +271,8 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
     if (byEmail) {
       await env.DB.prepare('UPDATE users SET google_sub = ?, email_verified = 1, updated_at = ? WHERE id = ?').bind(claims.sub, nowIso(), byEmail.id).run();
       user = byEmail;
+      // Told, like a new passkey: from now on this Google account opens it too.
+      await sendMail(env, user.email, t.mailGoogleLinkedSubject, t.mailGoogleLinked(`${env.ISSUER}/account`)).catch((err) => console.error('google-linked mail failed', err));
     } else {
       user = await createUser(env, { email, name: typeof claims.name === 'string' ? claims.name : email.split('@')[0], googleSub: claims.sub });
     }

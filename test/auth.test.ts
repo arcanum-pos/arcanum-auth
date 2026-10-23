@@ -317,6 +317,17 @@ describe('accounts, without passwords', () => {
     expect((await post('/login/code', { id: next.id, code: await lastCodeFor(email) })).status).toBe(302);
   });
 
+  it('stores a mailed code only as a keyed hash: a plain SHA-256 of it is not in the database', async () => {
+    const email = uniqueEmail('hashed');
+    const { id } = await askCode(post, email);
+    const code = await lastCodeFor(email);
+    const row = await env.DB.prepare('SELECT code_hash FROM email_codes WHERE id = ?').bind(id).first<{ code_hash: string }>();
+    const plain = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code))).toString('base64url');
+    expect(row!.code_hash).not.toBe(plain);
+    expect(row!.code_hash).not.toContain(code);
+    expect((await post('/login/code', { id, code })).status).toBe(200);
+  });
+
   it("never says whether an address has an account, and a code only works once", async () => {
     const known = uniqueEmail('known');
     await signUp(known);
@@ -410,6 +421,23 @@ describe('sign in with Google', () => {
     expect(cookieOf(back)).toMatch(/^__Host-session=/);
     const after = await env.DB.prepare('SELECT id, google_sub FROM users WHERE email = ?').bind(email).first<{ id: string; google_sub: string }>();
     expect(after).toEqual({ id: before!.id, google_sub: `google-${email}` });
+  });
+
+  it('mails the account when Google is linked to it, not when Google creates one', async () => {
+    const email = uniqueEmail('linked');
+    await signUp(email);
+    const start = await call('/google?continue=%2Faccount');
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state');
+    expect((await call(`/callback/google?code=${encodeURIComponent(email)}&state=${state}`, { headers: { Cookie: cookieOf(start) } })).status).toBe(302);
+    const linked = (await mails()).filter((m) => m.body.message.to === email && m.body.message.subject === 'Google gekoppeld aan je account');
+    expect(linked).toHaveLength(1);
+    expect(linked[0].body.message.text).toContain(`${ISSUER}/account`);
+
+    const fresh = uniqueEmail('fresh');
+    const again = await call('/google?continue=%2Faccount');
+    const state2 = new URL(again.headers.get('Location')!).searchParams.get('state');
+    expect((await call(`/callback/google?code=${encodeURIComponent(fresh)}&state=${state2}`, { headers: { Cookie: cookieOf(again) } })).status).toBe(302);
+    expect((await mails()).some((m) => m.body.message.to === fresh)).toBe(false);
   });
 
   it('refuses an unverified Google address and a replayed state', async () => {

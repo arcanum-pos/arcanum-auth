@@ -58,6 +58,7 @@ export default defineConfig({
           TEST_MIGRATIONS: JSON.stringify(['./migrations/0002_guests_and_client_metadata.sql', './migrations/0003_passkeys.sql', './migrations/0004_passkey_aaguid.sql', './migrations/0005_refresh_rotated_at.sql', './migrations/0006_settings.sql', './migrations/0007_passwordless.sql'].flatMap((f) => sqlStatements(f))),
           SIGNING_KEY: signingKey,
           ADMIN_API_KEY: 'test-admin-key',
+          CODE_HASH_KEY: 'test-code-hash-key',
           // 32 bytes, base64 (settings.ts).
           SETTINGS_KEY: btoa('0123456789abcdef0123456789abcdef'),
           MAILER_INTERNAL_KEY: 'test-mailer-key',

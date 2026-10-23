@@ -23,6 +23,15 @@ export async function sha256(text: string): Promise<string> {
   return base64url(new Uint8Array(digest));
 }
 
+// A mailed 6-digit code's hash: keyed (HMAC-SHA256 with the CODE_HASH_KEY
+// secret), since a plain SHA-256 of one of a million codes is reversed in
+// milliseconds — a copy of the database would hand out every code still valid.
+export async function codeHash(secret: string | undefined, code: string): Promise<string> {
+  if (!secret) throw new Error('CODE_HASH_KEY is not set');
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return base64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(code))));
+}
+
 export function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
