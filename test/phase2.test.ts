@@ -19,7 +19,7 @@ const basic = (id: string, secret: string) => ({ Authorization: `Basic ${btoa(`$
 const cookieOf = (res: Response) => (res.headers.get('Set-Cookie') || '').split(';')[0];
 
 async function newClient(extra: Record<string, unknown> = {}) {
-  const res = await adminPost('/admin/clients', { name: 'Demo instance', redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], ...extra });
+  const res = await adminPost('/admin/clients', { name: 'Demo instance', redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], restricted: false, ...extra });
   expect(res.status).toBe(201);
   return (await res.json()) as { client_id: string; client_secret: string; instance_url: string | null; owner_email: string | null };
 }

@@ -49,6 +49,33 @@ const T = {
     mailPasskey: (name: string, accountUrl: string) => `Er werd een passkey ("${name}") aan je account toegevoegd.\n\nWas jij dat niet? Verwijder hem meteen op ${accountUrl}.`,
     mailGoogleLinkedSubject: 'Google gekoppeld aan je account',
     mailGoogleLinked: (accountUrl: string) => `Je kunt je voortaan ook aanmelden met je Google-account met dit e-mailadres.\n\nWas jij dat niet? Meld het meteen aan de beheerder van de toepassing waarvoor je je aanmeldt, en kijk je account na op ${accountUrl}.`,
+    accessTitle: "Geen toegang",
+    accessRequestButton: "Toegang vragen",
+    manageIntro: "Alleen wie hier met toegang staat, kan zich aanmelden.",
+    manageOpen: "Deze toepassing is open: iedereen kan zich aanmelden. De lijst hieronder geldt pas als ze afgeschermd wordt.",
+    requestsTitle: "Aanvragen",
+    noRequests: "Geen openstaande aanvragen.",
+    assignedTitle: "Met toegang",
+    approve: "Toestaan",
+    refuse: "Weigeren",
+    removeAccess: "Verwijderen",
+    makeAdmin: "Beheerder maken",
+    makeMember: "Geen beheerder meer",
+    adminBadge: "beheerder",
+    you: "jij",
+    addTitle: "Iemand toevoegen",
+    add: "Toevoegen",
+    manageApps: "Toepassingen die je beheert",
+    accessText: (client: string) => `Je hebt nog geen toegang tot ${client}. Vraag de beheerder om je toe te voegen.`,
+    accessRequested: (client: string) => `Je aanvraag voor ${client} is verstuurd. Je krijgt een e-mail zodra een beheerder je toegang geeft.`,
+    accessGuest: (client: string) => `Met een gastaccount heb je geen toegang tot ${client}.`,
+    accessAlready: (client: string) => `Je hebt al toegang tot ${client}. Ga terug naar de toepassing en meld je opnieuw aan.`,
+    mailAccessRequestSubject: (client: string) => `Aanvraag voor toegang tot ${client}`,
+    mailAccessRequest: (name: string, email: string, client: string, url: string) => `${name} (${email}) vraagt toegang tot ${client}.\n\nToestaan of weigeren: ${url}`,
+    mailAccessGrantedSubject: (client: string) => `Je hebt toegang tot ${client}`,
+    mailAccessGranted: (client: string, url: string | null) => `Een beheerder gaf je toegang tot ${client}.` + (url ? `\n\nMeld je aan op ${url}` : ''),
+    manageTitle: (client: string) => `Toegang tot ${client}`,
+    accessDone: { approved: "Toegestaan. De persoon krijgt een e-mail.", refused: "Aanvraag geweigerd.", removed: "Verwijderd.", role: "Aangepast.", added: "Toegevoegd.", none: "Niets veranderd." },
     securityKey: 'Beveiligingssleutel',
     phone: 'Telefoon',
     kindSecurityKey: (how: string) => `Beveiligingssleutel${how ? ` · ${how}` : ''}`,
@@ -67,6 +94,8 @@ const T = {
     mailCodeSubject: 'Je aanmeldcode',
     mailCode: (code: string, link: string) => `Je code om je aan te melden: ${code}\n\nOf meld je aan met deze link: ${link}\n\nDe code en de link zijn 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
     errors: {
+      notAdmin: "Je beheert deze toepassing niet.",
+      lastAdmin: "Er moet minstens één beheerder overblijven.",
       tooMany: 'Te veel pogingen. Probeer het over een kwartier opnieuw.',
       emailInvalid: 'Vul een geldig e-mailadres in.',
       nameMissing: 'Vul je naam in.',
@@ -129,6 +158,33 @@ const T = {
     mailPasskey: (name: string, accountUrl: string) => `Une clé d’accès (« ${name} ») a été ajoutée à votre compte.\n\nCe n’était pas vous ? Supprimez-la tout de suite sur ${accountUrl}.`,
     mailGoogleLinkedSubject: 'Google lié à votre compte',
     mailGoogleLinked: (accountUrl: string) => `Vous pouvez désormais aussi vous connecter avec votre compte Google à cette adresse e-mail.\n\nCe n’était pas vous ? Signalez-le tout de suite à l’administrateur de l’application à laquelle vous vous connectez, et vérifiez votre compte sur ${accountUrl}.`,
+    accessTitle: "Pas d’accès",
+    accessRequestButton: "Demander l’accès",
+    manageIntro: "Seules les personnes ayant accès ici peuvent se connecter.",
+    manageOpen: "Cette application est ouverte : tout le monde peut se connecter. La liste ci-dessous ne s’applique qu’une fois l’accès restreint.",
+    requestsTitle: "Demandes",
+    noRequests: "Aucune demande en attente.",
+    assignedTitle: "Avec accès",
+    approve: "Accepter",
+    refuse: "Refuser",
+    removeAccess: "Retirer",
+    makeAdmin: "Rendre administrateur",
+    makeMember: "Retirer administrateur",
+    adminBadge: "administrateur",
+    you: "vous",
+    addTitle: "Ajouter quelqu’un",
+    add: "Ajouter",
+    manageApps: "Applications que vous gérez",
+    accessText: (client: string) => `Vous n’avez pas encore accès à ${client}. Demandez à l’administrateur de vous ajouter.`,
+    accessRequested: (client: string) => `Votre demande pour ${client} a été envoyée. Vous recevrez un e-mail dès qu’un administrateur vous donne accès.`,
+    accessGuest: (client: string) => `Un compte invité n’a pas accès à ${client}.`,
+    accessAlready: (client: string) => `Vous avez déjà accès à ${client}. Retournez à l’application et reconnectez-vous.`,
+    mailAccessRequestSubject: (client: string) => `Demande d’accès à ${client}`,
+    mailAccessRequest: (name: string, email: string, client: string, url: string) => `${name} (${email}) demande l’accès à ${client}.\n\nAccepter ou refuser : ${url}`,
+    mailAccessGrantedSubject: (client: string) => `Vous avez accès à ${client}`,
+    mailAccessGranted: (client: string, url: string | null) => `Un administrateur vous a donné accès à ${client}.` + (url ? `\n\nConnectez-vous sur ${url}` : ''),
+    manageTitle: (client: string) => `Accès à ${client}`,
+    accessDone: { approved: "Accepté. La personne reçoit un e-mail.", refused: "Demande refusée.", removed: "Retiré.", role: "Modifié.", added: "Ajouté.", none: "Rien n’a changé." },
     securityKey: 'Clé de sécurité',
     phone: 'Téléphone',
     kindSecurityKey: (how: string) => `Clé de sécurité${how ? ` · ${how}` : ''}`,
@@ -147,6 +203,8 @@ const T = {
     mailCodeSubject: 'Votre code de connexion',
     mailCode: (code: string, link: string) => `Votre code pour vous connecter : ${code}\n\nOu connectez-vous avec ce lien : ${link}\n\nLe code et le lien sont valables 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
     errors: {
+      notAdmin: "Vous ne gérez pas cette application.",
+      lastAdmin: "Il doit rester au moins un administrateur.",
       tooMany: 'Trop de tentatives. Réessayez dans un quart d’heure.',
       emailInvalid: 'Saisissez une adresse e-mail valable.',
       nameMissing: 'Saisissez votre nom.',
@@ -209,6 +267,33 @@ const T = {
     mailPasskey: (name: string, accountUrl: string) => `A passkey ("${name}") was added to your account.\n\nWasn't you? Remove it straight away at ${accountUrl}.`,
     mailGoogleLinkedSubject: 'Google linked to your account',
     mailGoogleLinked: (accountUrl: string) => `From now on you can also sign in with your Google account for this email address.\n\nWasn't you? Tell the administrator of the application you sign in to straight away, and check your account at ${accountUrl}.`,
+    accessTitle: "No access",
+    accessRequestButton: "Request access",
+    manageIntro: "Only the people with access listed here can sign in.",
+    manageOpen: "This application is open: anyone can sign in. The list below only applies once it is restricted.",
+    requestsTitle: "Requests",
+    noRequests: "No open requests.",
+    assignedTitle: "With access",
+    approve: "Approve",
+    refuse: "Refuse",
+    removeAccess: "Remove",
+    makeAdmin: "Make admin",
+    makeMember: "No longer admin",
+    adminBadge: "admin",
+    you: "you",
+    addTitle: "Add someone",
+    add: "Add",
+    manageApps: "Applications you manage",
+    accessText: (client: string) => `You don't have access to ${client} yet. Ask its administrator to add you.`,
+    accessRequested: (client: string) => `Your request for ${client} was sent. You'll get an email as soon as an administrator gives you access.`,
+    accessGuest: (client: string) => `A guest account has no access to ${client}.`,
+    accessAlready: (client: string) => `You already have access to ${client}. Go back to the application and sign in again.`,
+    mailAccessRequestSubject: (client: string) => `Access request for ${client}`,
+    mailAccessRequest: (name: string, email: string, client: string, url: string) => `${name} (${email}) asks for access to ${client}.\n\nApprove or refuse: ${url}`,
+    mailAccessGrantedSubject: (client: string) => `You have access to ${client}`,
+    mailAccessGranted: (client: string, url: string | null) => `An administrator gave you access to ${client}.` + (url ? `\n\nSign in at ${url}` : ''),
+    manageTitle: (client: string) => `Access to ${client}`,
+    accessDone: { approved: "Approved. They get an email.", refused: "Request refused.", removed: "Removed.", role: "Changed.", added: "Added.", none: "Nothing changed." },
     securityKey: 'Security key',
     phone: 'Phone',
     kindSecurityKey: (how: string) => `Security key${how ? ` · ${how}` : ''}`,
@@ -227,6 +312,8 @@ const T = {
     mailCodeSubject: 'Your sign-in code',
     mailCode: (code: string, link: string) => `Your code to sign in: ${code}\n\nOr sign in with this link: ${link}\n\nThe code and the link are valid for 15 minutes. Didn’t ask for this? Then ignore this email.`,
     errors: {
+      notAdmin: "You don't manage this application.",
+      lastAdmin: "At least one admin has to remain.",
       tooMany: 'Too many attempts. Try again in a quarter of an hour.',
       emailInvalid: 'Enter a valid email address.',
       nameMissing: 'Enter your name.',
@@ -425,7 +512,7 @@ const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
   `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
 <p class="error" role="alert" data-passkey-error hidden></p>`;
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string }[]; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
   const items = opts.passkeys
     .map(
@@ -444,6 +531,7 @@ ${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidd
 ${opts.googleUnlinked ? `<p class="ok" role="status">${t.googleUnlinked}</p>` : ''}${
       opts.google ? `<h2>${t.googleTitle}</h2><p>${t.googleLinkedText}</p><form method="post" action="/account/google"><button type="submit" name="action" value="unlink" class="secondary">${t.unlinkGoogle}</button></form>` : ''
     }
+${opts.managed.length ? `<h2>${t.manageApps}</h2><ul class="keys">${opts.managed.map((c) => `<li><a href="/access/${encodeURIComponent(c.id)}">${esc(c.name)}</a></li>`).join('')}</ul>` : ''}
 <a class="button secondary" href="/logout">${t.signOut}</a>`,
     status,
     {},
@@ -463,5 +551,66 @@ ${addPasskeyButton(t, continueTo, continueTo)}
     200,
     {},
     { passkeys: true }
+  );
+}
+
+// A restricted client someone has no access to (from /authorize or /device):
+// ask its admins to be added, or see that the request is on its way.
+export function accessPage(request: Request, opts: { clientId: string; clientName: string; email: string; requested: boolean; error?: ErrorKey | null }, status = 200) {
+  const t = texts(request);
+  const body = opts.requested
+    ? `<p class="ok" role="status">${esc(t.accessRequested(opts.clientName))}</p>`
+    : `<p>${esc(t.accessText(opts.clientName))}</p>${error(t, opts.error)}
+<form method="post" action="/access/${encodeURIComponent(opts.clientId)}/request"><button type="submit">${t.accessRequestButton}</button></form>`;
+  return page(
+    request,
+    t.accessTitle,
+    `<h1>${t.accessTitle}</h1><p>${esc(t.signedInAs(opts.email))}</p>${body}
+<a class="button secondary" href="/logout">${t.signOut}</a>`,
+    status
+  );
+}
+
+export interface AccessItem {
+  email: string;
+  status: 'assigned' | 'requested';
+  role: 'member' | 'admin';
+  created_at: string;
+  name: string | null;
+}
+
+// A client's admins: open requests, who has access, add someone.
+export function accessAdminPage(
+  request: Request,
+  opts: { clientId: string; clientName: string; restricted: boolean; me: string; items: AccessItem[]; notice?: string; error?: ErrorKey | null },
+  status = 200
+) {
+  const t = texts(request);
+  const action = `/access/${encodeURIComponent(opts.clientId)}`;
+  const who = (i: AccessItem) => `<div class="key-name">${esc(i.name || i.email)}${i.email === opts.me ? ` (${t.you})` : ''}</div>${i.name ? `<div class="key-meta">${esc(i.email)}</div>` : ''}`;
+  const buttons = (i: AccessItem, list: [string, string][]) =>
+    `<form method="post" action="${action}">${hidden('email', i.email)}${list.map(([value, label]) => `<button type="submit" name="action" value="${value}" class="secondary">${label}</button>`).join('')}</form>`;
+  const requests = opts.items.filter((i) => i.status === 'requested');
+  const assigned = opts.items.filter((i) => i.status === 'assigned');
+  const requestItems = requests.map((i) => `<li>${who(i)}<div class="key-meta">${esc(when(request, i.created_at))}</div>${buttons(i, [['approve', t.approve], ['refuse', t.refuse]])}</li>`).join('');
+  const assignedItems = assigned
+    .map(
+      (i) =>
+        `<li>${who(i)}${i.role === 'admin' ? `<div class="key-meta">${t.adminBadge}</div>` : ''}${buttons(i, [
+          i.role === 'admin' ? ['member', t.makeMember] : ['admin', t.makeAdmin],
+          ['remove', t.removeAccess],
+        ])}</li>`
+    )
+    .join('');
+  return page(
+    request,
+    t.manageTitle(opts.clientName),
+    `<h1>${esc(t.manageTitle(opts.clientName))}</h1><p>${opts.restricted ? t.manageIntro : t.manageOpen}</p>
+${opts.notice ? `<p class="ok" role="status">${esc(opts.notice)}</p>` : ''}${error(t, opts.error)}
+<h2>${t.requestsTitle}</h2>${requestItems ? `<ul class="keys">${requestItems}</ul>` : `<p>${t.noRequests}</p>`}
+<h2>${t.assignedTitle}</h2><ul class="keys">${assignedItems}</ul>
+<h2>${t.addTitle}</h2><form method="post" action="${action}">${hidden('action', 'add')}<label for="email">${t.email}</label><input id="email" name="email" type="email" required autocomplete="off"><button type="submit">${t.add}</button></form>
+<div class="links"><a href="/account">${t.accountTitle}</a></div>`,
+    status
   );
 }

@@ -2,6 +2,7 @@ import { decodeJwt as decodeJwtPayload } from 'jose';
 import type { Env } from './env';
 import { sendMail } from './mail';
 import { codePage, deviceCodePage, deviceConfirmPage, linkPage, loginPage, messagePage, namePage, texts } from './pages';
+import { mayUse, noAccess } from './access';
 import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
 import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
 import {
@@ -311,6 +312,7 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
     if (!session) return redirect(`/login?continue=${encodeURIComponent(url.pathname + url.search)}`);
     const pending = await pendingDevice(env, userCode);
     const client = pending ? await clientById(env, pending.client_id) : null;
+    if (pending && client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
     if (pending && client) return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email });
     return deviceCodePage(request, { userCode: url.searchParams.get('user_code') || '', error: userCode ? 'deviceCode' : null });
   }
@@ -327,6 +329,7 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
     await recordAttempt(env, ipKey);
     return deviceCodePage(request, { userCode: form.user_code, error: 'deviceCode' }, 400);
   }
+  if (!(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
   return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email });
 }
 
@@ -339,6 +342,11 @@ export async function deviceConfirm(request: Request, env: Env): Promise<Respons
   const form = await readForm(request);
   const userCode = normalizeUserCode(form.user_code || '');
   const allow = form.decision === 'allow';
+  if (allow) {
+    const pending = await pendingDevice(env, userCode);
+    const client = pending ? await clientById(env, pending.client_id) : null;
+    if (client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
+  }
   const done = await env.DB.prepare(
     "UPDATE device_codes SET status = ?, user_id = ?, auth_time = ? WHERE user_code = ? AND status = 'pending' AND expires_at > ?"
   )

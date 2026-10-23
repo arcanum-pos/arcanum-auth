@@ -10,6 +10,7 @@
 // A passkey (passkeys.ts) is one more way into that same user.
 // Clients — one per installation — are created by the installer via /admin.
 import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, loginCode, loginLink, loginName, loginOnce } from './account';
+import { manageAccess, requestAccess } from './access';
 import { admin } from './admin';
 import { cleanup } from './cleanup';
 import { clientSelf } from './clients';
@@ -85,7 +86,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/passkey.js' && method === 'GET') {
         return new Response(PASSKEY_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' } });
       }
-      if (path === '/clients/self' || path === '/clients/self/secret') return clientSelf(request, env, path);
+      if (path === '/clients/self' || path === '/clients/self/secret' || path.startsWith('/clients/self/users')) return clientSelf(request, env, path);
+      const access = path.match(/^\/access\/([^/]+)(\/request)?$/);
+      if (access && access[2] && method === 'POST') return requestAccess(request, env, decodeURIComponent(access[1]));
+      if (access && !access[2] && (method === 'GET' || method === 'POST')) return manageAccess(request, env, decodeURIComponent(access[1]));
       // The admin API is for the bootstrapper, over its service binding —
       // never from the internet (Cloudflare marks those with
       // CF-Connecting-IP; a service binding's calls don't carry it), even

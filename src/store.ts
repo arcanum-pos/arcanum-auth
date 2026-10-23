@@ -30,6 +30,8 @@ export interface Client {
   instance_url: string | null;
   owner_email: string | null;
   owner_sub: string | null;
+  // Only assigned people may sign in (access.ts); 0: anyone with an account.
+  restricted: number;
 }
 
 // --- Users.
@@ -77,6 +79,7 @@ interface ClientRow {
   instance_url: string | null;
   owner_email: string | null;
   owner_sub: string | null;
+  restricted: number;
   disabled_at: string | null;
 }
 

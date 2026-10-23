@@ -1,7 +1,8 @@
+import { assign, unassign, accessRow } from './access';
 import { validUris } from './admin';
 import type { Env } from './env';
 import { clientById, clientSecretMatches, type Client } from './store';
-import { json, randomToken, sha256 } from './util';
+import { isEmail, json, normalizeEmail, nowIso, randomToken, sha256 } from './util';
 
 // Client self-service — an application managing its own client
 // with its own credentials (HTTP Basic: client_id:client_secret), never the
@@ -9,8 +10,16 @@ import { json, randomToken, sha256 } from './util';
 //   GET   /clients/self         → its name + URIs
 //   PATCH /clients/self         { redirect_uris?, post_logout_redirect_uris? } (replaces each list given)
 //   POST  /clients/self/secret  → { client_secret } — a new one; the old stops working
+// Who may use it (a restricted client, access.ts) — Arcanum assigns whoever
+// it invites, and unassigns them when they leave:
+//   GET    /clients/self/users          → { restricted, users: [{ email, status, role }] }
+//   POST   /clients/self/users          { emails[] } (up to 500) → assigns each, { assigned }
+//   PUT    /clients/self/users/:email   → assigns it (a request becomes an assignment)
+//   DELETE /clients/self/users/:email   → unassigns it and revokes its refresh tokens;
+//          never an admin of the client ({ removed: false, reason: 'admin' })
 
 const MAX_URIS = 10;
+const MAX_BULK = 500;
 
 async function authenticated(request: Request, env: Env): Promise<Client | null> {
   const auth = request.headers.get('Authorization') || '';
@@ -50,6 +59,49 @@ export async function clientSelf(request: Request, env: Env, path: string): Prom
       .bind(JSON.stringify(redirects), JSON.stringify(logouts), client.id)
       .run();
     return json(view({ ...client, redirect_uris: redirects, post_logout_redirect_uris: logouts }));
+  }
+
+  if (path === '/clients/self/users' && request.method === 'GET') {
+    const { results } = await env.DB.prepare('SELECT email, status, role FROM client_access WHERE client_id = ? ORDER BY email').bind(client.id).all();
+    return json({ restricted: !!client.restricted, users: results || [] });
+  }
+
+  if (path === '/clients/self/users' && request.method === 'POST') {
+    const body = (await request.json().catch(() => null)) as { emails?: unknown } | null;
+    const emails = Array.isArray(body?.emails) ? [...new Set(body.emails.filter((e): e is string => typeof e === 'string').map(normalizeEmail))] : null;
+    if (!emails || emails.length > MAX_BULK || emails.some((e) => !isEmail(e))) return json({ error: `emails: up to ${MAX_BULK} e-mail addresses` }, 400);
+    // One statement for all of them (json_each): D1's per-query limits.
+    const now = nowIso();
+    await env.DB.prepare(
+      `INSERT INTO client_access (client_id, email, status, role, source, created_at, updated_at)
+       SELECT ?, value, 'assigned', 'member', 'app', ?, ? FROM json_each(?)
+       WHERE true ON CONFLICT (client_id, email) DO UPDATE SET status = 'assigned', source = 'app', updated_at = excluded.updated_at WHERE client_access.status != 'assigned'`
+    )
+      .bind(client.id, now, now, JSON.stringify(emails))
+      .run();
+    return json({ assigned: emails.length });
+  }
+
+  const one = path.match(/^\/clients\/self\/users\/([^/]+)$/);
+  if (one) {
+    let email: string;
+    try {
+      email = normalizeEmail(decodeURIComponent(one[1]));
+    } catch {
+      return json({ error: 'not an e-mail address' }, 400);
+    }
+    if (!isEmail(email)) return json({ error: 'not an e-mail address' }, 400);
+    if (request.method === 'PUT') {
+      await assign(env, client.id, email, 'app', null);
+      const row = await accessRow(env, client.id, email);
+      return json({ email, status: row!.status, role: row!.role });
+    }
+    if (request.method === 'DELETE') {
+      const row = await accessRow(env, client.id, email);
+      if (row?.role === 'admin' && row.status === 'assigned') return json({ email, removed: false, reason: 'admin' });
+      if (row) await unassign(env, client.id, email);
+      return json({ email, removed: !!row });
+    }
   }
 
   if (path === '/clients/self/secret' && request.method === 'POST') {

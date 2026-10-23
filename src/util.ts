@@ -110,6 +110,7 @@ export function sameOrigin(request: Request, issuer: string): boolean {
 export function safeContinue(value: string | null | undefined): string {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return '/account';
   const path = value.split('?')[0];
+  if (/^\/access\/[^/?]+$/.test(path)) return value;
   return path === '/authorize' || path === '/device' || path === '/account' ? value : '/account';
 }
 

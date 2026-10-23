@@ -1,5 +1,6 @@
 import type { Env } from './env';
 import { publicKeys } from './keys';
+import { mayUse, noAccess } from './access';
 import { messagePage, texts } from './pages';
 import { authenticateClient, clientById, currentSession, endSession, userById, type Client } from './store';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
@@ -39,6 +40,9 @@ export function discovery(env: Env): Response {
       claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'auth_time', 'nonce', 'email', 'email_verified', 'name'],
       token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
       code_challenge_methods_supported: ['S256'],
+      // Not standard: an application assigns who may use its client here
+      // (with its own credentials; clients.ts). Arcanum looks for it.
+      client_users_endpoint: `${i}/clients/self/users`,
     },
     200,
     { 'Cache-Control': 'public, max-age=300' }
@@ -83,6 +87,9 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
     if (!again.searchParams.get('prompt')) again.searchParams.delete('prompt');
     return redirect(`/login?continue=${encodeURIComponent(again.pathname + again.search)}`);
   }
+
+  // A restricted client: only who's assigned (else: ask to be added).
+  if (!(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
 
   const code = randomToken(32);
   await env.DB.prepare(
@@ -137,6 +144,7 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
   if (!(await pkceMatches(form.code_verifier || '', row.code_challenge))) return oauthError('invalid_grant', 'PKCE verification failed');
   const user = await userById(env, row.user_id);
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
+  if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
   return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, nonce: row.nonce }));
 }
 
@@ -160,6 +168,7 @@ async function refreshGrant(env: Env, client: Client, form: Record<string, strin
       .bind(row.user_id, row.client_id, row.rotated_at)
       .first();
     const user = revokedSince ? null : await userById(env, row.user_id);
+    if (user && !(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
     if (user) return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time }));
   }
   if (row.revoked_at) {
@@ -175,6 +184,8 @@ async function refreshGrant(env: Env, client: Client, form: Record<string, strin
   if (!revoked.meta.changes) return oauthError('invalid_grant', 'Refresh token was already used');
   const user = await userById(env, row.user_id);
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
+  // Unassigned since: no new tokens (unassigning also revoked them; this is the backstop).
+  if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
   return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time }));
 }
 
@@ -209,6 +220,7 @@ async function deviceGrant(env: Env, client: Client, form: Record<string, string
   const consumed = await env.DB.prepare("DELETE FROM device_codes WHERE device_code_hash = ? AND status = 'approved'").bind(hash).run();
   const user = row.user_id ? await userById(env, row.user_id) : null;
   if (!consumed.meta.changes || !user) return oauthError('invalid_grant', 'Unknown device_code');
+  if (!(await mayUse(env, client, user))) return oauthError('access_denied', 'No access to this client');
   return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time ?? unixNow() }));
 }
 

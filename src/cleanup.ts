@@ -18,6 +18,8 @@ export async function cleanup(env: Env, now = new Date()): Promise<Record<string
     ['device_codes', `DELETE FROM device_codes WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [ago(1), iso]],
     ['email_codes', 'DELETE FROM email_codes WHERE expires_at <= ?', [ago(24)]],
     ['oauth_states', 'DELETE FROM oauth_states WHERE expires_at <= ?', [iso]],
+    // An access request nobody answered in 90 days.
+    ['client_access', "DELETE FROM client_access WHERE status = 'requested' AND created_at <= ?", [ago(24 * 90)]],
     ['attempts', 'DELETE FROM attempts WHERE at <= ?', [ago(24)]],
     ['guests', 'DELETE FROM users WHERE guest = 1 AND expires_at <= ?', [iso]],
   ];

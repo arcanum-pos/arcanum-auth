@@ -24,6 +24,7 @@ import {
 } from '@simplewebauthn/server';
 import type { Env } from './env';
 import { sendMail } from './mail';
+import { managedClients } from './access';
 import { accountPage, passkeyOfferPage, texts, type ErrorKey, type PasskeyItem } from './pages';
 import { clientIp, createSession, currentSession, recordAttempt, tooManyAttempts, type User } from './store';
 import { base64url, fromBase64url, inSeconds, json, nowIso, readForm, redirect, safeContinue, sameOrigin, sha256, unixNow } from './util';
@@ -287,7 +288,7 @@ export async function accountWithPasskeys(request: Request, env: Env, user: User
       transports: transports.filter((t) => t === 'usb' || t === 'nfc' || t === 'ble'),
     };
   });
-  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, ...opts }, status);
+  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, managed: await managedClients(env, user), ...opts }, status);
 }
 
 export async function managePasskey(request: Request, env: Env): Promise<Response> {

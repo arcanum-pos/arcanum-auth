@@ -27,7 +27,7 @@ async function newClient(name = 'Test installation') {
   const res = await call('/admin/clients', {
     method: 'POST',
     headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP] }),
+    body: JSON.stringify({ name, redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], restricted: false }),
   });
   expect(res.status).toBe(201);
   return (await res.json()) as { client_id: string; client_secret: string };

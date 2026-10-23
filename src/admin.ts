@@ -37,9 +37,11 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 
 // Clients (one per application, e.g. per installation), managed by the bootstrapper with
 // ADMIN_API_KEY:
-//   POST   /admin/clients      { name, redirect_uris[], post_logout_redirect_uris[]? }
+//   POST   /admin/clients      { name, redirect_uris[], post_logout_redirect_uris[]?, owner_email?, restricted? (default true) }
 //          → 201 { client_id, client_secret, ... }  (the secret is shown only here)
-//   GET    /admin/clients      → [{ client_id, name, redirect_uris, ... }]
+//          The owner becomes the client's first admin (access.ts).
+//   GET    /admin/clients      → [{ client_id, name, redirect_uris, restricted, ... }]
+//   PATCH  /admin/clients/:id  { restricted } → open it to anyone with an account, or restrict it
 //   DELETE /admin/clients/:id  → disables it (tokens it issued simply expire)
 // Demo visitors without an account (the bootstrapper's "Direct proberen"):
 //   POST   /admin/guests       { name?, lifetime_hours? (default 5, max 24) }
@@ -89,22 +91,34 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     const instanceUrl = text(body?.instance_url, 300);
     const ownerEmail = text(body?.owner_email, 254)?.toLowerCase() ?? null;
     const ownerSub = text(body?.owner_sub, 200);
+    const restricted = body?.restricted !== false;
     const clientId = `arc_${randomToken(12)}`;
     const secret = randomToken(32);
-    await env.DB.prepare(
-      'INSERT INTO clients (id, secret_hash, name, redirect_uris, post_logout_redirect_uris, created_at, instance_url, owner_email, owner_sub) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    )
-      .bind(clientId, await sha256(secret), name, JSON.stringify(redirects), JSON.stringify(logouts), nowIso(), instanceUrl, ownerEmail, ownerSub)
-      .run();
+    const now = nowIso();
+    await env.DB.batch([
+      env.DB.prepare(
+        'INSERT INTO clients (id, secret_hash, name, redirect_uris, post_logout_redirect_uris, created_at, instance_url, owner_email, owner_sub, restricted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(clientId, await sha256(secret), name, JSON.stringify(redirects), JSON.stringify(logouts), now, instanceUrl, ownerEmail, ownerSub, restricted ? 1 : 0),
+      ...(ownerEmail
+        ? [
+            env.DB.prepare("INSERT INTO client_access (client_id, email, status, role, source, created_at, updated_at) VALUES (?, ?, 'assigned', 'admin', 'owner', ?, ?)").bind(
+              clientId,
+              ownerEmail,
+              now,
+              now
+            ),
+          ]
+        : []),
+    ]);
     return json(
-      { client_id: clientId, client_secret: secret, name, redirect_uris: redirects, post_logout_redirect_uris: logouts, instance_url: instanceUrl, owner_email: ownerEmail, owner_sub: ownerSub, issuer: env.ISSUER },
+      { client_id: clientId, client_secret: secret, name, redirect_uris: redirects, post_logout_redirect_uris: logouts, instance_url: instanceUrl, owner_email: ownerEmail, owner_sub: ownerSub, restricted, issuer: env.ISSUER },
       201
     );
   }
 
   if (path === '/admin/clients' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
-      'SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, created_at, disabled_at FROM clients ORDER BY created_at'
+      'SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, created_at, disabled_at FROM clients ORDER BY created_at'
     ).all<{
       id: string;
       name: string;
@@ -113,6 +127,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
       instance_url: string | null;
       owner_email: string | null;
       owner_sub: string | null;
+      restricted: number;
       created_at: string;
       disabled_at: string | null;
     }>();
@@ -125,6 +140,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
         instance_url: c.instance_url,
         owner_email: c.owner_email,
         owner_sub: c.owner_sub,
+        restricted: !!c.restricted,
         created_at: c.created_at,
         disabled_at: c.disabled_at,
       }))
@@ -204,6 +220,12 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
   }
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
+  if (one && request.method === 'PATCH') {
+    const body = (await request.json().catch(() => null)) as { restricted?: unknown } | null;
+    if (typeof body?.restricted !== 'boolean') return json({ error: 'restricted (true or false) is required' }, 400);
+    const res = await env.DB.prepare('UPDATE clients SET restricted = ? WHERE id = ? AND disabled_at IS NULL').bind(body.restricted ? 1 : 0, decodeURIComponent(one[1])).run();
+    return res.meta.changes ? json({ ok: true, restricted: body.restricted }) : json({ error: 'Not found' }, 404);
+  }
   if (one && request.method === 'DELETE') {
     const res = await env.DB.prepare('UPDATE clients SET disabled_at = ? WHERE id = ? AND disabled_at IS NULL').bind(nowIso(), decodeURIComponent(one[1])).run();
     return res.meta.changes ? json({ ok: true }) : json({ error: 'Not found' }, 404);

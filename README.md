@@ -90,6 +90,32 @@ sets up an installation, or by hand there for another application
   404, even with the right key.
 - **HSTS** on every answer; a CSP and no framing on every page.
 
+## Restricted clients
+
+Every client is **restricted** unless created with `restricted: false` (or
+opened with `PATCH /admin/clients/:id`): only the people assigned to it can
+sign in — every grant checks (`/authorize`, the device page, and the token
+endpoint for a code, a refresh and a device code). Open on
+login.kaboutersoft.be: the bootstrapper's own client and the demo instance's
+(anyone may start there). Assignments are per client and **e-mail address**
+(`client_access`, migration 0008), so an address can be assigned before it
+has an account. Guests never get into a restricted client.
+
+- **Someone asks** — without access, `/authorize` (or `/device`) shows "Request
+  access"; the client's admins get a mail with a link to
+  `/access/:clientId`, where they approve or refuse, remove people, make
+  someone an admin, or add an address. Approved people get a mail (with the
+  client's `instance_url`). Five requests per address a day; one nobody
+  answered goes after 90 days.
+- **The application assigns** — with its own id + secret,
+  `/clients/self/users` (advertised as `client_users_endpoint` in
+  discovery). Arcanum assigns whoever it invites and unassigns them when
+  their last membership goes. Unassigning revokes the person's refresh
+  tokens for that client; an access token runs out within the hour. An
+  admin of the client is never unassigned by the application.
+- **Admins** — the owner (`owner_email`) is a client's first admin; there is
+  always at least one. `/account` links to the clients you manage.
+
 ## Endpoints
 
 | Path | What |
@@ -107,10 +133,12 @@ sets up an installation, or by hand there for another application
 | `GET/POST /passkey/offer` | the one-time offer after signing in another way (POST = "not now") |
 | `POST /account/passkeys` | rename (`action=rename`) or remove (`action=delete`) one of your own |
 | `GET /passkey.js` | the pages' one script (WebAuthn in the browser) |
-| `POST/GET /admin/clients`, `DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`); a client can carry `instance_url`, `owner_email`, `owner_sub` |
+| `POST/GET /admin/clients`, `PATCH/DELETE /admin/clients/:id` | manage clients (bearer `ADMIN_API_KEY`); a client can carry `instance_url`, `owner_email`, `owner_sub`, `restricted` (default true; PATCH changes only that) |
 | `POST /admin/guests` | a **guest** — a demo visitor without an account: no password, `guest-…@guest.invalid` (unverified), gone after `lifetime_hours` (default 5, max 24) |
 | `POST /admin/login-links` | a **one-time sign-in link** for a guest (single use, 60 s) that continues to an address on an origin some client registered |
 | `GET /login/once?token=…` | where that link leads: starts the guest's session, then continues |
+| `GET/POST /access/:clientId`, `POST /access/:clientId/request` | a restricted client's admin page; asking for access (see Restricted clients) |
+| `GET/POST /clients/self/users`, `PUT/DELETE /clients/self/users/:email` | who may use a restricted client — the application itself, HTTP Basic with its id + secret (bulk: up to 500 addresses) |
 | `GET/PATCH /clients/self`, `POST /clients/self/secret` | **client self-service** with the client's own id + secret (HTTP Basic): read/replace its redirect and logout URIs, rotate its secret — what an installation's installer uses after setting a custom domain |
 
 ## Deploy (Cloudflare, your account)
