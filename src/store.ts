@@ -1,5 +1,5 @@
 import type { Env } from './env';
-import { inSeconds, nowIso, randomToken, sha256, timingSafeEqual } from './util';
+import { hostsOf, inSeconds, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
 export interface User {
   id: string;
@@ -83,11 +83,23 @@ interface ClientRow {
   disabled_at: string | null;
 }
 
+// The name people see: an installation is named after its Cloudflare
+// account's workers.dev address when it's made ("Arcanum — x.workers.dev");
+// once it has a domain of its own, that says which one it is — "Arcanum —
+// kassa.club.be". The stored name stays as it is (the bootstrapper lists it).
+export function shownName(name: string, instanceUrl: string | null, redirectUris: string[]): string {
+  const generic = name.match(/^(.*?)\s+—\s+[^\s]+\.workers\.dev$/);
+  if (!instanceUrl || !generic) return name;
+  const own = hostsOf(redirectUris).find((h) => !h.endsWith('.workers.dev') && !/^(localhost|127\.0\.0\.1)(:|$)/.test(h));
+  return own ? `${generic[1]} — ${own}` : name;
+}
+
 export async function clientById(env: Env, id: string | null | undefined): Promise<Client | null> {
   if (!id) return null;
   const row = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(id).first<ClientRow>();
   if (!row || row.disabled_at) return null;
-  return { ...row, redirect_uris: JSON.parse(row.redirect_uris), post_logout_redirect_uris: JSON.parse(row.post_logout_redirect_uris) };
+  const redirects = JSON.parse(row.redirect_uris) as string[];
+  return { ...row, name: shownName(row.name, row.instance_url, redirects), redirect_uris: redirects, post_logout_redirect_uris: JSON.parse(row.post_logout_redirect_uris) };
 }
 
 export async function clientSecretMatches(client: Client, secret: string | null | undefined): Promise<boolean> {

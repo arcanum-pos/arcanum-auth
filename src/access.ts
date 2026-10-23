@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { sendMail } from './mail';
 import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
-import { clientById, currentSession, recordAttempt, tooManyAttempts, type Client, type User } from './store';
+import { clientById, currentSession, recordAttempt, shownName, tooManyAttempts, type Client, type User } from './store';
 import { validUris } from './admin';
 import { hostsOf, isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
 
@@ -230,12 +230,15 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
 export async function managedClients(env: Env, user: User): Promise<{ id: string; name: string; hosts: string[] }[]> {
   if (user.guest) return [];
   const { results } = await env.DB.prepare(
-    `SELECT clients.id, clients.name, clients.redirect_uris FROM client_access JOIN clients ON clients.id = client_access.client_id
+    `SELECT clients.id, clients.name, clients.instance_url, clients.redirect_uris FROM client_access JOIN clients ON clients.id = client_access.client_id
      WHERE client_access.email = ? AND client_access.role = 'admin' AND client_access.status = 'assigned' AND clients.disabled_at IS NULL ORDER BY clients.name`
   )
     .bind(user.email)
-    .all<{ id: string; name: string; redirect_uris: string }>();
+    .all<{ id: string; name: string; instance_url: string | null; redirect_uris: string }>();
   // Only the addresses that tell one installation from another: its own
   // domains, not the *.workers.dev ones every Cloudflare installation has.
-  return (results || []).map((c) => ({ id: c.id, name: c.name, hosts: hostsOf(JSON.parse(c.redirect_uris) as string[]).filter((h) => !h.endsWith('.workers.dev')) }));
+  return (results || []).map((c) => {
+    const redirects = JSON.parse(c.redirect_uris) as string[];
+    return { id: c.id, name: shownName(c.name, c.instance_url, redirects), hosts: hostsOf(redirects).filter((h) => !h.endsWith('.workers.dev')) };
+  });
 }
