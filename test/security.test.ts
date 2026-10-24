@@ -97,7 +97,7 @@ describe('headers on every answer', () => {
 // Turnstile on the sign-in form (2026-10-24): no code is mailed without a
 // passed check, for this host and this form; siteverify down lets it through.
 describe('Turnstile on the sign-in form', () => {
-  const on = { ...env, TURNSTILE_SITE_KEY: 'site-key', TURNSTILE_SECRET: 'turnstile-secret' };
+  const on = { ...env, TURNSTILE_SITE_KEY: 'site-key', TURNSTILE_SECRET: '0xturnstile-secret' };
 
   it('verifies the token server-side: success, this host, this action', async () => {
     expect(await turnstilePasses(on, 'good', '203.0.113.1', 'login')).toBe(true);
@@ -135,11 +135,14 @@ describe('Turnstile on the sign-in form', () => {
 // The hourly cron says what isn't on: an instance without Turnstile or mail gets noticed.
 describe('protection_off: what protects this instance but is off', () => {
   const smtp = JSON.stringify({ host: 'smtp.test', port: 465, username: 'u', password: 'p', fromAddress: 'noreply@test' });
-  const full = { ...env, TURNSTILE_SITE_KEY: 'site-key', TURNSTILE_SECRET: 'secret', MAILER_INTERNAL_KEY: 'k', MAIL_SMTP: smtp };
+  const full = { ...env, TURNSTILE_SITE_KEY: '0x4site-key', TURNSTILE_SECRET: '0xturnstile-secret', MAILER_INTERNAL_KEY: 'k', MAIL_SMTP: smtp };
 
   it('names each one; nothing when all is on', async () => {
     expect(await protectionsOff(full)).toEqual([]);
     expect(await protectionsOff({ ...full, TURNSTILE_SECRET: undefined })).toEqual(['turnstile']);
+    // Set but not working: Cloudflare's test keys, or a secret siteverify refuses.
+    expect(await protectionsOff({ ...full, TURNSTILE_SITE_KEY: '1x00000000000000000000AA' })).toEqual(['turnstile_keys']);
+    expect(await protectionsOff({ ...full, TURNSTILE_SECRET: '0xwrong-secret' })).toEqual(['turnstile_secret']);
     expect(await protectionsOff({ ...full, MAIL_SENDING: 'off' })).toEqual(['mail_off']);
     expect(await protectionsOff({ ...full, MAILER: undefined })).toEqual(['mail_unset']);
     expect(await protectionsOff({ ...full, TURNSTILE_SITE_KEY: undefined, MAIL_SENDING: 'Off' })).toEqual(['turnstile', 'mail_off']);

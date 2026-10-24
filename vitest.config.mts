@@ -51,7 +51,7 @@ function fakeGoogle(request: Request): Promise<Response> {
 async function fakeSiteverify(request: Request): Promise<Response> {
   const form = await request.formData();
   const token = String(form.get('response'));
-  if (form.get('secret') !== 'turnstile-secret') return Response.json({ success: false, 'error-codes': ['invalid-input-secret'] });
+  if (form.get('secret') !== '0xturnstile-secret') return Response.json({ success: false, 'error-codes': ['invalid-input-secret'] });
   if (token === 'down') return new Response('unavailable', { status: 503 });
   return Response.json({
     success: token !== 'bad',

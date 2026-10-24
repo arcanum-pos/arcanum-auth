@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { securityEvent } from './audit';
 import { currentMail, mailOff } from './mail';
-import { turnstileSiteKey } from './turnstile';
+import { turnstileKeyProblem, turnstileSiteKey } from './turnstile';
 
 // What protects this instance but isn't on (2026-10-24): checked by the
 // hourly cron and logged as one security event, `protection_off` - so an
@@ -9,11 +9,17 @@ import { turnstileSiteKey } from './turnstile';
 // once an hour, never per request. Off on purpose (a scan target) shows too;
 // that's the point of seeing it.
 //   turnstile  - TURNSTILE_SITE_KEY and TURNSTILE_SECRET not both set
+//   turnstile_keys   - not real keys (Cloudflare's test keys, or not 0x…)
+//   turnstile_secret - siteverify refuses the secret
 //   mail_off   - MAIL_SENDING is "off"
 //   mail_unset - no mailer bound or no mail account: codes only logged
 export async function protectionsOff(env: Env): Promise<string[]> {
   const off: string[] = [];
   if (!turnstileSiteKey(env)) off.push('turnstile');
+  else {
+    const problem = await turnstileKeyProblem(env);
+    if (problem) off.push(problem);
+  }
   if (mailOff(env)) off.push('mail_off');
   else {
     const mail = await currentMail(env).catch(() => null);
