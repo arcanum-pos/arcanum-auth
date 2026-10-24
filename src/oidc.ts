@@ -1,11 +1,14 @@
+import { compactVerify, createLocalJWKSet } from 'jose';
+import { securityEvent } from './audit';
 import type { Env } from './env';
+import { sendMail } from './mail';
 import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
-import { messagePage, texts } from './pages';
+import { logoutConfirmPage, messagePage, texts } from './pages';
 import { authenticateClient, clientById, currentSession, endSession, userById, type Client } from './store';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
 import { withinLimit } from './ratelimit';
-import { inSeconds, json, newUserCode, nowIso, oauthError, pkceMatches, randomToken, readForm, redirect, sha256, unixNow } from './util';
+import { inSeconds, json, newUserCode, nowIso, oauthError, pkceMatches, randomToken, readForm, redirect, sameOrigin, sha256, unixNow } from './util';
 
 const SUPPORTED_SCOPES = ['openid', 'profile', 'email', 'offline_access'];
 const AUTH_CODE_SECONDS = 300;
@@ -40,6 +43,8 @@ export function discovery(env: Env): Response {
       claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'auth_time', 'nonce', 'email', 'email_verified', 'name'],
       token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
       code_challenge_methods_supported: ['S256'],
+      // RFC 9207: every authorization response says who answered (mix-up attacks).
+      authorization_response_iss_parameter_supported: true,
       // Not standard: an application assigns who may use its client here
       // (with its own credentials; clients.ts). Arcanum looks for it.
       client_users_endpoint: `${i}/clients/self/users`,
@@ -67,6 +72,7 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
     const target = new URL(redirectUri);
     for (const [k, v] of Object.entries(params)) target.searchParams.set(k, v);
     if (p.get('state')) target.searchParams.set('state', p.get('state')!);
+    target.searchParams.set('iss', env.ISSUER);
     return redirect(target.toString());
   };
 
@@ -112,7 +118,7 @@ export async function token(request: Request, env: Env): Promise<Response> {
     case 'authorization_code':
       return authorizationCodeGrant(env, client, form);
     case 'refresh_token':
-      return refreshGrant(env, client, form);
+      return refreshGrant(request, env, client, form);
     case DEVICE_GRANT:
       return deviceGrant(env, client, form);
     default:
@@ -139,6 +145,12 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
     .bind(nowIso(), codeHash, nowIso())
     .run();
   const row = await env.DB.prepare('SELECT * FROM auth_codes WHERE code_hash = ?').bind(codeHash).first<AuthCodeRow>();
+  if (!claimed.meta.changes && row?.used_at && row.client_id === client.id) {
+    // Used before: someone has a copy (RFC 9700 §4.2.4). What it was
+    // exchanged for goes too - that user's refresh tokens for this client.
+    await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL').bind(nowIso(), row.user_id, row.client_id).run();
+    securityEvent('code_reuse', { client: client.id, user: row.user_id });
+  }
   if (!claimed.meta.changes || !row) return oauthError('invalid_grant', 'Invalid, expired or used code');
   if (row.client_id !== client.id || row.redirect_uri !== form.redirect_uri) return oauthError('invalid_grant', 'Code was issued to another client or redirect_uri');
   if (!(await pkceMatches(form.code_verifier || '', row.code_challenge))) return oauthError('invalid_grant', 'PKCE verification failed');
@@ -154,7 +166,7 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
 // stolen copy: it gets fresh tokens. After it, reuse revokes them all.
 const ROTATION_GRACE_MS = 30_000;
 
-async function refreshGrant(env: Env, client: Client, form: Record<string, string>): Promise<Response> {
+async function refreshGrant(request: Request, env: Env, client: Client, form: Record<string, string>): Promise<Response> {
   const tokenHash = await sha256(form.refresh_token || '');
   const row = await env.DB.prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?')
     .bind(tokenHash)
@@ -173,9 +185,16 @@ async function refreshGrant(env: Env, client: Client, form: Record<string, strin
   }
   if (row.revoked_at) {
     // A rotated-away token used again: someone has a copy. Revoke them all.
-    await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL')
+    const revoked = await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL')
       .bind(nowIso(), row.user_id, row.client_id)
       .run();
+    securityEvent('refresh_reuse', { client: client.id, user: row.user_id, revoked: revoked.meta.changes ?? 0 });
+    // Told once (when it signed them out somewhere): they sign in again, and look if it repeats.
+    const user = revoked.meta.changes ? await userById(env, row.user_id) : null;
+    if (user && !user.guest) {
+      const t = texts(request);
+      await sendMail(env, user.email, t.mailTokenReuseSubject, t.mailTokenReuse(client.name, `${env.ISSUER}/account`)).catch((err) => console.error('token-reuse mail failed', err));
+    }
     return oauthError('invalid_grant', 'Refresh token was already used');
   }
   if (row.expires_at <= nowIso()) return oauthError('invalid_grant', 'Refresh token expired');
@@ -272,17 +291,44 @@ export async function userinfo(request: Request, env: Env): Promise<Response> {
 }
 
 // --- RP-initiated logout: end the session here, then back to the client's
-// registered post_logout_redirect_uri (never an unregistered one).
+// registered post_logout_redirect_uri (never an unregistered one). With a
+// valid id_token_hint (ours, for that client, for whoever is signed in - an
+// expired one too) it happens right away; without, the browser is asked
+// first (logoutConfirmPage): any page could send it here.
+
+async function hintedUser(env: Env, hint: string | null, clientId: string | null): Promise<{ sub: string; aud: string } | null> {
+  if (!hint) return null;
+  try {
+    const keys = createLocalJWKSet({ keys: await publicKeys(env) });
+    const { payload } = await compactVerify(hint, keys, { algorithms: ['RS256'] });
+    const claims = JSON.parse(new TextDecoder().decode(payload)) as { iss?: unknown; sub?: unknown; aud?: unknown };
+    const aud = Array.isArray(claims.aud) ? claims.aud[0] : claims.aud;
+    if (claims.iss !== env.ISSUER || typeof claims.sub !== 'string' || typeof aud !== 'string') return null;
+    if (clientId && aud !== clientId) return null;
+    return { sub: claims.sub, aud };
+  } catch {
+    return null;
+  }
+}
 
 export async function logout(request: Request, env: Env): Promise<Response> {
-  const p = new URL(request.url).searchParams;
+  const params: Record<string, string> =
+    request.method === 'POST' ? await readForm(request) : Object.fromEntries(new URL(request.url).searchParams);
+  if (request.method === 'POST' && !sameOrigin(request, env.ISSUER)) return messagePage(request, texts(request).errors.request, 403);
+  const session = await currentSession(env, request);
+  const hint = await hintedUser(env, params.id_token_hint || null, params.client_id || null);
+  // Signed in, no hint for this person, not confirmed here: ask.
+  if (session && request.method === 'GET' && hint?.sub !== session.user.id) {
+    const keep = ['client_id', 'post_logout_redirect_uri', 'state'].filter((k) => params[k]);
+    return logoutConfirmPage(request, Object.fromEntries(keep.map((k) => [k, params[k]])));
+  }
   const cookies = await endSession(env, request);
-  const client = await clientById(env, p.get('client_id'));
-  const target = p.get('post_logout_redirect_uri');
+  const client = await clientById(env, params.client_id || hint?.aud || null);
+  const target = params.post_logout_redirect_uri;
   let res: Response;
   if (client && target && client.post_logout_redirect_uris.includes(target)) {
     const url = new URL(target);
-    if (p.get('state')) url.searchParams.set('state', p.get('state')!);
+    if (params.state) url.searchParams.set('state', params.state);
     res = redirect(url.toString());
   } else {
     res = messagePage(request, texts(request).signedOut);
@@ -290,4 +336,3 @@ export async function logout(request: Request, env: Env): Promise<Response> {
   for (const cookie of cookies) res.headers.append('Set-Cookie', cookie);
   return res;
 }
-

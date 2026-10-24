@@ -1,0 +1,5 @@
+10055	IGNORE	(CSP form-action https: - the browser follows a sign-in form's redirect to the client's https return address and Chrome checks form-action on it; every form posts to this origin)
+10031	IGNORE	(continue in an attribute - escaped, and safeContinue allows only this issuer's own paths)
+10202	IGNORE	(no CSRF token - every form post is checked on Origin / Sec-Fetch-Site, cookies are SameSite=Lax; tested in auth.test.ts)
+10027	IGNORE	(a comment in passkey.js mentions autocomplete="username webauthn" - nothing secret)
+10109	IGNORE	(informational: a modern web application)

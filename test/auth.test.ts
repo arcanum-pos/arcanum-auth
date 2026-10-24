@@ -160,6 +160,44 @@ describe('authorization code flow (the console)', () => {
     expect(wrongSecret.status).toBe(401);
   });
 
+  // RFC 9700 §4.2.4: a code used twice means someone has a copy - what it
+  // was exchanged for is revoked too. RFC 9207: the response names the issuer.
+  it('a code used again revokes the refresh token it gave; every response carries iss', async () => {
+    const client = await newClient();
+    const cookie = await signUp(uniqueEmail('reuse'));
+    const { code, verifier, tokenRes } = await codeFlow(client, cookie);
+    const { refresh_token } = (await tokenRes.json()) as { refresh_token: string };
+    const again = await post('/token', { grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: client.client_id, client_secret: client.client_secret, code_verifier: verifier });
+    expect(((await again.json()) as Record<string, string>).error).toBe('invalid_grant');
+    const refresh = await post('/token', { grant_type: 'refresh_token', refresh_token, client_id: client.client_id, client_secret: client.client_secret });
+    expect(((await refresh.json()) as Record<string, string>).error).toBe('invalid_grant');
+
+    const { challenge } = await pkce();
+    const back = new URL((await call(authorizeUrl(client.client_id, challenge), { headers: { Cookie: cookie } })).headers.get('Location')!);
+    expect(back.searchParams.get('iss')).toBe(ISSUER);
+    const wrong = new URL((await call(authorizeUrl(client.client_id, challenge, { response_type: 'token' }), { headers: { Cookie: cookie } })).headers.get('Location')!);
+    expect(wrong.searchParams.get('iss')).toBe(ISSUER);
+    const d = (await (await call('/.well-known/openid-configuration')).json()) as Record<string, unknown>;
+    expect(d.authorization_response_iss_parameter_supported).toBe(true);
+  });
+
+  it('a refresh token used again after its grace period signs out that app and mails its user', async () => {
+    const client = await newClient('Webmail');
+    const email = uniqueEmail('stolen');
+    const cookie = await signUp(email);
+    const { tokenRes } = await codeFlow(client, cookie);
+    const { refresh_token } = (await tokenRes.json()) as { refresh_token: string };
+    const refresh = (token: string) => post('/token', { grant_type: 'refresh_token', refresh_token: token, client_id: client.client_id, client_secret: client.client_secret });
+    const { refresh_token: next } = (await (await refresh(refresh_token)).json()) as { refresh_token: string };
+    // Past the grace period of a parallel request.
+    await env.DB.prepare('UPDATE refresh_tokens SET rotated_at = ? WHERE rotated_at IS NOT NULL AND client_id = ?').bind(new Date(Date.now() - 60_000).toISOString(), client.client_id).run();
+    expect(((await (await refresh(refresh_token)).json()) as Record<string, string>).error).toBe('invalid_grant');
+    expect(((await (await refresh(next)).json()) as Record<string, string>).error).toBe('invalid_grant');
+    const mail = (await mails()).reverse().find((m) => m.body.message.to === email)!.body.message;
+    expect(mail.subject).toBe('Je bent afgemeld in een toepassing');
+    expect(mail.text).toContain('Webmail');
+  });
+
   it('sends a signed-out user to sign in, and back', async () => {
     const client = await newClient();
     const email = uniqueEmail('return');
@@ -485,18 +523,41 @@ describe('sign in with Google', () => {
 });
 
 describe('logout', () => {
-  it('ends the session and returns only to a registered address', async () => {
+  it("with the app's own id_token_hint: ends the session at once and returns only to a registered address", async () => {
     const client = await newClient();
     const cookie = await signUp(uniqueEmail('logout'));
-    const res = await call(`/logout?client_id=${client.client_id}&post_logout_redirect_uri=${encodeURIComponent(APP)}`, { headers: { Cookie: cookie } });
+    const { id_token } = (await (await codeFlow(client, cookie)).tokenRes.json()) as { id_token: string };
+    const res = await call(`/logout?client_id=${client.client_id}&id_token_hint=${id_token}&post_logout_redirect_uri=${encodeURIComponent(APP)}&state=s1`, { headers: { Cookie: cookie } });
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe(`${APP}/`);
+    expect(res.headers.get('Location')).toBe(`${APP}/?state=s1`);
     const stranger = await call(`/logout?client_id=${client.client_id}&post_logout_redirect_uri=${encodeURIComponent('https://evil.test')}`);
     expect(stranger.status).toBe(200);
     // The old cookie no longer signs anyone in.
     const { challenge } = await pkce();
     const again = await call(authorizeUrl(client.client_id, challenge), { headers: { Cookie: cookie } });
     expect(new URL(again.headers.get('Location')!, ISSUER).pathname).toBe('/login');
+  });
+
+  it('without a hint (or one for another app) it asks first; the confirmation is a same-origin POST', async () => {
+    const client = await newClient();
+    const other = await newClient('Other');
+    const cookie = await signUp(uniqueEmail('logout-ask'));
+    const { id_token } = (await (await codeFlow(other, cookie)).tokenRes.json()) as { id_token: string };
+    for (const hint of ['', `&id_token_hint=${id_token}`, '&id_token_hint=not.a.token']) {
+      const ask = await call(`/logout?client_id=${client.client_id}${hint}&post_logout_redirect_uri=${encodeURIComponent(APP)}`, { headers: { Cookie: cookie } });
+      expect(ask.status).toBe(200);
+      const html = await ask.text();
+      expect(html).toContain('<form method="post" action="/logout">');
+      expect(html).not.toContain('id_token_hint');
+    }
+    // Still signed in.
+    expect((await call('/account', { headers: { Cookie: cookie } })).status).toBe(200);
+    // From another site: refused.
+    expect((await post('/logout', { client_id: client.client_id }, { Cookie: cookie, Origin: 'https://evil.test' })).status).toBe(403);
+    const done = await post('/logout', { client_id: client.client_id, post_logout_redirect_uri: APP }, { Cookie: cookie });
+    expect(done.status).toBe(302);
+    expect(done.headers.get('Location')).toBe(`${APP}/`);
+    expect((await call('/account', { headers: { Cookie: cookie } })).status).toBe(302);
   });
 });
 
@@ -515,7 +576,7 @@ describe('no product name', () => {
     const cookie = await signUp(uniqueEmail('oldcookie'));
     const old = cookie.replace(/^__Host-session=/, '__Host-arcanum_auth=');
     expect((await call('/account', { headers: { Cookie: old } })).status).toBe(200);
-    const out = await call('/logout', { headers: { Cookie: old } });
+    const out = await post('/logout', {}, { Cookie: old });
     expect(out.headers.get('Set-Cookie')).toMatch(/__Host-session=;.*__Host-arcanum_auth=;/);
     expect((await call('/account', { headers: { Cookie: old } })).status).toBe(302);
   });

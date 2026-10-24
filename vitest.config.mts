@@ -47,6 +47,19 @@ function fakeGoogle(request: Request): Promise<Response> {
   });
 }
 
+// Stand-in for Turnstile's siteverify: the token says how it goes.
+async function fakeSiteverify(request: Request): Promise<Response> {
+  const form = await request.formData();
+  const token = String(form.get('response'));
+  if (form.get('secret') !== 'turnstile-secret') return Response.json({ success: false, 'error-codes': ['invalid-input-secret'] });
+  if (token === 'down') return new Response('unavailable', { status: 503 });
+  return Response.json({
+    success: token !== 'bad',
+    hostname: token === 'elsewhere' ? 'evil.test' : 'login.kaboutersoft.be',
+    action: token === 'other-action' ? 'signup' : 'login',
+  });
+}
+
 export default defineConfig({
   plugins: [
     cloudflareTest({
@@ -69,8 +82,12 @@ export default defineConfig({
           PBKDF2_ITERATIONS: '10000',
         },
         serviceBindings: { MAILER: recordingMailer() },
-        outboundService: (request: Request) =>
-          new URL(request.url).hostname === 'google.test' ? fakeGoogle(request) : new Response('no outbound in tests', { status: 502 }),
+        outboundService: (request: Request) => {
+          const host = new URL(request.url).hostname;
+          if (host === 'google.test') return fakeGoogle(request);
+          if (host === 'challenges.cloudflare.com') return fakeSiteverify(request);
+          return new Response('no outbound in tests', { status: 502 });
+        },
       },
     }),
   ],

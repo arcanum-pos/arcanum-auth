@@ -89,6 +89,29 @@ sets up an installation, or by hand there for another application
   bootstrapper's): a request from the internet (`CF-Connecting-IP`) gets a
   404, even with the right key.
 - **HSTS** on every answer; a CSP and no framing on every page.
+- **Turnstile** (Cloudflare's free bot check) on the sign-in form, when
+  `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` are set: no code is mailed
+  without a passed check (verified server-side, this host, action `login`).
+  If siteverify can't be reached the form goes through; the limits still
+  apply. Every public form post that writes a row is first limited per IP
+  in memory, before D1 sees it.
+- **OAuth details (RFC 9700):** a code used twice revokes that user's
+  refresh tokens for the client; every authorization response carries
+  `iss` (RFC 9207); a refresh token used again after its 30-second grace
+  revokes them all and mails the user. `/logout` without the app's own
+  `id_token_hint` (for whoever is signed in; an expired one is fine) asks
+  first - any page could send a browser there.
+- **Security events**: one JSON line each in Workers Logs, `"event":
+  "security"` - `refresh_reuse`, `code_reuse`, `turnstile_failed`,
+  `login_limited`, `code_guesses_limited`, `rate_limited`, `admin`,
+  `client_self`, `admin_from_internet`. Search them in the dashboard
+  (Workers → arcanum-auth → Logs); never a token or secret in them.
+- **CI** (`.github/workflows/ci.yml`): typecheck, tests, `npm audit` of the
+  deployed dependencies, Semgrep, and OWASP ZAP's passive baseline against
+  a local copy (findings triaged in `.zap/rules.tsv`, each with its reason;
+  anything new fails) - on every push and weekly. Dependabot proposes
+  updates. Locally: `nerdctl run --rm -v "$PWD/.zap:/zap/wrk" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://host.docker.internal:8788/login -c rules.tsv`
+  against `npm run dev`.
 
 ## Restricted clients
 
@@ -211,8 +234,17 @@ has an account. Guests never get into a restricted client.
    The `MAILER` service binding in `wrangler.jsonc` points at
    `arcanum-platform-mailer` on the same account (the platform's own, never an
    installation's arcanum-mailer); remove it if that Worker isn't there.
-3. **Deploy.** Push to `main` with Workers Builds connected, or
-   `npx wrangler deploy`. `wrangler.jsonc` claims `login.kaboutersoft.be` as
+3. **Turnstile** (optional, recommended): Cloudflare dashboard → Turnstile →
+   Add widget, hostname `login.kaboutersoft.be`, mode "Managed". Then
+   `npx wrangler secret put TURNSTILE_SECRET` and
+   `npx wrangler secret put TURNSTILE_SITE_KEY`. Both set: on.
+4. **Deploy.** Push to `main` with Workers Builds connected, or
+   `npx wrangler deploy`.
+
+   **Checks before deploy:** in Workers Builds (Workers → arcanum-auth →
+   Settings → Build), set the build command to `npm ci && npm run check` -
+   typecheck, tests and `npm audit` of what's deployed. A push that fails
+   them isn't deployed. `wrangler.jsonc` claims `login.kaboutersoft.be` as
    a custom domain (the `kaboutersoft.be` zone must be on the same account).
    `workers_dev` is off.
 

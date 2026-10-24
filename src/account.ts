@@ -3,6 +3,8 @@ import type { Env } from './env';
 import { sendMail } from './mail';
 import { codePage, deviceCodePage, deviceConfirmPage, linkPage, loginPage, messagePage, namePage, texts } from './pages';
 import { mayUse, noAccess } from './access';
+import { securityEvent } from './audit';
+import { turnstilePasses, turnstileSiteKey } from './turnstile';
 import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
 import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
 import {
@@ -70,19 +72,28 @@ const codeRow = (env: Env, id: string) => env.DB.prepare("SELECT * FROM email_co
 
 export async function login(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  if (request.method === 'GET') return loginPage(request, { continueTo: safeContinue(url.searchParams.get('continue')), google: googleEnabled(env) });
+  const turnstile = turnstileSiteKey(env);
+  if (request.method === 'GET') return loginPage(request, { continueTo: safeContinue(url.searchParams.get('continue')), google: googleEnabled(env), turnstile });
   const foreign = refuseForeign(request, env);
   if (foreign) return foreign;
 
   const form = await readForm(request);
   const continueTo = safeContinue(form.continue);
   const email = normalizeEmail(form.email || '');
-  const again = (error: 'emailInvalid' | 'tooMany' | 'mail', status: number) => loginPage(request, { continueTo, email, error, google: googleEnabled(env) }, status);
+  const again = (error: 'emailInvalid' | 'tooMany' | 'mail' | 'botCheck', status: number) => loginPage(request, { continueTo, email, error, google: googleEnabled(env), turnstile }, status);
   if (!isEmail(email)) return again('emailInvalid', 400);
+  // Before anything is written or mailed: no bot asks codes (turnstile.ts).
+  if (!(await turnstilePasses(env, form['cf-turnstile-response'], request.headers.get('CF-Connecting-IP'), 'login'))) {
+    securityEvent('turnstile_failed', { ip: clientIp(request) });
+    return again('botCheck', 403);
+  }
   // Per IP and per address — whether or not it has an account (no enumeration).
   const ipKey = `mail-ip:${clientIp(request)}`;
   const addressKey = `mail-email:${email}`;
-  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) return again('tooMany', 429);
+  if ((await tooManyAttempts(env, ipKey, 10, 3600)) || (await tooManyAttempts(env, addressKey, MAX_CODES_PER_ADDRESS, 3600))) {
+    securityEvent('login_limited', { ip: clientIp(request), email });
+    return again('tooMany', 429);
+  }
   await recordAttempt(env, ipKey);
   await recordAttempt(env, addressKey);
 
@@ -115,7 +126,10 @@ async function checkEmailCode(env: Env, id: string, code: string): Promise<Email
   const row = await codeRow(env, id);
   if (!row || row.used_at || row.expires_at <= nowIso() || row.attempts >= MAX_CODE_TRIES) return 'unknown';
   const addressKey = `code-email:${row.email}`;
-  if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS, 3600)) return 'unknown';
+  if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS, 3600)) {
+    securityEvent('code_guesses_limited', { email: row.email });
+    return 'unknown';
+  }
   if (!timingSafeEqual(await codeHash(env.CODE_HASH_KEY, code.trim()), row.code_hash)) {
     await env.DB.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE id = ?').bind(id).run();
     await recordAttempt(env, addressKey);

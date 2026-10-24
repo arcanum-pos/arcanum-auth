@@ -2,7 +2,9 @@
 // in-memory rate limits on what writes a row without anyone signed in, the
 // admin API only over the bootstrapper's service binding, HSTS everywhere.
 // (The __Host- session cookie and Google's browser-bound state: auth.test.ts.)
-import { SELF } from 'cloudflare:test';
+import { env, SELF } from 'cloudflare:test';
+import { login } from '../src/account';
+import { turnstilePasses } from '../src/turnstile';
 import { describe, expect, it } from 'vitest';
 import { askCode, lastCodeFor, signInWithCode } from './signin';
 
@@ -88,5 +90,48 @@ describe('headers on every answer', () => {
     const policy = (await call('/login')).headers.get('Permissions-Policy')!;
     expect(policy).toContain('camera=()');
     expect(policy).not.toContain('publickey-credentials');
+  });
+});
+
+// Turnstile on the sign-in form (2026-10-24): no code is mailed without a
+// passed check, for this host and this form; siteverify down lets it through.
+describe('Turnstile on the sign-in form', () => {
+  const on = { ...env, TURNSTILE_SITE_KEY: 'site-key', TURNSTILE_SECRET: 'turnstile-secret' };
+
+  it('verifies the token server-side: success, this host, this action', async () => {
+    expect(await turnstilePasses(on, 'good', '203.0.113.1', 'login')).toBe(true);
+    for (const token of ['bad', 'elsewhere', 'other-action', '', undefined]) expect(await turnstilePasses(on, token, null, 'login')).toBe(false);
+    // Unreachable: through (the rate limits still apply).
+    expect(await turnstilePasses(on, 'down', null, 'login')).toBe(true);
+    // Off (no keys): no check.
+    expect(await turnstilePasses(env, undefined, null, 'login')).toBe(true);
+  });
+
+  it('the form shows the widget (its script allowed for this page only), and a refused check mails nothing', async () => {
+    const page = await login(new Request(`${ISSUER}/login`), on);
+    const html = await page.text();
+    expect(html).toContain('data-sitekey="site-key"');
+    expect(page.headers.get('Content-Security-Policy')).toContain('frame-src https://challenges.cloudflare.com');
+    expect((await call('/login')).headers.get('Content-Security-Policy')).not.toContain('challenges.cloudflare.com');
+
+    const email = uniqueEmail('bot');
+    const ask = (token: string) =>
+      login(new Request(`${ISSUER}/login`, { method: 'POST', headers: { ...FORM, 'CF-Connecting-IP': ip() }, body: new URLSearchParams({ email, continue: '/account', 'cf-turnstile-response': token }) }), on);
+    const refused = await ask('bad');
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toContain('geen robot');
+    const mailed = await env.DB.prepare('SELECT COUNT(*) AS n FROM email_codes WHERE email = ?').bind(email).first<{ n: number }>();
+    expect(mailed!.n).toBe(0);
+    expect((await ask('good')).status).toBe(302);
+  });
+});
+
+describe('the in-memory limit before any database write on the public forms', () => {
+  it('per IP on the sign-in forms; calls without an IP (service bindings) are not limited', async () => {
+    const from = ip();
+    const statuses: number[] = [];
+    for (let i = 0; i < 24; i++) statuses.push((await post('/login/code', { id: 'nope', code: '123456' }, { 'CF-Connecting-IP': from })).status);
+    expect(statuses).toContain(429);
+    expect(statuses.slice(0, 15).every((s) => s !== 429)).toBe(true);
   });
 });

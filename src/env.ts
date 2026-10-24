@@ -20,6 +20,9 @@ export interface Env {
   // Sign in with Google (optional — the button only shows when both are set).
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  // Cloudflare Turnstile on the sign-in form (turnstile.ts): on when both are set.
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
   // Test hook: where Google's token endpoint is (defaults to Google's own).
   GOOGLE_TOKEN_URL?: string;
   // The mailed sign-in codes, via the platform's mailer (optional — without it,

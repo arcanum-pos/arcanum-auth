@@ -21,6 +21,7 @@ import { manageGoogle, managePasskey, passkeyLogin, passkeyLoginOptions, passkey
 import { PASSKEY_SCRIPT } from './passkey-script';
 import { json, redirect, safeContinue } from './util';
 import { tooManyRequests, withinLimit } from './ratelimit';
+import { securityEvent } from './audit';
 
 export type { Env };
 
@@ -43,6 +44,17 @@ export default {
 
 const tooMany = tooManyRequests;
 
+// A form post from the internet that writes rows (codes, attempts, requests):
+// first the in-memory limit per IP (ratelimit.ts), so a flood never reaches
+// D1. Calls over a service binding carry no CF-Connecting-IP and aren't limited.
+async function limited(env: Env, request: Request, name: string): Promise<boolean> {
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (!ip || request.method !== 'POST') return false;
+  if (await withinLimit(env, `${name}:${ip}`)) return false;
+  securityEvent('rate_limited', { route: name, ip });
+  return true;
+}
+
 async function handle(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
@@ -54,8 +66,9 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/token' && method === 'POST') return token(request, env);
       if (path === '/device/code' && method === 'POST') return deviceAuthorization(request, env);
       if (path === '/userinfo' && (method === 'GET' || method === 'POST')) return userinfo(request, env);
-      if (path === '/logout' && method === 'GET') return logout(request, env);
+      if (path === '/logout' && (method === 'GET' || method === 'POST')) return logout(request, env);
 
+      if (['/login', '/login/code', '/login/link', '/login/name', '/device', '/device/confirm', '/passkey/login', '/logout'].includes(path) && (await limited(env, request, path))) return tooMany();
       if (path === '/login' && (method === 'GET' || method === 'POST')) return login(request, env);
       if (path === '/login/code' && (method === 'GET' || method === 'POST')) return loginCode(request, env);
       if (path === '/login/link' && (method === 'GET' || method === 'POST')) return loginLink(request, env);
@@ -86,17 +99,29 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/passkey.js' && method === 'GET') {
         return new Response(PASSKEY_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' } });
       }
-      if (path === '/clients/self' || path === '/clients/self/secret' || path.startsWith('/clients/self/users')) return clientSelf(request, env, path);
+      if (path === '/clients/self' || path === '/clients/self/secret' || path.startsWith('/clients/self/users')) {
+        const res = await clientSelf(request, env, path);
+        if (method !== 'GET') securityEvent('client_self', { method, path: path.replace(/\/users\/.+$/, '/users/:email'), status: res.status });
+        return res;
+      }
       const access = path.match(/^\/access\/([^/]+)(\/request)?$/);
-      if (access && access[2] && method === 'POST') return requestAccess(request, env, decodeURIComponent(access[1]));
+      if (access && access[2] && method === 'POST') {
+        if (await limited(env, request, 'access-request')) return tooMany();
+        return requestAccess(request, env, decodeURIComponent(access[1]));
+      }
       if (access && !access[2] && (method === 'GET' || method === 'POST')) return manageAccess(request, env, decodeURIComponent(access[1]));
       // The admin API is for the bootstrapper, over its service binding —
       // never from the internet (Cloudflare marks those with
       // CF-Connecting-IP; a service binding's calls don't carry it), even
       // with the right key.
       if (path.startsWith('/admin/')) {
-        if (request.headers.has('CF-Connecting-IP')) return json({ error: 'Not found' }, 404);
-        return admin(request, env, path);
+        if (request.headers.has('CF-Connecting-IP')) {
+          securityEvent('admin_from_internet', { method, path, ip: request.headers.get('CF-Connecting-IP') });
+          return json({ error: 'Not found' }, 404);
+        }
+        const res = await admin(request, env, path);
+        if (method !== 'GET') securityEvent('admin', { method, path, status: res.status });
+        return res;
       }
       if (path === '/' && method === 'GET') return redirect('/account');
       if (path === '/health') return json({ ok: true });

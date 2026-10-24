@@ -1,8 +1,10 @@
 // The issuer's own pages — sign in (a mailed code, a passkey, Google; no
 // passwords), connect a device, manage passkeys. Server-rendered HTML
-// in the browser's language (nl/fr/en), light or dark. The only script is
+// in the browser's language (nl/fr/en), light or dark. The only scripts are
 // /passkey.js (passkeys need the browser's WebAuthn API), on the pages that
-// offer them.
+// offer them, and Cloudflare's Turnstile on the sign-in form when it's on.
+
+import { TURNSTILE_ORIGIN, TURNSTILE_SCRIPT } from './turnstile';
 
 type Lang = 'nl' | 'fr' | 'en';
 
@@ -26,6 +28,10 @@ const T = {
     signedInAs: (email: string) => `Aangemeld als ${email}.`,
     signOut: 'Afmelden',
     signedOut: 'Je bent afgemeld.',
+    logoutConfirm: (host: string) => `Afmelden bij ${host}?`,
+    logoutConfirmText: 'Een toepassing vraagt om je af te melden. Wil je dat?',
+    mailTokenReuseSubject: 'Je bent afgemeld in een toepassing',
+    mailTokenReuse: (client: string, accountUrl: string) => `Een oude aanmeldsleutel voor ${client} werd opnieuw gebruikt. Daarom ben je daar voor de zekerheid afgemeld: meld je gewoon opnieuw aan.\n\nGebeurt dit vaker of vertrouw je het niet? Kijk je account na op ${accountUrl}.`,
     withPasskey: 'Aanmelden met een passkey',
     accountTitle: 'Je account',
     passkeysTitle: 'Passkeys',
@@ -108,6 +114,7 @@ const T = {
     mailCodeSubject: 'Je aanmeldcode',
     mailCode: (code: string, link: string) => `Je code om je aan te melden: ${code}\n\nOf meld je aan met deze link: ${link}\n\nDe code en de link zijn 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
     errors: {
+      botCheck: 'We konden niet nagaan of je geen robot bent. Probeer het opnieuw.',
       urisInvalid: "Geef 1 tot 10 https-adressen, één per regel, zonder #.",
       notAdmin: "Je beheert deze toepassing niet.",
       lastAdmin: "Er moet minstens één beheerder overblijven.",
@@ -150,6 +157,10 @@ const T = {
     signedInAs: (email: string) => `Connecté en tant que ${email}.`,
     signOut: 'Se déconnecter',
     signedOut: 'Vous êtes déconnecté.',
+    logoutConfirm: (host: string) => `Vous déconnecter de ${host} ?`,
+    logoutConfirmText: 'Une application demande à vous déconnecter. Le voulez-vous ?',
+    mailTokenReuseSubject: 'Vous avez été déconnecté d’une application',
+    mailTokenReuse: (client: string, accountUrl: string) => `Une ancienne clé de connexion pour ${client} a été réutilisée. Par sécurité, vous y avez été déconnecté : reconnectez-vous simplement.\n\nCela se répète ou vous ne vous y fiez pas ? Vérifiez votre compte sur ${accountUrl}.`,
     withPasskey: 'Se connecter avec une clé d’accès',
     accountTitle: 'Votre compte',
     passkeysTitle: 'Clés d’accès',
@@ -232,6 +243,7 @@ const T = {
     mailCodeSubject: 'Votre code de connexion',
     mailCode: (code: string, link: string) => `Votre code pour vous connecter : ${code}\n\nOu connectez-vous avec ce lien : ${link}\n\nLe code et le lien sont valables 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
     errors: {
+      botCheck: 'Nous n’avons pas pu vérifier que vous n’êtes pas un robot. Réessayez.',
       urisInvalid: "Indiquez 1 à 10 adresses https, une par ligne, sans #.",
       notAdmin: "Vous ne gérez pas cette application.",
       lastAdmin: "Il doit rester au moins un administrateur.",
@@ -274,6 +286,10 @@ const T = {
     signedInAs: (email: string) => `Signed in as ${email}.`,
     signOut: 'Sign out',
     signedOut: 'You are signed out.',
+    logoutConfirm: (host: string) => `Sign out of ${host}?`,
+    logoutConfirmText: 'An application asks to sign you out. Do you want that?',
+    mailTokenReuseSubject: 'You were signed out of an application',
+    mailTokenReuse: (client: string, accountUrl: string) => `An old sign-in key for ${client} was used again, so you were signed out there to be safe: just sign in again.\n\nDoes this keep happening, or don’t you trust it? Check your account at ${accountUrl}.`,
     withPasskey: 'Sign in with a passkey',
     accountTitle: 'Your account',
     passkeysTitle: 'Passkeys',
@@ -356,6 +372,7 @@ const T = {
     mailCodeSubject: 'Your sign-in code',
     mailCode: (code: string, link: string) => `Your code to sign in: ${code}\n\nOr sign in with this link: ${link}\n\nThe code and the link are valid for 15 minutes. Didn’t ask for this? Then ignore this email.`,
     errors: {
+      botCheck: 'We couldn’t check that you’re not a robot. Please try again.',
       urisInvalid: "Give 1 to 10 https addresses, one per line, without #.",
       notAdmin: "You don't manage this application.",
       lastAdmin: "At least one admin has to remain.",
@@ -420,8 +437,11 @@ textarea{width:100%;border:1px solid var(--border);border-radius:10px;background
 [hidden]{display:none!important}`;
 
 // `wide`: a page to manage something (a client's access), not a sign-in form.
-export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean; wide?: boolean } = {}): Response {
-  const script = opts.passkeys ? '<script src="/passkey.js" defer></script>' : '';
+// `turnstile`: the page shows Cloudflare's bot check (turnstile.ts) - its
+// script and frame come from challenges.cloudflare.com, allowed for this page only.
+export function page(request: Request, title: string, body: string, status = 200, headers: Record<string, string> = {}, opts: { passkeys?: boolean; wide?: boolean; turnstile?: boolean } = {}): Response {
+  const script = (opts.passkeys ? '<script src="/passkey.js" defer></script>' : '') + (opts.turnstile ? `<script src="${TURNSTILE_SCRIPT}" async defer></script>` : '');
+  const challenge = opts.turnstile ? ` ${TURNSTILE_ORIGIN}` : '';
   const html = `<!doctype html><html lang="${language(request)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><title>${esc(title)} · ${esc(new URL(request.url).host)}</title><style>${STYLE}</style>${script}</head>
 <body><main${opts.wide ? ' class="wide"' : ''}><div class="brand">${esc(new URL(request.url).host)}</div>${body}</main></body></html>`;
@@ -430,7 +450,7 @@ export function page(request: Request, title: string, body: string, status = 200
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
+      'Content-Security-Policy': `default-src 'none'; script-src 'self'${challenge}; connect-src 'self'${challenge}; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'${challenge ? `; frame-src${challenge}` : ''}`,
       'X-Frame-Options': 'DENY',
       // Not no-referrer: that makes browsers send `Origin: null` on our own
       // form posts. same-origin still leaks nothing to other sites (Google).
@@ -449,7 +469,7 @@ const error = (t: Texts, key?: ErrorKey | null) => (key ? `<p class="error" role
 // Sign in without a password: an e-mail address (a mailed code follows), a
 // passkey (the browser also offers it in the e-mail field) or Google. An
 // address without an account gets one after its code (namePage).
-export function loginPage(request: Request, opts: { continueTo: string; email?: string; error?: ErrorKey | null; google: boolean }, status = 200) {
+export function loginPage(request: Request, opts: { continueTo: string; email?: string; error?: ErrorKey | null; google: boolean; turnstile?: string | null }, status = 200) {
   const t = texts(request);
   const q = `?continue=${encodeURIComponent(opts.continueTo)}`;
   return page(
@@ -466,10 +486,11 @@ ${opts.google ? `<a class="button secondary" href="/google${q}">${t.withGoogle}<
 <form method="post" action="/login">${hidden('continue', opts.continueTo)}
 <label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="username webauthn" required value="${esc(opts.email ?? '')}">
 <p class="hint">${t.signInHint}</p>
+${opts.turnstile ? `<div class="cf-turnstile" data-sitekey="${esc(opts.turnstile)}" data-action="login" data-theme="auto" data-size="flexible"></div>` : ''}
 ${error(t, opts.error)}<button type="submit">${t.continueEmail}</button></form>`,
     status,
     {},
-    { passkeys: true }
+    { passkeys: true, turnstile: !!opts.turnstile }
   );
 }
 
@@ -720,4 +741,14 @@ export function notAdminPage(request: Request, opts: { clientId: string; clientN
 <a class="button" href="/login?continue=${encodeURIComponent(back)}">${t.switchAccount}</a>`,
     403
   );
+}
+
+// /logout without a valid id_token_hint: anyone's page could send a browser
+// there, so ask first (OpenID RP-Initiated Logout §2). The same parameters go
+// along with the POST.
+export function logoutConfirmPage(request: Request, params: Record<string, string>) {
+  const t = texts(request);
+  const host = new URL(request.url).host;
+  const fields = Object.entries(params).map(([k, v]) => hidden(k, v)).join('');
+  return page(request, t.signOut, `<h1>${esc(t.logoutConfirm(host))}</h1><p>${t.logoutConfirmText}</p><form method="post" action="/logout">${fields}<button type="submit">${t.signOut}</button></form>`);
 }

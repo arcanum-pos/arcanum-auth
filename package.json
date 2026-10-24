@@ -8,7 +8,8 @@
     "typecheck": "tsc && tsc -p test",
     "test": "node --no-warnings test/check-passkey-script.mjs && vitest run",
     "test:watch": "vitest",
-    "generate-key": "node scripts/generate-signing-key.mjs"
+    "generate-key": "node scripts/generate-signing-key.mjs",
+    "check": "npm run typecheck && npm test && npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.3",
