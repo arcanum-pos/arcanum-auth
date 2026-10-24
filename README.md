@@ -104,7 +104,9 @@ sets up an installation, or by hand there for another application
 - **Security events**: one JSON line each in Workers Logs, `"event":
   "security"` - `refresh_reuse`, `code_reuse`, `turnstile_failed`,
   `login_limited`, `code_guesses_limited`, `rate_limited`, `admin`,
-  `client_self`, `admin_from_internet`. Search them in the dashboard
+  `client_self`, `admin_from_internet`, and once an hour (the cron)
+  `protection_off` when Turnstile isn't set (`turnstile`), mail is switched
+  off (`mail_off`) or has no mailer or account (`mail_unset`). Search them in the dashboard
   (Workers → arcanum-auth → Logs); never a token or secret in them.
 - **Passkey required** per client (its admins switch it on `/access/:id`,
   or the admin API's `require_passkey`): only a session made with a passkey

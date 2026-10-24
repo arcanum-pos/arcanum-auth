@@ -19,6 +19,7 @@ import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinf
 import { messagePage, texts } from './pages';
 import { manageGoogle, managePasskey, manageSessions, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions, passkeyRequired } from './passkeys';
 import { PASSKEY_SCRIPT } from './passkey-script';
+import { reportProtections } from './protections';
 import { json, redirect, safeContinue } from './util';
 import { tooManyRequests, withinLimit } from './ratelimit';
 import { securityEvent } from './audit';
@@ -39,6 +40,7 @@ export default {
   // Hourly (triggers.crons): expired guests and old protocol state.
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     console.log(JSON.stringify({ event: 'auth cleanup', deleted: await cleanup(env) }));
+    await reportProtections(env);
   },
 };
 

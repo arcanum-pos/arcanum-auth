@@ -5,7 +5,8 @@
 import { env, SELF } from 'cloudflare:test';
 import { login } from '../src/account';
 import { turnstilePasses } from '../src/turnstile';
-import { describe, expect, it } from 'vitest';
+import { protectionsOff, reportProtections } from '../src/protections';
+import { describe, expect, it, vi } from 'vitest';
 import { askCode, lastCodeFor, signInWithCode } from './signin';
 
 const ISSUER = 'https://login.kaboutersoft.be';
@@ -128,6 +129,29 @@ describe('Turnstile on the sign-in form', () => {
     const mailed = await env.DB.prepare('SELECT COUNT(*) AS n FROM email_codes WHERE email = ?').bind(email).first<{ n: number }>();
     expect(mailed!.n).toBe(0);
     expect((await ask('good')).status).toBe(302);
+  });
+});
+
+// The hourly cron says what isn't on: an instance without Turnstile or mail gets noticed.
+describe('protection_off: what protects this instance but is off', () => {
+  const smtp = JSON.stringify({ host: 'smtp.test', port: 465, username: 'u', password: 'p', fromAddress: 'noreply@test' });
+  const full = { ...env, TURNSTILE_SITE_KEY: 'site-key', TURNSTILE_SECRET: 'secret', MAILER_INTERNAL_KEY: 'k', MAIL_SMTP: smtp };
+
+  it('names each one; nothing when all is on', async () => {
+    expect(await protectionsOff(full)).toEqual([]);
+    expect(await protectionsOff({ ...full, TURNSTILE_SECRET: undefined })).toEqual(['turnstile']);
+    expect(await protectionsOff({ ...full, MAIL_SENDING: 'off' })).toEqual(['mail_off']);
+    expect(await protectionsOff({ ...full, MAILER: undefined })).toEqual(['mail_unset']);
+    expect(await protectionsOff({ ...full, TURNSTILE_SITE_KEY: undefined, MAIL_SENDING: 'Off' })).toEqual(['turnstile', 'mail_off']);
+  });
+
+  it('one security event, only when something is off', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await reportProtections(full);
+    expect(log).not.toHaveBeenCalled();
+    await reportProtections({ ...full, TURNSTILE_SITE_KEY: undefined });
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({ event: 'security', name: 'protection_off', off: ['turnstile'] });
+    log.mockRestore();
   });
 });
 
