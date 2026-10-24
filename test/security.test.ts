@@ -135,3 +135,56 @@ describe('the in-memory limit before any database write on the public forms', ()
     expect(statuses.slice(0, 15).every((s) => s !== 429)).toBe(true);
   });
 });
+
+// Hardening phase 4 (2026-10-24): sessions end after 7 idle days, and are
+// listed on /account - one ended, or all others plus every app's tokens.
+describe('sessions', () => {
+  const browser = (ua: string) => ({ 'User-Agent': ua });
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+  const WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+
+  it('end after 7 days without use, however much of their 14 days is left', async () => {
+    const { cookie } = await signInWithCode(post, uniqueEmail('idle'));
+    expect((await call('/account', { headers: { Cookie: cookie } })).status).toBe(200);
+    await env.DB.prepare('UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?')
+      .bind(new Date(Date.now() - 8 * 86400_000).toISOString(), await hash(cookie.split('=')[1]))
+      .run();
+    expect((await call('/account', { headers: { Cookie: cookie } })).status).toBe(302);
+  });
+
+  it('are listed on /account (which browser, how); one ended, or all others and every app', async () => {
+    const email = uniqueEmail('sessions');
+    const mac = (await signInWithCode((p, f, h) => post(p, f, { ...h, ...browser(MAC) }), email)).cookie;
+    const win = (await signInWithCode((p, f, h) => post(p, f, { ...h, ...browser(WIN) }), email)).cookie;
+    const third = (await signInWithCode(post, email)).cookie;
+    const page = await (await call('/account', { headers: { Cookie: mac } })).text();
+    expect(page).toContain('Safari · macOS (deze browser)');
+    expect(page).toContain('Chrome · Windows');
+    expect(page).toContain('met een code via e-mail');
+    // End the Windows one from the Mac.
+    const winId = page.match(/Chrome · Windows[\s\S]*?name="id" value="([^"]+)"/)![1];
+    expect((await post('/account/sessions', { action: 'end', id: winId }, { Cookie: mac })).headers.get('Location')).toBe('/account');
+    expect((await call('/account', { headers: { Cookie: win } })).status).toBe(302);
+    // Someone else's id does nothing; another site is refused.
+    expect((await post('/account/sessions', { action: 'everywhere' }, { Cookie: mac, Origin: 'https://evil.test' })).status).toBe(403);
+
+    // An app's refresh token, then everywhere: only this browser stays.
+    const created = await call('/admin/clients', { method: 'POST', headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'App', redirect_uris: ['https://app.test/cb'], restricted: false }) });
+    const client = (await created.json()) as { client_id: string };
+    const userId = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>())!.id;
+    await env.DB.prepare("INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at) VALUES (?, ?, ?, 'openid', 0, ?, ?)")
+      .bind(`t-${Date.now()}`, client.client_id, userId, new Date().toISOString(), new Date(Date.now() + 86400_000).toISOString())
+      .run();
+    const everywhere = await post('/account/sessions', { action: 'everywhere' }, { Cookie: mac });
+    expect(everywhere.headers.get('Location')).toBe('/account?ended=everywhere');
+    expect((await call('/account', { headers: { Cookie: third } })).status).toBe(302);
+    expect(await (await call('/account?ended=everywhere', { headers: { Cookie: mac } })).text()).toContain('Je bent overal afgemeld, behalve hier.');
+    const live = await env.DB.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ? AND revoked_at IS NULL').bind(userId).first<{ n: number }>();
+    expect(live!.n).toBe(0);
+  });
+});
+
+async function hash(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}

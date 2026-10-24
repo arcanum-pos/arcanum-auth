@@ -5,8 +5,8 @@ import { codePage, deviceCodePage, deviceConfirmPage, linkPage, loginPage, messa
 import { mayUse, noAccess } from './access';
 import { securityEvent } from './audit';
 import { turnstilePasses, turnstileSiteKey } from './turnstile';
-import { accountWithPasskeys, shouldOfferPasskey } from './passkeys';
-import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type User } from './store';
+import { accountWithPasskeys, needsPasskey, passkeyStep, shouldOfferPasskey } from './passkeys';
+import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type Amr, type User } from './store';
 import {
   codeHash,
   inSeconds,
@@ -34,8 +34,8 @@ const googleEnabled = (env: Env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT
 
 // Signed in with a mailed code or Google: on to `continueTo` —
 // by way of the offer to add a passkey, when that's due (passkeys.ts).
-async function signIn(env: Env, user: User, continueTo: string): Promise<Response> {
-  const cookie = await createSession(env, user.id, unixNow());
+async function signIn(request: Request, env: Env, user: User, continueTo: string, amr: Amr): Promise<Response> {
+  const cookie = await createSession(env, user.id, unixNow(), { amr, request });
   const next = safeContinue(continueTo);
   const offer = await shouldOfferPasskey(env, user);
   return redirect(offer ? `/passkey/offer?continue=${encodeURIComponent(next)}` : next, { 'Set-Cookie': cookie });
@@ -187,7 +187,7 @@ async function proven(request: Request, env: Env, row: EmailCodeRow): Promise<Re
   const user = await userByEmail(env, row.email);
   if (user) {
     if (!user.email_verified) await env.DB.prepare('UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?').bind(nowIso(), user.id).run();
-    return signIn(env, user, continueTo);
+    return signIn(request, env, user, continueTo, 'otp');
   }
   const finish = randomToken(24);
   await env.DB.prepare('UPDATE email_codes SET finish_hash = ? WHERE id = ?').bind(await sha256(finish), row.id).run();
@@ -208,7 +208,7 @@ export async function loginName(request: Request, env: Env): Promise<Response> {
   if (!spent.meta.changes) return messagePage(request, texts(request).errors.codeInvalid, 400);
   // Signed up another way (Google) in the meantime: that account.
   const user = (await userByEmail(env, row.email)) ?? (await createUser(env, { email: row.email, name }));
-  return signIn(env, user, safeContinue(row.continue_to));
+  return signIn(request, env, user, safeContinue(row.continue_to), 'otp');
 }
 
 // --- Sign in with Google (OpenID Connect, code flow + PKCE).
@@ -292,7 +292,7 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
       user = await createUser(env, { email, name: typeof claims.name === 'string' ? claims.name : email.split('@')[0], googleSub: claims.sub });
     }
   }
-  return signIn(env, user, saved.continue_to);
+  return signIn(request, env, user, saved.continue_to, 'fed');
 }
 
 function safeDecode(token: string): Record<string, unknown> | null {
@@ -327,6 +327,7 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
     const pending = await pendingDevice(env, userCode);
     const client = pending ? await clientById(env, pending.client_id) : null;
     if (pending && client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
+    if (pending && client && needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
     if (pending && client) return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email });
     return deviceCodePage(request, { userCode: url.searchParams.get('user_code') || '', error: userCode ? 'deviceCode' : null });
   }
@@ -344,6 +345,7 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
     return deviceCodePage(request, { userCode: form.user_code, error: 'deviceCode' }, 400);
   }
   if (!(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
+  if (needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
   return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email });
 }
 
@@ -360,11 +362,12 @@ export async function deviceConfirm(request: Request, env: Env): Promise<Respons
     const pending = await pendingDevice(env, userCode);
     const client = pending ? await clientById(env, pending.client_id) : null;
     if (client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
+    if (client && needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
   }
   const done = await env.DB.prepare(
-    "UPDATE device_codes SET status = ?, user_id = ?, auth_time = ? WHERE user_code = ? AND status = 'pending' AND expires_at > ?"
+    "UPDATE device_codes SET status = ?, user_id = ?, auth_time = ?, amr = ? WHERE user_code = ? AND status = 'pending' AND expires_at > ?"
   )
-    .bind(allow ? 'approved' : 'denied', session.user.id, session.authTime, userCode, nowIso())
+    .bind(allow ? 'approved' : 'denied', session.user.id, session.authTime, session.amr, userCode, nowIso())
     .run();
   if (!done.meta.changes) return deviceCodePage(request, { error: 'deviceCode' }, 400);
   return messagePage(request, allow ? t.deviceDone : t.deviceDenied);
@@ -383,7 +386,7 @@ export async function loginOnce(request: Request, env: Env): Promise<Response> {
     : null;
   const user = link ? await env.DB.prepare('SELECT * FROM users WHERE id = ? AND guest = 1 AND expires_at > ?').bind(link.user_id, nowIso()).first<User>() : null;
   if (!link || !user) return messagePage(request, texts(request).errors.linkInvalid, 400);
-  const cookie = await createSession(env, user.id, unixNow(), user.expires_at);
+  const cookie = await createSession(env, user.id, unixNow(), { amr: 'link', until: user.expires_at, request });
   return redirect(link.continue_to, { 'Set-Cookie': cookie });
 }
 
@@ -391,5 +394,5 @@ export async function account(request: Request, env: Env): Promise<Response> {
   const session = await currentSession(env, request);
   if (!session) return redirect('/login?continue=%2Faccount');
   const q = new URL(request.url).searchParams;
-  return accountWithPasskeys(request, env, session.user, { added: q.get('passkey') === 'added', googleUnlinked: q.get('google') === 'unlinked' });
+  return accountWithPasskeys(request, env, session.user, { added: q.get('passkey') === 'added', googleUnlinked: q.get('google') === 'unlinked', endedEverywhere: q.get('ended') === 'everywhere' });
 }

@@ -5,7 +5,8 @@ import { sendMail } from './mail';
 import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
 import { logoutConfirmPage, messagePage, texts } from './pages';
-import { authenticateClient, clientById, currentSession, endSession, userById, type Client } from './store';
+import { needsPasskey, passkeyStep } from './passkeys';
+import { authenticateClient, clientById, currentSession, endSession, userById, type Amr, type Client } from './store';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
 import { withinLimit } from './ratelimit';
 import { inSeconds, json, newUserCode, nowIso, oauthError, pkceMatches, randomToken, readForm, redirect, sameOrigin, sha256, unixNow } from './util';
@@ -96,13 +97,15 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
 
   // A restricted client: only who's assigned (else: ask to be added).
   if (!(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
+  // One that requires a passkey: only a session made with one (else: sign in with it, or add one).
+  if (needsPasskey(client, session)) return passkeyStep(url.pathname + url.search);
 
   const code = randomToken(32);
   await env.DB.prepare(
-    `INSERT INTO auth_codes (code_hash, client_id, user_id, redirect_uri, scope, nonce, code_challenge, auth_time, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO auth_codes (code_hash, client_id, user_id, redirect_uri, scope, nonce, code_challenge, auth_time, expires_at, amr)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(await sha256(code), client.id, session.user.id, redirectUri, cleanScope(p.get('scope')), p.get('nonce'), challenge, session.authTime, inSeconds(AUTH_CODE_SECONDS))
+    .bind(await sha256(code), client.id, session.user.id, redirectUri, cleanScope(p.get('scope')), p.get('nonce'), challenge, session.authTime, inSeconds(AUTH_CODE_SECONDS), session.amr)
     .run();
   return back({ code });
 }
@@ -136,6 +139,7 @@ interface AuthCodeRow {
   auth_time: number;
   expires_at: string;
   used_at: string | null;
+  amr: Amr | null;
 }
 
 async function authorizationCodeGrant(env: Env, client: Client, form: Record<string, string>): Promise<Response> {
@@ -157,7 +161,7 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
   const user = await userById(env, row.user_id);
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
   if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
-  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, nonce: row.nonce }));
+  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, nonce: row.nonce, amr: row.amr }));
 }
 
 // A rotated-away refresh token presented again within this window counts as
@@ -170,7 +174,7 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
   const tokenHash = await sha256(form.refresh_token || '');
   const row = await env.DB.prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?')
     .bind(tokenHash)
-    .first<{ client_id: string; user_id: string; scope: string; auth_time: number; expires_at: string; revoked_at: string | null; rotated_at: string | null }>();
+    .first<{ client_id: string; user_id: string; scope: string; auth_time: number; expires_at: string; revoked_at: string | null; rotated_at: string | null; amr: Amr | null }>();
   if (!row || row.client_id !== client.id) return oauthError('invalid_grant', 'Invalid refresh token');
   if (row.revoked_at && row.rotated_at && Date.now() - Date.parse(row.rotated_at) <= ROTATION_GRACE_MS && row.expires_at > nowIso()) {
     // Only while nothing of this user + client was revoked since (theft, a new password).
@@ -181,7 +185,7 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
       .first();
     const user = revokedSince ? null : await userById(env, row.user_id);
     if (user && !(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
-    if (user) return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time }));
+    if (user) return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, amr: row.amr }));
   }
   if (row.revoked_at) {
     // A rotated-away token used again: someone has a copy. Revoke them all.
@@ -205,7 +209,7 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
   // Unassigned since: no new tokens (unassigning also revoked them; this is the backstop).
   if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
-  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time }));
+  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, amr: row.amr }));
 }
 
 interface DeviceRow {
@@ -219,6 +223,7 @@ interface DeviceRow {
   interval_seconds: number;
   last_poll_at: string | null;
   expires_at: string;
+  amr: Amr | null;
 }
 
 async function deviceGrant(env: Env, client: Client, form: Record<string, string>): Promise<Response> {
@@ -240,7 +245,7 @@ async function deviceGrant(env: Env, client: Client, form: Record<string, string
   const user = row.user_id ? await userById(env, row.user_id) : null;
   if (!consumed.meta.changes || !user) return oauthError('invalid_grant', 'Unknown device_code');
   if (!(await mayUse(env, client, user))) return oauthError('access_denied', 'No access to this client');
-  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time ?? unixNow() }));
+  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time ?? unixNow(), amr: row.amr }));
 }
 
 // --- Device authorization (RFC 8628): the kassa asks for a code. The BFF

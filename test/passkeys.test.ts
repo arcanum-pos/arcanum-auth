@@ -324,3 +324,136 @@ describe('the pages', () => {
     expect(await env.DB.prepare("SELECT 1 FROM webauthn_challenges WHERE challenge_hash = 'old-challenge'").first()).toBeNull();
   });
 });
+
+// --- Hardening phase 3 (2026-10-24): a client that requires a passkey, amr
+// in the id_token, and managing passkeys needs a passkey once there is one.
+
+const APP = 'https://strict.test';
+const REDIRECT = `${APP}/callback`;
+const ADMIN_API = { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' };
+
+async function strictClient(extra: Record<string, unknown> = {}) {
+  const res = await call('/admin/clients', { method: 'POST', headers: ADMIN_API, body: JSON.stringify({ name: 'Editor', redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], restricted: false, ...extra }) });
+  const client = (await res.json()) as { client_id: string; client_secret: string };
+  expect((await call(`/admin/clients/${client.client_id}`, { method: 'PATCH', headers: ADMIN_API, body: JSON.stringify({ require_passkey: true }) })).status).toBe(200);
+  return client;
+}
+
+async function authorize(clientId: string, cookie: string) {
+  const verifier = 'v'.repeat(20) + crypto.randomUUID().replace(/-/g, '');
+  const challenge = b64u(await sha256(utf8(verifier)));
+  const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, scope: 'openid email', state: 's', code_challenge: challenge, code_challenge_method: 'S256' });
+  const res = await call(`/authorize?${q}`, { headers: { Cookie: cookie } });
+  return { res, verifier, path: `/authorize?${q}` };
+}
+
+async function idTokenAmr(client: { client_id: string; client_secret: string }, cookie: string) {
+  const { res, verifier } = await authorize(client.client_id, cookie);
+  const code = new URL(res.headers.get('Location')!).searchParams.get('code')!;
+  const tokens = (await (await post('/token', { grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: client.client_id, client_secret: client.client_secret, code_verifier: verifier })).json()) as { id_token: string };
+  return JSON.parse(new TextDecoder().decode(fromB64u(tokens.id_token.split('.')[1]))).amr;
+}
+
+const passkeySession = async (auth: Authenticator) => cookieOf(await postJson('/passkey/login', { response: await auth.get(await loginOptions()) }));
+
+describe('a client that requires a passkey', () => {
+  it('a session made with a mailed code is sent to sign in with the passkey first; with it: a code, amr says so', async () => {
+    const client = await strictClient();
+    const email = uniqueEmail('strict');
+    const first = await signUp(email);
+    const auth = await addPasskey(first.cookie);
+    // Signed in again by code (a new browser): not enough for this client.
+    const { cookie: byCode } = await signUp(email);
+    const { res, path } = await authorize(client.client_id, byCode);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe(`/login/passkey?continue=${encodeURIComponent(path)}`);
+    const step = await call(res.headers.get('Location')!, { headers: { Cookie: byCode } });
+    const html = await step.text();
+    expect(html).toContain('data-passkey-login');
+    expect(html).toContain('Meld je aan met je passkey');
+
+    const byPasskey = await passkeySession(auth);
+    expect(await idTokenAmr(client, byPasskey)).toEqual(['hwk', 'mfa']);
+  });
+
+  it('without a passkey yet: add one on the spot - that session then passes', async () => {
+    const client = await strictClient();
+    const { cookie } = await signUp(uniqueEmail('enroll'));
+    const { res } = await authorize(client.client_id, cookie);
+    const step = await call(res.headers.get('Location')!, { headers: { Cookie: cookie } });
+    expect(await step.text()).toContain('data-passkey-register');
+    await addPasskey(cookie);
+    expect((await authorize(client.client_id, cookie)).res.headers.get('Location')).toMatch(/^https:\/\/strict\.test\/callback\?code=/);
+  });
+
+  it('other clients: no step, amr says how (a mailed code)', async () => {
+    const res = await call('/admin/clients', { method: 'POST', headers: ADMIN_API, body: JSON.stringify({ name: 'Open', redirect_uris: [REDIRECT], restricted: false }) });
+    const client = (await res.json()) as { client_id: string; client_secret: string };
+    const { cookie } = await signUp(uniqueEmail('plain'));
+    expect(await idTokenAmr(client, cookie)).toEqual(['otp']);
+  });
+
+  it('a device sign-in for it takes the passkey step too', async () => {
+    const client = await strictClient();
+    const email = uniqueEmail('strict-device');
+    const first = await signUp(email);
+    await addPasskey(first.cookie);
+    const { cookie: byCode } = await signUp(email);
+    const { user_code } = (await (await call('/device/code', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: client.client_id, scope: 'openid' }) })).json()) as { user_code: string };
+    const res = await call(`/device?user_code=${user_code}`, { headers: { Cookie: byCode } });
+    expect(res.headers.get('Location')).toBe(`/login/passkey?continue=${encodeURIComponent(`/device?user_code=${user_code}`)}`);
+    const confirm = await post('/device/confirm', { user_code, decision: 'allow' }, { Cookie: byCode });
+    expect(confirm.status).toBe(302);
+  });
+
+  it('its admins switch the rule on /access - and once on, manage it only with a passkey; the other admins are told', async () => {
+    const owner = uniqueEmail('rule-owner');
+    const other = uniqueEmail('rule-other');
+    const res = await call('/admin/clients', { method: 'POST', headers: ADMIN_API, body: JSON.stringify({ name: 'Rules', redirect_uris: [REDIRECT], owner_email: owner }) });
+    const { client_id } = (await res.json()) as { client_id: string };
+    const ownerSession = await signUp(owner);
+    const auth = await addPasskey(ownerSession.cookie);
+    await post(`/access/${client_id}`, { action: 'add', email: other }, { Cookie: ownerSession.cookie });
+    await post(`/access/${client_id}`, { action: 'admin', email: other }, { Cookie: ownerSession.cookie });
+    const { cookie: byCode } = await signUp(owner);
+    expect(await (await call(`/access/${client_id}`, { headers: { Cookie: byCode } })).text()).toContain('Passkey verplicht maken');
+    const on = await post(`/access/${client_id}`, { action: 'passkey-on' }, { Cookie: byCode });
+    expect(on.headers.get('Location')).toBe(`/access/${client_id}?done=passkeyOn`);
+    expect((await mails()).reverse().find((m) => m.body.message.to === other)!.body.message.subject).toBe('Passkey-regel van Rules gewijzigd');
+    // On: the page itself asks for the passkey; switching it off with only a mailbox doesn't work.
+    expect((await call(`/access/${client_id}`, { headers: { Cookie: byCode } })).headers.get('Location')).toBe(`/login/passkey?continue=${encodeURIComponent(`/access/${client_id}`)}`);
+    expect((await post(`/access/${client_id}`, { action: 'passkey-off' }, { Cookie: byCode })).headers.get('Location')).toMatch(/^\/login\/passkey/);
+    const withKey = await passkeySession(auth);
+    expect((await post(`/access/${client_id}`, { action: 'passkey-off' }, { Cookie: withKey })).headers.get('Location')).toBe(`/access/${client_id}?done=passkeyOff`);
+  });
+});
+
+describe('managing passkeys once there is one', () => {
+  it('adding or removing one takes a passkey sign-in; a mailed code alone is refused', async () => {
+    const email = uniqueEmail('stepup');
+    const first = await signUp(email);
+    const auth = await addPasskey(first.cookie);
+    const { cookie: byCode } = await signUp(email);
+    const options = await postJson('/passkey/register/options', {}, { Cookie: byCode });
+    expect(options.status).toBe(403);
+    expect(((await options.json()) as { error: string }).error).toContain('Meld je eerst aan met een van je passkeys');
+    const removed = await post('/account/passkeys', { action: 'delete', id: b64u(auth.id) }, { Cookie: byCode });
+    expect(removed.status).toBe(403);
+    expect(await row(auth.id)).not.toBeNull();
+    // With the passkey: both work.
+    const withKey = await passkeySession(auth);
+    await addPasskey(withKey, 'Second');
+    expect((await post('/account/passkeys', { action: 'delete', id: b64u(auth.id) }, { Cookie: withKey })).headers.get('Location')).toBe('/account');
+  });
+
+  it('all lost: a platform admin removes them (admin API), the user is told by mail', async () => {
+    const email = uniqueEmail('reset');
+    const { cookie } = await signUp(email);
+    const auth = await addPasskey(cookie);
+    const res = await call(`/admin/users/${encodeURIComponent(email)}/passkeys`, { method: 'DELETE', headers: ADMIN_API });
+    expect(await res.json()).toEqual({ ok: true, removed: 1 });
+    expect(await row(auth.id)).toBeNull();
+    expect((await mails()).reverse().find((m) => m.body.message.to === email)!.body.message.subject).toBe('Je passkeys zijn verwijderd');
+    expect((await call(`/admin/users/${encodeURIComponent(email)}/passkeys`, { method: 'DELETE', headers: { ...ADMIN_API, 'CF-Connecting-IP': '203.0.113.5' } })).status).toBe(404);
+  });
+});

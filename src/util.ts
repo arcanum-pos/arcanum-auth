@@ -121,12 +121,13 @@ export function sameOrigin(request: Request, issuer: string): boolean {
   return site === 'same-origin' || site === 'none';
 }
 
-// Where to go after signing in: only our own authorize / device pages.
+// Where to go after signing in: only our own authorize / device / account
+// pages, an access page, or the passkey step on the way to one of them.
 export function safeContinue(value: string | null | undefined): string {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return '/account';
   const path = value.split('?')[0];
   if (/^\/access\/[^/?]+$/.test(path)) return value;
-  return path === '/authorize' || path === '/device' || path === '/account' ? value : '/account';
+  return path === '/authorize' || path === '/device' || path === '/account' || path === '/login/passkey' ? value : '/account';
 }
 
 export async function readForm(request: Request): Promise<Record<string, string>> {

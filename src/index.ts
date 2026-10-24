@@ -17,7 +17,7 @@ import { clientSelf } from './clients';
 import type { Env } from './env';
 import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
 import { messagePage, texts } from './pages';
-import { manageGoogle, managePasskey, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions } from './passkeys';
+import { manageGoogle, managePasskey, manageSessions, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions, passkeyRequired } from './passkeys';
 import { PASSKEY_SCRIPT } from './passkey-script';
 import { json, redirect, safeContinue } from './util';
 import { tooManyRequests, withinLimit } from './ratelimit';
@@ -73,6 +73,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/login/code' && (method === 'GET' || method === 'POST')) return loginCode(request, env);
       if (path === '/login/link' && (method === 'GET' || method === 'POST')) return loginLink(request, env);
       if (path === '/login/name' && method === 'POST') return loginName(request, env);
+      if (path === '/login/passkey' && method === 'GET') return passkeyRequired(request, env);
       // No passwords anymore: the old sign-up, verify and reset pages lead to sign-in.
       if (path === '/signup' || path === '/verify' || path === '/reset' || path === '/reset/confirm') {
         return redirect(`/login?continue=${encodeURIComponent(safeContinue(url.searchParams.get('continue')))}`, {}, 303);
@@ -96,6 +97,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/passkey/offer' && (method === 'GET' || method === 'POST')) return passkeyOffer(request, env);
       if (path === '/account/passkeys' && method === 'POST') return managePasskey(request, env);
       if (path === '/account/google' && method === 'POST') return manageGoogle(request, env);
+      if (path === '/account/sessions' && method === 'POST') return manageSessions(request, env);
       if (path === '/passkey.js' && method === 'GET') {
         return new Response(PASSKEY_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' } });
       }

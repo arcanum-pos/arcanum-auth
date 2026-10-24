@@ -1,7 +1,9 @@
 import { jwtVerify, SignJWT } from 'jose';
 import type { Env } from './env';
 import { signingKey, verificationKey } from './keys';
-import type { User } from './store';
+import type { Amr, User } from './store';
+
+const AMR_CLAIM: Record<Amr, string[]> = { otp: ['otp'], link: ['otp'], fed: ['fed'], passkey: ['hwk', 'mfa'] };
 import { inSeconds, nowIso, randomToken, sha256, unixNow } from './util';
 
 export const ACCESS_TOKEN_SECONDS = 3600;
@@ -15,7 +17,7 @@ export function scopeHas(scope: string, value: string): boolean {
 // token endpoint returns them for every grant.
 export async function issueTokens(
   env: Env,
-  params: { clientId: string; user: User; scope: string; authTime: number; nonce?: string | null }
+  params: { clientId: string; user: User; scope: string; authTime: number; nonce?: string | null; amr?: Amr | null }
 ): Promise<Record<string, unknown>> {
   const { key, kid } = await signingKey(env);
   const now = unixNow();
@@ -39,6 +41,9 @@ export async function issueTokens(
   if (scopeHas(params.scope, 'openid')) {
     const claims: Record<string, unknown> = { auth_time: params.authTime };
     if (params.nonce) claims.nonce = params.nonce;
+    // How the user signed in (RFC 8176 values where there's one): a passkey
+    // with user verification counts as two factors.
+    if (params.amr) claims.amr = AMR_CLAIM[params.amr];
     if (scopeHas(params.scope, 'email')) Object.assign(claims, { email: params.user.email, email_verified: !!params.user.email_verified });
     if (scopeHas(params.scope, 'profile')) claims.name = params.user.name;
     body.id_token = await new SignJWT(claims)
@@ -54,9 +59,9 @@ export async function issueTokens(
   if (scopeHas(params.scope, 'offline_access')) {
     const refresh = randomToken(32);
     await env.DB.prepare(
-      'INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at, amr) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-      .bind(await sha256(refresh), params.clientId, params.user.id, params.scope, params.authTime, nowIso(), inSeconds(REFRESH_TOKEN_SECONDS))
+      .bind(await sha256(refresh), params.clientId, params.user.id, params.scope, params.authTime, nowIso(), inSeconds(REFRESH_TOKEN_SECONDS), params.amr ?? null)
       .run();
     body.refresh_token = refresh;
   }

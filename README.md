@@ -106,6 +106,18 @@ sets up an installation, or by hand there for another application
   `login_limited`, `code_guesses_limited`, `rate_limited`, `admin`,
   `client_self`, `admin_from_internet`. Search them in the dashboard
   (Workers → arcanum-auth → Logs); never a token or secret in them.
+- **Passkey required** per client (its admins switch it on `/access/:id`,
+  or the admin API's `require_passkey`): only a session made with a passkey
+  gets a code or a device sign-in for it; someone without one adds their
+  first on the spot. Sessions remember how they were made (`amr`: a mailed
+  code, Google, a passkey), and the id_token says so (`amr`: `otp`, `fed`,
+  or `hwk` + `mfa` for a passkey). Once someone has a passkey, adding or
+  removing one - and managing a client that requires one - takes a passkey
+  sign-in, so a mailbox alone can't swap them. All lost: a platform admin
+  removes them (`DELETE /admin/users/:email/passkeys`), and the user is told.
+- **Sessions** end after 7 days without use (14 at most). `/account` lists
+  them (browser, since when, how), ends one, or signs out everywhere else -
+  every application's refresh tokens included.
 - **CI** (`.github/workflows/ci.yml`): typecheck, tests, `npm audit` of the
   deployed dependencies, Semgrep, and OWASP ZAP's passive baseline against
   a local copy (findings triaged in `.zap/rules.tsv`, each with its reason;
@@ -339,14 +351,28 @@ provider").
   10 ms of CPU either.
 - **Rate limits**: 10 mails per IP and 5 per address per hour; 5 tries per
   mailed code, 10 wrong codes per address per hour; 20 wrong device codes
-  per IP per quarter hour.
-- **Key rotation**: generate a new key; put the *old* key's public JWK (no
-  `d`/`p`/`q`/…) in `PREVIOUS_PUBLIC_KEYS` as a JSON array; replace
-  `SIGNING_KEY`. Remove the old one after an hour (the longest access/id
-  token lifetime).
-- **Not (yet) here**: two-factor authentication, an admin UI, account
-  deletion, dynamic client registration, consent screens (every client is
-  first-party).
+  per IP per quarter hour; and before any of these, 20 form posts a minute
+  per IP in memory.
+- **Not (yet) here**: an admin UI, account deletion, dynamic client
+  registration, consent screens (every client is first-party).
+
+## Rotating secrets
+
+Every secret lives only as a Worker secret (`npx wrangler secret put …
+--name arcanum-auth`); nothing is in the repo or `wrangler.jsonc`. Rotate
+one when it may have leaked, and the signing key once a year anyway.
+
+| Secret | Rotating it breaks | Steps |
+|---|---|---|
+| `SIGNING_KEY` | nothing, done this way | 1. `npm run generate-key --silent > new.json`. 2. The *current* key's public half (its JWK without `d`, `p`, `q`, `dp`, `dq`, `qi`) as a JSON array into `PREVIOUS_PUBLIC_KEYS`. 3. `npx wrangler secret put SIGNING_KEY < new.json`, then `rm new.json`. 4. After an hour (the longest token lifetime), `PREVIOUS_PUBLIC_KEYS` can go. Clients read the keys from the JWKS. |
+| `CODE_HASH_KEY` | codes mailed in the last 15 minutes | `openssl rand -base64 32 \| npx wrangler secret put CODE_HASH_KEY` |
+| `ADMIN_API_KEY` | the bootstrapper until it has the new one | new value here, then the same in the bootstrapper's secret |
+| `SETTINGS_KEY` | the mail account stored from the bootstrapper | store it again at `/admin/e-mail` after the change |
+| `GOOGLE_CLIENT_SECRET` | Google sign-in until both match | a new secret in Google Cloud Console, then here; delete the old one there |
+| `TURNSTILE_SECRET` | the sign-in form until both match | rotate in the dashboard (Turnstile → widget → Rotate secret), then here |
+| `MAILER_INTERNAL_KEY` | sign-in mails until both match | the same new value here and in arcanum-platform-mailer |
+| a client's secret | that installation until its installer has it | the client rotates it itself: `POST /clients/self/secret` |
+
 
 ## License
 

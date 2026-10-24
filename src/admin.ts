@@ -3,7 +3,7 @@ import { currentMail, mailProvider, sendMail, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
 import { clientById, createGuest, userById } from './store';
 import { texts } from './pages';
-import { inSeconds, json, newEmailCode, nowIso, randomToken, sha256, timingSafeEqual } from './util';
+import { inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
 const LOGIN_LINK_SECONDS = 60;
 
@@ -234,13 +234,14 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
   if (one && request.method === 'PATCH') {
-    const body = (await request.json().catch(() => null)) as { restricted?: unknown; redirect_uris?: unknown; post_logout_redirect_uris?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as { restricted?: unknown; require_passkey?: unknown; redirect_uris?: unknown; post_logout_redirect_uris?: unknown } | null;
     const sets: string[] = [];
     const params: unknown[] = [];
-    if (body?.restricted !== undefined) {
-      if (typeof body.restricted !== 'boolean') return json({ error: 'restricted must be true or false' }, 400);
-      sets.push('restricted = ?');
-      params.push(body.restricted ? 1 : 0);
+    for (const field of ['restricted', 'require_passkey'] as const) {
+      if (body?.[field] === undefined) continue;
+      if (typeof body[field] !== 'boolean') return json({ error: `${field} must be true or false` }, 400);
+      sets.push(`${field} = ?`);
+      params.push(body[field] ? 1 : 0);
     }
     // Each list given replaces the old one (exact URIs, https — as at creation).
     for (const [field, min] of [['redirect_uris', 1], ['post_logout_redirect_uris', 0]] as const) {
@@ -250,11 +251,24 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
       sets.push(`${field} = ?`);
       params.push(JSON.stringify(uris));
     }
-    if (!sets.length) return json({ error: 'restricted, redirect_uris or post_logout_redirect_uris is required' }, 400);
+    if (!sets.length) return json({ error: 'restricted, require_passkey, redirect_uris or post_logout_redirect_uris is required' }, 400);
     const res = await env.DB.prepare(`UPDATE clients SET ${sets.join(', ')} WHERE id = ? AND disabled_at IS NULL`).bind(...params, decodeURIComponent(one[1])).run();
     if (!res.meta.changes) return json({ error: 'Not found' }, 404);
     const client = await clientById(env, decodeURIComponent(one[1]));
-    return json({ ok: true, restricted: !!client!.restricted, redirect_uris: client!.redirect_uris, post_logout_redirect_uris: client!.post_logout_redirect_uris });
+    return json({ ok: true, restricted: !!client!.restricted, require_passkey: !!client!.require_passkey, redirect_uris: client!.redirect_uris, post_logout_redirect_uris: client!.post_logout_redirect_uris });
+  }
+  // Someone lost all their passkeys (once they have one, managing them takes
+  // a passkey sign-in - passkeys.ts): a platform admin removes them all; the
+  // user signs in by mail and adds a new one. They're told by mail.
+  const passkeysOfUser = path.match(/^\/admin\/users\/([^/]+)\/passkeys$/);
+  if (passkeysOfUser && request.method === 'DELETE') {
+    const email = normalizeEmail(decodeURIComponent(passkeysOfUser[1]));
+    const user = await env.DB.prepare('SELECT id, email FROM users WHERE email = ? AND guest = 0').bind(email).first<{ id: string; email: string }>();
+    if (!user) return json({ error: 'Not found' }, 404);
+    const removed = await env.DB.prepare('DELETE FROM passkeys WHERE user_id = ?').bind(user.id).run();
+    const t = texts(request);
+    await sendMail(env, user.email, t.mailPasskeysResetSubject, t.mailPasskeysReset(`${env.ISSUER}/account`)).catch((err) => console.error('passkeys reset mail failed', err));
+    return json({ ok: true, removed: removed.meta.changes ?? 0 });
   }
   if (one && request.method === 'DELETE') {
     const id = decodeURIComponent(one[1]);

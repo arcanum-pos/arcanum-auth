@@ -1,3 +1,5 @@
+import { securityEvent } from './audit';
+import { needsPasskey, passkeyStep } from './passkeys';
 import type { Env } from './env';
 import { sendMail } from './mail';
 import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
@@ -132,6 +134,9 @@ async function asAdmin(request: Request, env: Env, clientId: string): Promise<{ 
   const row = client && !session.user.guest ? await accessRow(env, client.id, session.user.email) : null;
   if (!client) return messagePage(request, texts(request).errors.notAdmin, 403);
   if (row?.status !== 'assigned' || row.role !== 'admin') return notAdminPage(request, { clientId: client.id, clientName: client.name, email: session.user.email });
+  // A client that requires a passkey is managed only with one too (so its
+  // rule can't be switched off with just someone's mailbox).
+  if (needsPasskey(client, session)) return passkeyStep(`/access/${clientId}`);
   return { client, user: session.user };
 }
 
@@ -153,6 +158,7 @@ async function adminView(request: Request, env: Env, client: Client, user: User,
       logoutUris: client.post_logout_redirect_uris,
       byInstaller: !!client.instance_url,
       restricted: !!client.restricted,
+      requirePasskey: !!client.require_passkey,
       me: user.email,
       items: results || [],
       ...opts,
@@ -220,6 +226,18 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
         await sendMail(env, admin, t.mailUrisSubject(client.name), t.mailUris(client.name, user.email, redirects, manage)).catch((err) => console.error('uris mail failed', err));
       }
       return back('uris');
+    }
+    case 'passkey-on':
+    case 'passkey-off': {
+      const on = form.action === 'passkey-on';
+      if (!!client.require_passkey === on) return back('none');
+      await env.DB.prepare('UPDATE clients SET require_passkey = ? WHERE id = ?').bind(on ? 1 : 0, client.id).run();
+      securityEvent('passkey_rule', { client: client.id, on, by: user.email });
+      const manage = `${env.ISSUER}/access/${encodeURIComponent(client.id)}`;
+      for (const admin of (await adminsOf(env, client)).filter((a) => a !== user.email)) {
+        await sendMail(env, admin, t.mailPasskeyRuleSubject(client.name), t.mailPasskeyRule(client.name, user.email, on, manage)).catch((err) => console.error('passkey rule mail failed', err));
+      }
+      return back(on ? 'passkeyOn' : 'passkeyOff');
     }
     default:
       return back('none');

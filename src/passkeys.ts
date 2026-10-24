@@ -11,6 +11,13 @@
 //   POST /passkey/register         (signed in) → { redirect }
 //   GET/POST /passkey/offer        once after signing in another way: add one, or not now
 //   POST /account/passkeys         rename or remove one (a form on /account)
+//   GET  /login/passkey            a client that requires a passkey (2026-10-24):
+//                                  sign in with yours, or add your first one
+//
+// Once someone has a passkey, adding or removing one takes a session made
+// with a passkey: else whoever reads their mail could sign in with a code,
+// swap the passkeys and pass any client that requires one. All of them lost:
+// a platform admin resets them (DELETE /admin/users/:email/passkeys).
 //
 // The JSON endpoints take JSON from this very origin only (CSRF). Challenges
 // are single use and live five minutes (webauthn_challenges, hashed).
@@ -25,8 +32,9 @@ import {
 import type { Env } from './env';
 import { sendMail } from './mail';
 import { managedClients } from './access';
-import { accountPage, passkeyOfferPage, texts, type ErrorKey, type PasskeyItem } from './pages';
-import { clientIp, createSession, currentSession, recordAttempt, tooManyAttempts, type User } from './store';
+import { securityEvent } from './audit';
+import { accountPage, passkeyOfferPage, passkeyRequiredPage, texts, type ErrorKey, type PasskeyItem, type SessionItem } from './pages';
+import { clientIp, createSession, currentSession, recordAttempt, SESSION_IDLE_SECONDS, tooManyAttempts, type Client, type Session, type User } from './store';
 import { base64url, fromBase64url, inSeconds, json, nowIso, readForm, redirect, safeContinue, sameOrigin, sha256, unixNow } from './util';
 
 const CHALLENGE_SECONDS = 300;
@@ -174,22 +182,40 @@ export async function passkeyLogin(request: Request, env: Env): Promise<Response
     return fail(request, 'passkeyFailed', 401);
   }
   await env.DB.prepare('UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ?').bind(newCounter, nowIso(), key.id).run();
-  const cookie = await createSession(env, key.user_id, unixNow());
+  const cookie = await createSession(env, key.user_id, unixNow(), { amr: 'passkey', request });
   return json({ redirect: safeContinue(typeof b.continue === 'string' ? b.continue : null) }, 200, { 'Set-Cookie': cookie });
+}
+
+// --- A client that requires a passkey.
+
+export const needsPasskey = (client: Client, session: Session) => !!client.require_passkey && session.amr !== 'passkey';
+
+// To where it says: sign in with a passkey (or add the first one), then back.
+export const passkeyStep = (continueTo: string) => redirect(`/login/passkey?continue=${encodeURIComponent(continueTo)}`);
+
+export async function passkeyRequired(request: Request, env: Env): Promise<Response> {
+  const continueTo = safeContinue(new URL(request.url).searchParams.get('continue'));
+  const session = await currentSession(env, request);
+  if (!session) return redirect(`/login?continue=${encodeURIComponent(continueTo)}`);
+  if (session.amr === 'passkey' || session.user.guest) return redirect(continueTo);
+  const has = (await passkeysOf(env, session.user.id)).length > 0;
+  return passkeyRequiredPage(request, { continueTo, enroll: !has });
 }
 
 // --- Adding one (signed in).
 
-async function signedInAccount(request: Request, env: Env): Promise<User | null> {
+async function signedInAccount(request: Request, env: Env): Promise<Session | null> {
   const session = await currentSession(env, request);
-  return session && !session.user.guest ? session.user : null;
+  return session && !session.user.guest ? session : null;
 }
 
 export async function passkeyRegisterOptions(request: Request, env: Env): Promise<Response> {
   if (!jsonFromHere(request, env)) return fail(request, 'request', 403);
-  const user = await signedInAccount(request, env);
-  if (!user) return fail(request, 'signInFirst', 401);
+  const session = await signedInAccount(request, env);
+  if (!session) return fail(request, 'signInFirst', 401);
+  const user = session.user;
   const existing = await passkeysOf(env, user.id);
+  if (existing.length && session.amr !== 'passkey') return fail(request, 'passkeyStepUp', 403);
   const options = await generateRegistrationOptions({
     // What the browser shows when saving it: this sign-in service's own host.
     rpName: rp(env).id,
@@ -208,8 +234,11 @@ export async function passkeyRegisterOptions(request: Request, env: Env): Promis
 
 export async function passkeyRegister(request: Request, env: Env): Promise<Response> {
   if (!jsonFromHere(request, env)) return fail(request, 'request', 403);
-  const user = await signedInAccount(request, env);
-  if (!user) return fail(request, 'signInFirst', 401);
+  const session = await signedInAccount(request, env);
+  if (!session) return fail(request, 'signInFirst', 401);
+  const user = session.user;
+  const first = (await passkeysOf(env, user.id)).length === 0;
+  if (!first && session.amr !== 'passkey') return fail(request, 'passkeyStepUp', 403);
   const b = await body(request);
   const response = b.response as RegistrationResponseJSON | undefined;
   if (!response?.response?.clientDataJSON) return fail(request, 'request', 400);
@@ -250,6 +279,9 @@ export async function passkeyRegister(request: Request, env: Env): Promise<Respo
       nowIso()
     )
     .run();
+  // The first one, just made and used: this session now counts as made with a
+  // passkey (a client that requires one lets it through).
+  if (first) await env.DB.prepare("UPDATE sessions SET amr = 'passkey' WHERE id_hash = ?").bind(session.idHash).run();
   // Told by mail: someone who got into the account can't quietly add a way back in.
   const t = texts(request);
   await sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${env.ISSUER}/account`)).catch((err) => console.error('passkey mail failed', err));
@@ -276,7 +308,7 @@ export async function passkeyOffer(request: Request, env: Env): Promise<Response
 
 // --- /account: the list, rename, remove.
 
-export async function accountWithPasskeys(request: Request, env: Env, user: User, opts: { added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null } = {}, status = 200) {
+export async function accountWithPasskeys(request: Request, env: Env, user: User, opts: { added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null } = {}, status = 200) {
   const passkeys: PasskeyItem[] = (await passkeysOf(env, user.id)).map((k) => {
     const transports = JSON.parse(k.transports) as string[];
     return {
@@ -288,7 +320,7 @@ export async function accountWithPasskeys(request: Request, env: Env, user: User
       transports: transports.filter((t) => t === 'usb' || t === 'nfc' || t === 'ble'),
     };
   });
-  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, managed: await managedClients(env, user), ...opts }, status);
+  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, managed: await managedClients(env, user), sessions: await sessionsOf(env, request, user), ...opts }, status);
 }
 
 export async function managePasskey(request: Request, env: Env): Promise<Response> {
@@ -297,10 +329,47 @@ export async function managePasskey(request: Request, env: Env): Promise<Respons
   if (!sameOrigin(request, env.ISSUER)) return accountWithPasskeys(request, env, session.user, { error: 'request' }, 403);
   const form = await readForm(request);
   if (form.action === 'delete') {
+    // Removing one takes a passkey sign-in (see the top of this file).
+    if (session.amr !== 'passkey') return accountWithPasskeys(request, env, session.user, { error: 'passkeyStepUp' }, 403);
     await env.DB.prepare('DELETE FROM passkeys WHERE id = ? AND user_id = ?').bind(form.id || '', session.user.id).run();
   } else if (form.action === 'rename') {
     const name = (form.name || '').trim().slice(0, 60);
     if (name) await env.DB.prepare('UPDATE passkeys SET name = ? WHERE id = ? AND user_id = ?').bind(name, form.id || '', session.user.id).run();
+  }
+  return redirect('/account');
+}
+
+// --- Where someone is signed in (/account, 2026-10-24): this site's live
+// sessions, one ended, or all others and every application's refresh tokens.
+
+async function sessionsOf(env: Env, request: Request, user: User): Promise<SessionItem[]> {
+  const current = await currentSession(env, request);
+  const idleSince = new Date(Date.now() - SESSION_IDLE_SECONDS * 1000).toISOString();
+  const { results } = await env.DB.prepare(
+    `SELECT id_hash, created_at, last_seen_at, user_agent, amr FROM sessions
+     WHERE user_id = ? AND expires_at > ? AND COALESCE(last_seen_at, created_at) > ? ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 20`
+  )
+    .bind(user.id, nowIso(), idleSince)
+    .all<{ id_hash: string; created_at: string; last_seen_at: string | null; user_agent: string | null; amr: string | null }>();
+  return (results || []).map((r) => ({ id: r.id_hash, created_at: r.created_at, last_seen_at: r.last_seen_at, user_agent: r.user_agent, amr: r.amr, current: r.id_hash === current?.idHash }));
+}
+
+export async function manageSessions(request: Request, env: Env): Promise<Response> {
+  const session = await currentSession(env, request);
+  if (!session) return redirect('/login?continue=%2Faccount');
+  if (!sameOrigin(request, env.ISSUER)) return accountWithPasskeys(request, env, session.user, { error: 'request' }, 403);
+  const form = await readForm(request);
+  if (form.action === 'end' && form.id && form.id !== session.idHash) {
+    await env.DB.prepare('DELETE FROM sessions WHERE id_hash = ? AND user_id = ?').bind(form.id, session.user.id).run();
+    return redirect('/account');
+  }
+  if (form.action === 'everywhere') {
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND id_hash != ?').bind(session.user.id, session.idHash),
+      env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').bind(nowIso(), session.user.id),
+    ]);
+    securityEvent('signed_out_everywhere', { user: session.user.id });
+    return redirect('/account?ended=everywhere');
   }
   return redirect('/account');
 }

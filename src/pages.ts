@@ -91,11 +91,35 @@ const T = {
     saveUris: "Adressen opslaan",
     urisHint: "Waar deze toepassing na het aanmelden naartoe mag - precies zoals ze het gebruikt. De andere beheerders krijgen een e-mail bij elke wijziging.",
     urisByInstaller: "Deze adressen beheert de installatie zelf (haar installer voegt bv. een eigen domein toe).",
+    passkeyRequiredTitle: 'Meld je aan met je passkey',
+    passkeyRequiredText: 'Deze toepassing vraagt dat je je aanmeldt met een passkey.',
+    passkeyEnrollTitle: 'Voeg een passkey toe',
+    passkeyEnrollText: 'Deze toepassing vraagt een passkey. Voeg er nu een toe: daarna meld je je ermee aan, met je vingerafdruk, je gezicht of de pincode van je toestel.',
+    passkeyLost: 'Geen passkey meer? Vraag de beheerder van de toepassing om hulp.',
+    passkeyRuleTitle: 'Passkey verplicht',
+    passkeyRuleText: 'Alleen wie zich met een passkey aanmeldt, kan deze toepassing gebruiken. Wie er nog geen heeft, voegt er een toe bij de volgende aanmelding.',
+    passkeyRuleOn: 'Passkey verplicht maken',
+    passkeyRuleOff: 'Niet meer verplichten',
+    passkeyRuleIsOn: 'Een passkey is verplicht.',
+    mailPasskeyRuleSubject: (client: string) => `Passkey-regel van ${client} gewijzigd`,
+    mailPasskeyRule: (client: string, by: string, on: boolean, manage: string) => `${by} heeft ${on ? 'een passkey verplicht gemaakt' : 'de verplichte passkey uitgezet'} voor ${client}.\n\nBekijk het op ${manage}`,
+    mailPasskeysResetSubject: 'Je passkeys zijn verwijderd',
+    mailPasskeysReset: (accountUrl: string) => `Een beheerder heeft op jouw vraag al je passkeys verwijderd. Meld je aan met een code via e-mail en voeg een nieuwe passkey toe op ${accountUrl}.\n\nHeb je dit niet gevraagd? Meld het meteen aan de beheerder.`,
+    sessionsTitle: 'Waar je aangemeld bent',
+    sessionsIntro: 'Op deze site. Wie 7 dagen niets doet, wordt afgemeld; na 14 dagen sowieso.',
+    thisBrowser: 'deze browser',
+    sessionMeta: (since: string, seen: string, how: string) => `Sinds ${since} · laatst ${seen} · ${how}`,
+    amrLabel: { otp: 'met een code via e-mail', fed: 'met Google', passkey: 'met een passkey', link: 'met een eenmalige link' } as Record<string, string>,
+    amrUnknown: 'aangemeld',
+    endSession: 'Afmelden',
+    endEverywhere: 'Overal afmelden',
+    endEverywhereText: 'Meldt je af in alle andere browsers en in elke toepassing: daar meld je je opnieuw aan.',
+    endedEverywhere: 'Je bent overal afgemeld, behalve hier.',
     mailUrisSubject: (client: string) => `Adressen van ${client} gewijzigd`,
     mailUris: (client: string, by: string, uris: string[], url: string) => `${by} wijzigde de adressen waar ${client} na het aanmelden naartoe mag:\n\n${uris.join('\n')}\n\nWas dat niet de bedoeling? Kijk het na op ${url}`,
     notAdminAs: (email: string, client: string) => `Je bent aangemeld als ${email}, en dat account beheert ${client} niet. Kreeg je een e-mail met een aanvraag? Meld je dan aan met het adres waarop je die kreeg.`,
     switchAccount: "Aanmelden met een ander account",
-    accessDone: { approved: "Toegestaan. De persoon krijgt een e-mail.", refused: "Aanvraag geweigerd.", removed: "Verwijderd.", role: "Aangepast.", added: "Toegevoegd.", none: "Niets veranderd.", uris: "Adressen opgeslagen." },
+    accessDone: { approved: "Toegestaan. De persoon krijgt een e-mail.", refused: "Aanvraag geweigerd.", removed: "Verwijderd.", role: "Aangepast.", added: "Toegevoegd.", none: "Niets veranderd.", uris: "Adressen opgeslagen.", passkeyOn: "Vanaf nu is een passkey verplicht.", passkeyOff: "Een passkey is niet meer verplicht." },
     securityKey: 'Beveiligingssleutel',
     phone: 'Telefoon',
     kindSecurityKey: (how: string) => `Beveiligingssleutel${how ? ` · ${how}` : ''}`,
@@ -133,6 +157,7 @@ const T = {
       passkeyExpired: 'Dat duurde te lang. Probeer opnieuw.',
       passkeyExists: 'Dit toestel heeft al een passkey voor je account.',
       passkeyAddFailed: 'De passkey kon niet toegevoegd worden. Probeer opnieuw.',
+      passkeyStepUp: 'Meld je eerst aan met een van je passkeys om je passkeys te beheren.',
       signInFirst: 'Meld je eerst aan.',
     },
     mailTestSubject: 'Testmail',
@@ -220,11 +245,35 @@ const T = {
     saveUris: "Enregistrer les adresses",
     urisHint: "Où cette application peut aller après la connexion - exactement comme elle l’utilise. Les autres administrateurs reçoivent un e-mail à chaque modification.",
     urisByInstaller: "Ces adresses sont gérées par l’installation elle-même (son installateur ajoute p. ex. un domaine propre).",
+    passkeyRequiredTitle: 'Connectez-vous avec votre clé d’accès',
+    passkeyRequiredText: 'Cette application demande que vous vous connectiez avec une clé d’accès.',
+    passkeyEnrollTitle: 'Ajoutez une clé d’accès',
+    passkeyEnrollText: 'Cette application demande une clé d’accès. Ajoutez-en une maintenant : ensuite vous vous connectez avec elle, avec votre empreinte, votre visage ou le code de votre appareil.',
+    passkeyLost: 'Plus de clé d’accès ? Demandez de l’aide à l’administrateur de l’application.',
+    passkeyRuleTitle: 'Clé d’accès obligatoire',
+    passkeyRuleText: 'Seuls ceux qui se connectent avec une clé d’accès peuvent utiliser cette application. Ceux qui n’en ont pas encore en ajoutent une à leur prochaine connexion.',
+    passkeyRuleOn: 'Rendre la clé d’accès obligatoire',
+    passkeyRuleOff: 'Ne plus l’imposer',
+    passkeyRuleIsOn: 'Une clé d’accès est obligatoire.',
+    mailPasskeyRuleSubject: (client: string) => `Règle des clés d’accès de ${client} modifiée`,
+    mailPasskeyRule: (client: string, by: string, on: boolean, manage: string) => `${by} a ${on ? 'rendu une clé d’accès obligatoire' : 'désactivé la clé d’accès obligatoire'} pour ${client}.\n\nVoir sur ${manage}`,
+    mailPasskeysResetSubject: 'Vos clés d’accès ont été supprimées',
+    mailPasskeysReset: (accountUrl: string) => `À votre demande, un administrateur a supprimé toutes vos clés d’accès. Connectez-vous avec un code par e-mail et ajoutez une nouvelle clé d’accès sur ${accountUrl}.\n\nVous ne l’avez pas demandé ? Signalez-le tout de suite à l’administrateur.`,
+    sessionsTitle: 'Où vous êtes connecté',
+    sessionsIntro: 'Sur ce site. Après 7 jours sans activité, vous êtes déconnecté ; après 14 jours de toute façon.',
+    thisBrowser: 'ce navigateur',
+    sessionMeta: (since: string, seen: string, how: string) => `Depuis ${since} · dernière fois ${seen} · ${how}`,
+    amrLabel: { otp: 'avec un code par e-mail', fed: 'avec Google', passkey: 'avec une clé d’accès', link: 'avec un lien unique' } as Record<string, string>,
+    amrUnknown: 'connecté',
+    endSession: 'Déconnecter',
+    endEverywhere: 'Me déconnecter partout',
+    endEverywhereText: 'Vous déconnecte de tous les autres navigateurs et de chaque application : vous vous y reconnectez.',
+    endedEverywhere: 'Vous êtes déconnecté partout, sauf ici.',
     mailUrisSubject: (client: string) => `Adresses de ${client} modifiées`,
     mailUris: (client: string, by: string, uris: string[], url: string) => `${by} a modifié les adresses où ${client} peut aller après la connexion :\n\n${uris.join('\n')}\n\nCe n’était pas voulu ? Vérifiez sur ${url}`,
     notAdminAs: (email: string, client: string) => `Vous êtes connecté en tant que ${email}, et ce compte ne gère pas ${client}. Vous avez reçu un e-mail avec une demande ? Connectez-vous avec l’adresse sur laquelle vous l’avez reçu.`,
     switchAccount: "Se connecter avec un autre compte",
-    accessDone: { approved: "Accepté. La personne reçoit un e-mail.", refused: "Demande refusée.", removed: "Retiré.", role: "Modifié.", added: "Ajouté.", none: "Rien n’a changé.", uris: "Adresses enregistrées." },
+    accessDone: { approved: "Accepté. La personne reçoit un e-mail.", refused: "Demande refusée.", removed: "Retiré.", role: "Modifié.", added: "Ajouté.", none: "Rien n’a changé.", uris: "Adresses enregistrées.", passkeyOn: "Une clé d’accès est désormais obligatoire.", passkeyOff: "Une clé d’accès n’est plus obligatoire." },
     securityKey: 'Clé de sécurité',
     phone: 'Téléphone',
     kindSecurityKey: (how: string) => `Clé de sécurité${how ? ` · ${how}` : ''}`,
@@ -262,6 +311,7 @@ const T = {
       passkeyExpired: 'C’était trop long. Réessayez.',
       passkeyExists: 'Cet appareil a déjà une clé d’accès pour votre compte.',
       passkeyAddFailed: 'La clé d’accès n’a pas pu être ajoutée. Réessayez.',
+      passkeyStepUp: 'Connectez-vous d’abord avec une de vos clés d’accès pour gérer vos clés d’accès.',
       signInFirst: 'Connectez-vous d’abord.',
     },
     mailTestSubject: 'E-mail de test',
@@ -349,11 +399,35 @@ const T = {
     saveUris: "Save addresses",
     urisHint: "Where this application may go after signing in - exactly as it uses them. The other admins get an email on every change.",
     urisByInstaller: "The installation manages these addresses itself (its installer adds e.g. a custom domain).",
+    passkeyRequiredTitle: 'Sign in with your passkey',
+    passkeyRequiredText: 'This application asks you to sign in with a passkey.',
+    passkeyEnrollTitle: 'Add a passkey',
+    passkeyEnrollText: 'This application asks for a passkey. Add one now: from then on you sign in with it, using your fingerprint, your face or your device’s PIN.',
+    passkeyLost: 'No passkey any more? Ask the application’s administrator for help.',
+    passkeyRuleTitle: 'Passkey required',
+    passkeyRuleText: 'Only people who sign in with a passkey can use this application. Whoever has none yet adds one at their next sign-in.',
+    passkeyRuleOn: 'Require a passkey',
+    passkeyRuleOff: 'Stop requiring it',
+    passkeyRuleIsOn: 'A passkey is required.',
+    mailPasskeyRuleSubject: (client: string) => `Passkey rule of ${client} changed`,
+    mailPasskeyRule: (client: string, by: string, on: boolean, manage: string) => `${by} ${on ? 'made a passkey required' : 'stopped requiring a passkey'} for ${client}.\n\nSee it at ${manage}`,
+    mailPasskeysResetSubject: 'Your passkeys were removed',
+    mailPasskeysReset: (accountUrl: string) => `At your request, an administrator removed all your passkeys. Sign in with a code by e-mail and add a new passkey at ${accountUrl}.\n\nDidn’t ask for this? Tell the administrator right away.`,
+    sessionsTitle: 'Where you are signed in',
+    sessionsIntro: 'On this site. After 7 days without use you are signed out; after 14 days in any case.',
+    thisBrowser: 'this browser',
+    sessionMeta: (since: string, seen: string, how: string) => `Since ${since} · last ${seen} · ${how}`,
+    amrLabel: { otp: 'with a code by e-mail', fed: 'with Google', passkey: 'with a passkey', link: 'with a one-time link' } as Record<string, string>,
+    amrUnknown: 'signed in',
+    endSession: 'Sign out',
+    endEverywhere: 'Sign out everywhere',
+    endEverywhereText: 'Signs you out of every other browser and of every application: you sign in there again.',
+    endedEverywhere: 'You are signed out everywhere except here.',
     mailUrisSubject: (client: string) => `Addresses of ${client} changed`,
     mailUris: (client: string, by: string, uris: string[], url: string) => `${by} changed where ${client} may go after signing in:\n\n${uris.join('\n')}\n\nNot intended? Check it at ${url}`,
     notAdminAs: (email: string, client: string) => `You're signed in as ${email}, and that account doesn't manage ${client}. Got an email with a request? Sign in with the address it was sent to.`,
     switchAccount: "Sign in with another account",
-    accessDone: { approved: "Approved. They get an email.", refused: "Request refused.", removed: "Removed.", role: "Changed.", added: "Added.", none: "Nothing changed.", uris: "Addresses saved." },
+    accessDone: { approved: "Approved. They get an email.", refused: "Request refused.", removed: "Removed.", role: "Changed.", added: "Added.", none: "Nothing changed.", uris: "Addresses saved.", passkeyOn: "A passkey is now required.", passkeyOff: "A passkey is no longer required." },
     securityKey: 'Security key',
     phone: 'Phone',
     kindSecurityKey: (how: string) => `Security key${how ? ` · ${how}` : ''}`,
@@ -391,6 +465,7 @@ const T = {
       passkeyExpired: 'That took too long. Try again.',
       passkeyExists: 'This device already has a passkey for your account.',
       passkeyAddFailed: 'The passkey could not be added. Try again.',
+      passkeyStepUp: 'Sign in with one of your passkeys first to manage your passkeys.',
       signInFirst: 'Sign in first.',
     },
     mailTestSubject: 'Test mail',
@@ -586,8 +661,33 @@ const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
   `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
 <p class="error" role="alert" data-passkey-error hidden></p>`;
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; added?: boolean; googleUnlinked?: boolean; error?: ErrorKey | null }, status = 200) {
+export interface SessionItem {
+  // sessions.id_hash: names it in the sign-out form (a hash, not the cookie).
+  id: string;
+  created_at: string;
+  last_seen_at: string | null;
+  user_agent: string | null;
+  amr: string | null;
+  current: boolean;
+}
+
+// "Safari on macOS" from a User-Agent, roughly - enough to tell one's own browsers apart.
+function browserOf(ua: string | null): string {
+  if (!ua) return '?';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+  return os ? `${browser} · ${os}` : browser;
+}
+
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; sessions?: SessionItem[]; added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null }, status = 200) {
   const t = texts(request);
+  const sessionItems = (opts.sessions ?? [])
+    .map(
+      (x) => `<li class="stack" data-testid="session"><div><div class="key-name">${esc(browserOf(x.user_agent))}${x.current ? ` (${t.thisBrowser})` : ''}</div><div class="key-meta">${esc(
+        t.sessionMeta(when(request, x.created_at), when(request, x.last_seen_at ?? x.created_at), (x.amr && t.amrLabel[x.amr]) || t.amrUnknown)
+      )}</div></div>${x.current ? '' : `<form method="post" action="/account/sessions">${hidden('id', x.id)}<button type="submit" name="action" value="end" class="secondary">${t.endSession}</button></form>`}</li>`
+    )
+    .join('');
   const items = opts.passkeys
     .map(
       (k) => `<li class="stack"><div><div class="key-name">${esc(k.name)}</div><div class="key-meta">${esc(kindOf(t, k))}</div><div class="key-meta">${esc(t.passkeyMeta(when(request, k.created_at), k.last_used_at ? when(request, k.last_used_at) : null))}</div></div>
@@ -602,6 +702,9 @@ export function accountPage(request: Request, opts: { email: string; passkeys: P
 ${opts.added ? `<p class="ok" role="status">${t.passkeyAdded}</p>` : ''}${error(t, opts.error)}
 ${items ? `<ul class="keys">${items}</ul>` : `<p>${t.noPasskeys}</p>`}
 ${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidden>${t.passkeyUnsupported}</p>
+<h2>${t.sessionsTitle}</h2><p>${t.sessionsIntro}</p>${opts.endedEverywhere ? `<p class="ok" role="status">${t.endedEverywhere}</p>` : ''}
+${sessionItems ? `<ul class="keys">${sessionItems}</ul>` : ''}
+<form method="post" action="/account/sessions"><p class="hint">${t.endEverywhereText}</p><button type="submit" name="action" value="everywhere" class="secondary">${t.endEverywhere}</button></form>
 ${opts.googleUnlinked ? `<p class="ok" role="status">${t.googleUnlinked}</p>` : ''}${
       opts.google ? `<h2>${t.googleTitle}</h2><p>${t.googleLinkedText}</p><form method="post" action="/account/google"><button type="submit" name="action" value="unlink" class="secondary">${t.unlinkGoogle}</button></form>` : ''
     }
@@ -677,6 +780,7 @@ export function accessAdminPage(
     // An installation's: its installer keeps the addresses up to date — shown, not edited here.
     byInstaller: boolean;
     restricted: boolean;
+    requirePasskey: boolean;
     me: string;
     items: AccessItem[];
     notice?: string;
@@ -714,6 +818,8 @@ ${opts.notice ? `<p class="ok" role="status">${esc(opts.notice)}</p>` : ''}${err
 <h2>${t.requestsTitle}</h2>${requestItems ? `<ul class="keys">${requestItems}</ul>` : `<p>${t.noRequests}</p>`}
 <h2>${t.assignedTitle}</h2><ul class="keys">${assignedItems}</ul>
 <h2>${t.addTitle}</h2><form method="post" action="${action}">${hidden('action', 'add')}<label for="email">${t.email}</label><input id="email" name="email" type="email" required autocomplete="off"><button type="submit">${t.add}</button></form>
+<h2>${t.passkeyRuleTitle}</h2><p>${opts.requirePasskey ? `<strong>${t.passkeyRuleIsOn}</strong> ` : ''}${t.passkeyRuleText}</p>
+<form method="post" action="${action}" data-testid="passkey-rule">${hidden('action', opts.requirePasskey ? 'passkey-off' : 'passkey-on')}<button type="submit" class="secondary">${opts.requirePasskey ? t.passkeyRuleOff : t.passkeyRuleOn}</button></form>
 <h2>${t.addressesTitle}</h2>${
       opts.byInstaller
         ? `<p>${t.urisByInstaller}</p><ul class="keys" data-testid="client-uris">${opts.redirectUris.map((u) => `<li><code>${esc(u)}</code></li>`).join('')}</ul>`
@@ -751,4 +857,16 @@ export function logoutConfirmPage(request: Request, params: Record<string, strin
   const host = new URL(request.url).host;
   const fields = Object.entries(params).map(([k, v]) => hidden(k, v)).join('');
   return page(request, t.signOut, `<h1>${esc(t.logoutConfirm(host))}</h1><p>${t.logoutConfirmText}</p><form method="post" action="/logout">${fields}<button type="submit">${t.signOut}</button></form>`);
+}
+
+// A client that requires a passkey (passkeys.ts passkeyRequired): sign in
+// with yours - or, without one yet, add it (that session then counts).
+export function passkeyRequiredPage(request: Request, opts: { continueTo: string; enroll: boolean }) {
+  const t = texts(request);
+  const body = opts.enroll
+    ? `<h1>${t.passkeyEnrollTitle}</h1><p>${t.passkeyEnrollText}</p>${addPasskeyButton(t, opts.continueTo)}`
+    : `<h1>${t.passkeyRequiredTitle}</h1><p>${t.passkeyRequiredText}</p>
+<div data-passkey-box hidden><button type="button" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button></div>
+<p class="error" role="alert" data-passkey-error hidden></p><p class="hint">${t.passkeyLost}</p>`;
+  return page(request, opts.enroll ? t.passkeyEnrollTitle : t.passkeyRequiredTitle, body, 200, {}, { passkeys: true });
 }

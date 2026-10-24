@@ -32,7 +32,13 @@ export interface Client {
   owner_sub: string | null;
   // Only assigned people may sign in (access.ts); 0: anyone with an account.
   restricted: number;
+  // Only sessions made with a passkey may use it (oidc.ts, needsPasskey).
+  require_passkey: number;
 }
+
+// How a session was made (sessions.amr): a mailed code or its link, Google,
+// a passkey, or a guest's one-time link (admin.ts).
+export type Amr = 'otp' | 'fed' | 'passkey' | 'link';
 
 // --- Users.
 
@@ -80,6 +86,7 @@ interface ClientRow {
   owner_email: string | null;
   owner_sub: string | null;
   restricted: number;
+  require_passkey: number;
   disabled_at: string | null;
 }
 
@@ -133,15 +140,21 @@ export async function authenticateClient(env: Env, request: Request, form: Recor
 export const SESSION_COOKIE = '__Host-session';
 const OLD_SESSION_COOKIE = '__Host-arcanum_auth';
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
+// Not used for this long: over, whatever is left of its 14 days (2026-10-24).
+export const SESSION_IDLE_SECONDS = 60 * 60 * 24 * 7;
+// last_seen_at is written at most this often (D1's daily write quota).
+const SEEN_EVERY_SECONDS = 60 * 60;
 
 // `until`: a guest's session ends with the guest, not after 14 days.
-export async function createSession(env: Env, userId: string, authTime: number, until?: string | null): Promise<string> {
+// `amr`: how it was made; `request`: whose browser (the list on /account).
+export async function createSession(env: Env, userId: string, authTime: number, opts: { amr: Amr; until?: string | null; request?: Request }): Promise<string> {
   const token = randomToken(32);
   const standard = inSeconds(SESSION_SECONDS);
-  const expiresAt = until && until < standard ? until : standard;
+  const expiresAt = opts.until && opts.until < standard ? opts.until : standard;
   const maxAge = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000));
-  await env.DB.prepare('INSERT INTO sessions (id_hash, user_id, auth_time, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(await sha256(token), userId, authTime, nowIso(), expiresAt)
+  const now = nowIso();
+  await env.DB.prepare('INSERT INTO sessions (id_hash, user_id, auth_time, created_at, expires_at, amr, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(await sha256(token), userId, authTime, now, expiresAt, opts.amr, now, opts.request?.headers.get('User-Agent')?.slice(0, 300) ?? null)
     .run();
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
@@ -154,16 +167,33 @@ export function cookieValue(request: Request, name: string): string | null {
   return null;
 }
 
-export async function currentSession(env: Env, request: Request): Promise<{ user: User; authTime: number } | null> {
+export interface Session {
+  user: User;
+  authTime: number;
+  amr: Amr | null;
+  // sha256 of its cookie (sessions.id_hash): which one is this browser's.
+  idHash: string;
+}
+
+// The signed-in session, if any: not expired, not idle for 7 days (2026-10-24).
+export async function currentSession(env: Env, request: Request): Promise<Session | null> {
   const token = cookieValue(request, SESSION_COOKIE) ?? cookieValue(request, OLD_SESSION_COOKIE);
   if (!token) return null;
+  const idHash = await sha256(token);
+  const now = nowIso();
+  const idleSince = new Date(Date.now() - SESSION_IDLE_SECONDS * 1000).toISOString();
   const row = await env.DB.prepare(
-    `SELECT users.*, sessions.auth_time AS session_auth_time FROM sessions JOIN users ON users.id = sessions.user_id
-     WHERE sessions.id_hash = ? AND sessions.expires_at > ? AND (users.guest = 0 OR users.expires_at > ?)`
+    `SELECT users.*, sessions.auth_time AS session_auth_time, sessions.amr AS session_amr, sessions.last_seen_at AS session_seen FROM sessions JOIN users ON users.id = sessions.user_id
+     WHERE sessions.id_hash = ? AND sessions.expires_at > ? AND COALESCE(sessions.last_seen_at, sessions.created_at) > ? AND (users.guest = 0 OR users.expires_at > ?)`
   )
-    .bind(await sha256(token), nowIso(), nowIso())
-    .first<User & { session_auth_time: number }>();
-  return row ? { user: row, authTime: row.session_auth_time } : null;
+    .bind(idHash, now, idleSince, now)
+    .first<User & { session_auth_time: number; session_amr: Amr | null; session_seen: string | null }>();
+  if (!row) return null;
+  if (!row.session_seen || Date.parse(row.session_seen) < Date.now() - SEEN_EVERY_SECONDS * 1000) {
+    await env.DB.prepare('UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?').bind(now, idHash).run();
+  }
+  const { session_auth_time, session_amr, session_seen: _seen, ...user } = row;
+  return { user: user as User, authTime: session_auth_time, amr: session_amr, idHash };
 }
 
 export async function endSession(env: Env, request: Request): Promise<string[]> {
