@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>arcanum-auth admin</title>
+<style>
+:root{--bg:#fafafa;--card:#fff;--fg:#0a0a0a;--muted:#737373;--border:#e5e5e5;--primary:#0a0a0a;--on-primary:#fff;--danger:#b91c1c;--warn-bg:#fef3c7;--warn-fg:#92400e;--ok-bg:#dcfce7;--ok-fg:#166534}
+@media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--card:#171717;--fg:#fafafa;--muted:#a3a3a3;--border:#262626;--primary:#fafafa;--on-primary:#0a0a0a;--danger:#f87171;--warn-bg:#422006;--warn-fg:#fcd34d;--ok-bg:#052e16;--ok-fg:#86efac}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px}
+main{max-width:960px;margin:0 auto;display:grid;gap:16px}
+section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px}
+h1{font-size:20px;margin:0;letter-spacing:-.02em}h2{font-size:16px;margin:0 0 12px}
+p{margin:0 0 10px;color:var(--muted)}
+label{display:block;font-size:12.5px;font-weight:600;margin:10px 0 4px}
+input,textarea{width:100%;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--fg);padding:8px 10px;font:inherit}
+textarea{font:12.5px/1.5 ui-monospace,monospace;resize:vertical}
+button{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--primary);background:var(--primary);color:var(--on-primary);font:600 13.5px system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+button.secondary{background:transparent;color:var(--fg);border-color:var(--border)}
+button.danger{background:transparent;color:var(--danger);border-color:var(--border)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>input{flex:1 1 220px;width:auto}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--border);color:var(--fg)}
+.badge.warn{background:var(--warn-bg);color:var(--warn-fg)}.badge.ok{background:var(--ok-bg);color:var(--ok-fg)}
+code{font:12.5px ui-monospace,monospace;word-break:break-all}
+.client{border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:grid;gap:8px}
+.client.disabled{opacity:.6}
+.clients{display:grid;gap:10px}
+.meta{font-size:12.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:640px){.grid2{grid-template-columns:1fr}}
+.msg{font-size:13px;margin-top:10px}.msg.error{color:var(--danger)}
+.secret{border:1px solid var(--warn-fg);background:var(--warn-bg);color:var(--warn-fg);border-radius:10px;padding:12px;margin-top:12px}
+.secret code{color:var(--fg)}
+details summary{cursor:pointer;font-weight:600;font-size:13px}
+.check{display:flex;gap:8px;align-items:center;font-weight:400;font-size:13.5px;margin-top:12px}.check input{width:auto;margin:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<section>
+  <div class="top">
+    <div><h1>arcanum-auth admin</h1><p id="instance">Not connected yet</p><div id="protections" class="row"></div></div>
+    <form id="keyForm" class="row" style="min-width:min(100%,420px)">
+      <input id="key" type="password" placeholder="ADMIN_API_KEY of this instance" autocomplete="off" aria-label="Admin API key">
+      <button type="submit">Connect</button>
+      <button type="button" id="forget" class="secondary" hidden>Forget key</button>
+    </form>
+  </div>
+  <p class="msg error" id="keyError" hidden></p>
+</section>
+
+<div id="app" hidden>
+<section>
+  <div class="top"><h2>Clients</h2><button class="secondary" id="reload">Refresh</button></div>
+  <div class="clients" id="clients"></div>
+</section>
+
+<section>
+  <h2>New client</h2>
+  <form id="newClient">
+    <div class="grid2">
+      <div><label for="ncName">Name</label><input id="ncName" required maxlength="100" placeholder="Scouts Elewijt"></div>
+      <div><label for="ncApp">App address (fills in the two lists)</label><input id="ncApp" placeholder="https://arcanum.example.be"></div>
+    </div>
+    <div class="grid2">
+      <div><label for="ncRedirects">Redirect URIs, one per line</label><textarea id="ncRedirects" rows="2" required placeholder="https://arcanum.example.be/callback"></textarea></div>
+      <div><label for="ncLogouts">Logout return addresses, one per line</label><textarea id="ncLogouts" rows="2" placeholder="https://arcanum.example.be"></textarea></div>
+    </div>
+    <div class="grid2">
+      <div><label for="ncOwner">Owner e-mail (first admin of its access list)</label><input id="ncOwner" type="email" placeholder="optional"></div>
+      <div><label for="ncInstance">Instance address (for support)</label><input id="ncInstance" placeholder="optional"></div>
+    </div>
+    <label class="check"><input id="ncRestricted" type="checkbox" checked> Restricted: only addresses on its access list can sign in</label>
+    <div class="row" style="margin-top:12px"><button type="submit">Create client</button></div>
+    <p class="msg" id="ncMsg" hidden></p>
+    <div class="secret" id="ncSecret" hidden></div>
+  </form>
+</section>
+
+<div class="grid2">
+<section>
+  <h2>Passkeys lost</h2>
+  <p>Removes all passkeys of an account; they're told by mail and sign in with a mailed code.</p>
+  <form id="passkeys" class="row"><input id="pkEmail" type="email" required placeholder="someone@example.be" aria-label="E-mail"><button type="submit" class="danger">Remove passkeys</button></form>
+  <p class="msg" id="pkMsg" hidden></p>
+</section>
+
+<section>
+  <h2>Mail</h2>
+  <div id="mail"><p>…</p></div>
+  <form id="testMail" class="row" style="margin-top:10px"><input id="tmTo" type="email" required placeholder="send a test mail to" aria-label="Test mail address"><button type="submit" class="secondary">Send test mail</button></form>
+  <p class="msg" id="tmMsg" hidden></p>
+</section>
+</div>
+</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'arcanum-auth-admin-key';
+  var key = '';
+  try { key = sessionStorage.getItem(KEY) || ''; } catch (e) {}
+
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function lines(v) { return v.split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
+  function when(iso) { return iso ? new Date(iso).toLocaleString() : 'never'; }
+  function show(el, text, error) { el.textContent = text; el.className = 'msg' + (error ? ' error' : ''); el.hidden = !text; }
+
+  function api(method, path, body) {
+    var init = { method: method, headers: { Authorization: 'Bearer ' + key } };
+    if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    return fetch(path, init).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) { var e = new Error(data.error || ('HTTP ' + res.status)); e.status = res.status; throw e; }
+        return data;
+      });
+    });
+  }
+
+  var LABELS = {
+    turnstile: 'Turnstile not set', turnstile_keys: 'Turnstile: test or malformed keys', turnstile_secret: 'Turnstile: secret refused',
+    mail_off: 'Mail switched off', mail_unset: 'No mailer or mail account'
+  };
+
+  function connect() {
+    show($('keyError'), '');
+    return api('GET', '/admin/info').then(function (info) {
+      try { sessionStorage.setItem(KEY, key); } catch (e) {}
+      $('instance').innerHTML = 'Connected to <code>' + esc(info.issuer) + '</code>';
+      $('protections').innerHTML = info.protections_off.length
+        ? info.protections_off.map(function (p) { return '<span class="badge warn">' + esc(LABELS[p] || p) + '</span>'; }).join('')
+        : '<span class="badge ok">Turnstile and mail on</span>';
+      $('app').hidden = false; $('forget').hidden = false; $('key').value = '';
+      $('key').placeholder = 'Connected - another key?';
+      loadClients(); loadMail();
+    }).catch(function (e) {
+      $('app').hidden = true;
+      show($('keyError'), e.status === 401 ? 'That key is not this instance\'s ADMIN_API_KEY.' : e.status === 404 ? 'arcanum-auth refused the call as coming from the internet - is this the tools/admin Worker?' : 'Could not reach arcanum-auth: ' + e.message, true);
+    });
+  }
+
+  function loadClients() {
+    return api('GET', '/admin/clients').then(function (list) {
+      list.sort(function (a, b) { return (!!a.disabled_at - !!b.disabled_at) || a.name.localeCompare(b.name); });
+      $('clients').innerHTML = list.length ? list.map(clientHtml).join('') : '<p>No clients yet.</p>';
+    }).catch(function (e) { $('clients').innerHTML = '<p class="msg error">' + esc(e.message) + '</p>'; });
+  }
+
+  function clientHtml(c) {
+    var id = esc(c.client_id);
+    var badges = c.disabled_at ? '<span class="badge warn">Disabled ' + esc(when(c.disabled_at)) + '</span>'
+      : (c.restricted ? '<span class="badge">Restricted</span>' : '<span class="badge ok">Open</span>') + (c.require_passkey ? ' <span class="badge">Passkey required</span>' : '');
+    var actions = c.disabled_at
+      ? '<button class="danger" data-act="delete" data-id="' + id + '" data-name="' + esc(c.name) + '">Delete for good</button>'
+      : '<button class="secondary" data-act="restricted" data-id="' + id + '" data-value="' + !c.restricted + '">' + (c.restricted ? 'Open to everyone' : 'Restrict') + '</button>' +
+        '<button class="secondary" data-act="passkey" data-id="' + id + '" data-value="' + !c.require_passkey + '">' + (c.require_passkey ? 'Passkey not required' : 'Require passkey') + '</button>' +
+        '<button class="danger" data-act="disable" data-id="' + id + '" data-name="' + esc(c.name) + '">Disable</button>';
+    var edit = c.disabled_at ? '' :
+      '<details><summary>Addresses</summary><form data-uris="' + id + '">' +
+      '<div class="grid2"><div><label>Redirect URIs</label><textarea name="r" rows="' + Math.max(2, c.redirect_uris.length) + '">' + esc(c.redirect_uris.join('\n')) + '</textarea></div>' +
+      '<div><label>Logout return addresses</label><textarea name="l" rows="' + Math.max(2, c.post_logout_redirect_uris.length) + '">' + esc(c.post_logout_redirect_uris.join('\n')) + '</textarea></div></div>' +
+      '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save addresses</button></div></form></details>';
+    return '<div class="client' + (c.disabled_at ? ' disabled' : '') + '">' +
+      '<div class="top"><div><strong>' + esc(c.name) + '</strong> <code class="meta">' + id + '</code></div><div class="row">' + badges + '</div></div>' +
+      '<div class="meta">' + (c.owner_email ? 'Owner ' + esc(c.owner_email) + ' · ' : '') + (c.instance_url ? esc(c.instance_url) + ' · ' : '') +
+      'last used ' + esc(when(c.last_used_at)) + ' · ' + c.active_users + ' active users (30 days) · created ' + esc(when(c.created_at)) + '</div>' +
+      '<div class="row">' + actions + '</div>' + edit + '<p class="msg" data-msg="' + id + '" hidden></p></div>';
+  }
+
+  function clientMsg(id, text, error) { var el = document.querySelector('[data-msg="' + id + '"]'); if (el) show(el, text, error); }
+
+  $('clients').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-act]'); if (!b) return;
+    var id = b.dataset.id, act = b.dataset.act, call;
+    if (act === 'restricted') call = api('PATCH', '/admin/clients/' + encodeURIComponent(id), { restricted: b.dataset.value === 'true' });
+    else if (act === 'passkey') call = api('PATCH', '/admin/clients/' + encodeURIComponent(id), { require_passkey: b.dataset.value === 'true' });
+    else if (act === 'disable') { if (!confirm('Disable ' + b.dataset.name + '? Nobody can sign in to it any more. Its owner is not mailed.')) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id)); }
+    else if (act === 'delete') { if (!confirm('Delete ' + b.dataset.name + ' for good, with its tokens and access list? This cannot be undone.')) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id) + '?hard=1'); }
+    b.disabled = true;
+    call.then(loadClients).catch(function (err) { b.disabled = false; clientMsg(id, err.message, true); });
+  });
+
+  $('clients').addEventListener('submit', function (e) {
+    var f = e.target.closest('form[data-uris]'); if (!f) return;
+    e.preventDefault();
+    var id = f.dataset.uris;
+    api('PATCH', '/admin/clients/' + encodeURIComponent(id), { redirect_uris: lines(f.r.value), post_logout_redirect_uris: lines(f.l.value) })
+      .then(function () { clientMsg(id, 'Addresses saved.'); }).catch(function (err) { clientMsg(id, err.message, true); });
+  });
+
+  $('ncApp').addEventListener('input', function () {
+    var base = this.value.trim().replace(/\/+$/, '');
+    if (!base) return;
+    $('ncRedirects').value = base + '/callback';
+    $('ncLogouts').value = base;
+    if (!$('ncInstance').value || $('ncInstance').dataset.auto) { $('ncInstance').value = base; $('ncInstance').dataset.auto = '1'; }
+  });
+  $('ncInstance').addEventListener('input', function () { delete this.dataset.auto; });
+
+  $('newClient').addEventListener('submit', function (e) {
+    e.preventDefault();
+    show($('ncMsg'), ''); $('ncSecret').hidden = true;
+    var body = { name: $('ncName').value.trim(), redirect_uris: lines($('ncRedirects').value), post_logout_redirect_uris: lines($('ncLogouts').value), restricted: $('ncRestricted').checked };
+    if ($('ncOwner').value.trim()) body.owner_email = $('ncOwner').value.trim();
+    if ($('ncInstance').value.trim()) body.instance_url = $('ncInstance').value.trim();
+    api('POST', '/admin/clients', body).then(function (c) {
+      $('ncSecret').innerHTML = '<strong>Created. Copy the secret now - it is never shown again.</strong>' +
+        '<div style="margin-top:8px">Issuer <code>' + esc(c.issuer) + '</code></div>' +
+        '<div>Client id <code>' + esc(c.client_id) + '</code></div>' +
+        '<div>Client secret <code>' + esc(c.client_secret) + '</code></div>' +
+        '<div class="row" style="margin-top:8px"><button type="button" class="secondary" id="copySecret">Copy all three</button></div>';
+      $('ncSecret').hidden = false;
+      $('copySecret').onclick = function () {
+        navigator.clipboard.writeText('ISSUER=' + c.issuer + '\nCLIENT_ID=' + c.client_id + '\nCLIENT_SECRET=' + c.client_secret).then(function () { $('copySecret').textContent = 'Copied'; });
+      };
+      $('newClient').reset(); delete $('ncInstance').dataset.auto;
+      loadClients();
+    }).catch(function (err) { show($('ncMsg'), err.message, true); });
+  });
+
+  $('passkeys').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = $('pkEmail').value.trim();
+    if (!confirm('Remove all passkeys of ' + email + '?')) return;
+    api('DELETE', '/admin/users/' + encodeURIComponent(email) + '/passkeys').then(function (r) {
+      show($('pkMsg'), r.removed + ' passkey(s) removed; ' + email + ' gets a mail.'); $('passkeys').reset();
+    }).catch(function (err) { show($('pkMsg'), err.status === 404 ? 'No account with that address.' : err.message, true); });
+  });
+
+  function loadMail() {
+    api('GET', '/admin/mail').then(function (m) {
+      var used = m.active === 'settings' ? m.stored : m.active === 'secret' ? m.secret : null;
+      $('mail').innerHTML = used
+        ? '<p>Sends through <strong>' + esc(used.provider) + '</strong>' + (used.values && used.values.fromAddress ? ' as <code>' + esc(used.values.fromAddress) + '</code>' : '') +
+          ' (' + (m.active === 'settings' ? 'stored in this instance' : 'the MAIL_CONFIG / MAIL_SMTP secret') + ').</p>'
+        : '<p>No mail account: codes only go to the log. Set <code>MAIL_CONFIG</code> as a secret on this instance.</p>';
+    }).catch(function (err) { $('mail').innerHTML = '<p class="msg error">' + esc(err.message) + '</p>'; });
+  }
+
+  $('testMail').addEventListener('submit', function (e) {
+    e.preventDefault();
+    api('POST', '/admin/mail/test', { to: $('tmTo').value.trim() }).then(function () { show($('tmMsg'), 'Sent - check the inbox (and spam).'); })
+      .catch(function (err) { show($('tmMsg'), err.message, true); });
+  });
+
+  $('keyForm').addEventListener('submit', function (e) { e.preventDefault(); if ($('key').value) { key = $('key').value; connect(); } });
+  $('forget').addEventListener('click', function () { try { sessionStorage.removeItem(KEY); } catch (e) {} location.reload(); });
+  $('reload').addEventListener('click', loadClients);
+  if (key) connect();
+})();
+</script>
+</body>
+</html>

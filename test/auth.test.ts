@@ -111,6 +111,14 @@ describe('admin API', () => {
     const mine = list.find((c) => c.client_id === client.client_id)!;
     expect(mine.name).toBe('Listed');
     expect(mine).not.toHaveProperty('client_secret');
+    expect(mine.require_passkey).toBe(false);
+  });
+
+  it('/admin/info: which instance, and what protection is off (tools/admin shows it)', async () => {
+    expect((await call('/admin/info')).status).toBe(401);
+    const info = (await (await call('/admin/info', { headers: { Authorization: 'Bearer test-admin-key' } })).json()) as { issuer: string; protections_off: string[] };
+    expect(info.issuer).toBe('https://login.kaboutersoft.be');
+    expect(info.protections_off).toContain('turnstile');
   });
 
   it('refuses non-https redirect URIs', async () => {

@@ -1,0 +1,13 @@
+// tools/admin: the admin API from your laptop, never deployed - see README.md.
+// `npx wrangler dev -c tools/admin/wrangler.jsonc` while logged in to the
+// account whose arcanum-auth you manage. Another instance with another Worker
+// name: add an env block here with its own `services` (not inherited).
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "arcanum-auth-admin",
+	"main": "index.js",
+	"compatibility_date": "2026-09-11",
+	"workers_dev": false,
+	"dev": { "port": 8799, "ip": "127.0.0.1" },
+	"services": [{ "binding": "AUTH", "service": "arcanum-auth", "remote": true }]
+}

@@ -194,6 +194,10 @@ has an account. Guests never get into a restricted client.
 
 ## Deploy (Cloudflare, your account)
 
+The admin API (clients, mail, passkey resets) only answers another Worker on
+the same account - the bootstrapper on kaboutersoft's, **`tools/admin`**
+(its README) from your laptop on any account.
+
 1. **Database**
    ```sh
    npx wrangler d1 create arcanum-auth
@@ -335,7 +339,8 @@ written into the database **once**, the first time it's needed. So test with
 a local Arcanum and a fresh local database (see `LOCAL_DEV.md`):
 1. Create a client for the local BFF:
    `ADMIN_API_KEY=… node scripts/create-client.mjs "Arcanum local" http://localhost:8787`
-   (localhost may use http).
+   with `tools/admin` running (the admin API doesn't answer from the
+   internet); localhost may use http.
 2. In arcanum-backend's `.dev.vars`: `DEFAULT_IDP_ISSUER_URL=https://login.kaboutersoft.be`
    plus that `client_id` / `client_secret`. Start backend, bff, frontends,
    devicehub, mailer as `LOCAL_DEV.md` describes.

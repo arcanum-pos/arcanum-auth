@@ -4,6 +4,7 @@ import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, t
 import { clientById, createGuest, userById } from './store';
 import { texts } from './pages';
 import { inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
+import { protectionsOff } from './protections';
 
 const LOGIN_LINK_SECONDS = 60;
 
@@ -123,7 +124,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
 
   if (path === '/admin/clients' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
-      `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, created_at, disabled_at, last_used_at,
+      `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, require_passkey, created_at, disabled_at, last_used_at,
          (SELECT COUNT(DISTINCT user_id) FROM refresh_tokens WHERE refresh_tokens.client_id = clients.id AND refresh_tokens.created_at > ?) AS active_users
        FROM clients ORDER BY created_at`
     )
@@ -137,6 +138,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
       owner_email: string | null;
       owner_sub: string | null;
       restricted: number;
+      require_passkey: number;
       created_at: string;
       disabled_at: string | null;
       last_used_at: string | null;
@@ -152,12 +154,18 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
         owner_email: c.owner_email,
         owner_sub: c.owner_sub,
         restricted: !!c.restricted,
+        require_passkey: !!c.require_passkey,
         last_used_at: c.last_used_at,
         active_users: c.active_users,
         created_at: c.created_at,
         disabled_at: c.disabled_at,
       }))
     );
+  }
+
+  // Which instance this is and what isn't on (protections.ts) - for tools/admin's page.
+  if (path === '/admin/info' && request.method === 'GET') {
+    return json({ issuer: env.ISSUER, protections_off: await protectionsOff(env) });
   }
 
   if (path === '/admin/guests' && request.method === 'POST') {
