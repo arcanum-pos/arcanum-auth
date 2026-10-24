@@ -293,7 +293,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     const by = (query.get('by') || '').trim().toLowerCase();
     if (row.owner_email && by && row.owner_email.toLowerCase() !== by) {
       const t = texts(request);
-      await sendMail(env, row.owner_email, t.mailClientDisabledSubject(row.name), t.mailClientDisabled(row.name, by)).catch((err) => console.error('client disabled mail failed', err));
+      await sendMail(env, row.owner_email, t.mailClientDisabledSubject(row.name), t.mailClientDisabled(row.name, by, new URL(env.ISSUER).host)).catch((err) => console.error('client disabled mail failed', err));
     }
     return json({ ok: true });
   }
