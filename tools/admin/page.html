@@ -28,7 +28,7 @@ code{font:12.5px ui-monospace,monospace;word-break:break-all}
 .client{border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:grid;gap:8px}
 .client.disabled{opacity:.6}
 .client .name{font-size:15px;font-weight:650}
-.hosts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14.5px}.hosts a{color:var(--fg);text-decoration:none;font-weight:500}.hosts a:hover{text-decoration:underline}
+.hosts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14.5px;align-items:center}.hosts .host{display:inline-flex;gap:6px;align-items:center}.hosts a{color:var(--fg);text-decoration:none;font-weight:500}.hosts a:hover{text-decoration:underline}
 .facts{display:grid;gap:1px;font-size:12.5px;color:var(--muted)}.facts code{font-size:12px}
 .clients{display:grid;gap:10px}
 .meta{font-size:12.5px;color:var(--muted)}
@@ -211,6 +211,34 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
   // its own domains, or only its one workers.dev address. All: under "Addresses".
   function shownHosts(c) { return c.hosts || []; }
 
+  // Arcanum installations: which release each address runs (its bff's public
+  // /version, asked through this tool's Worker). Only the addresses an
+  // installation signs in through (a /callback there); other apps have none.
+  var releases = {};
+  function installationHosts(c) {
+    return shownHosts(c).filter(function (h) {
+      return c.redirect_uris.some(function (u) { try { var x = new URL(u); return x.host === h && x.pathname === '/callback'; } catch (e) { return false; } });
+    });
+  }
+  function releaseBadge(h) {
+    var r = releases[h];
+    if (!r) return '<span class="badge" data-release="' + esc(h) + '">…</span>';
+    return r.ok ? '<span class="badge ok" data-release="' + esc(h) + '">' + esc(r.release || 'version unknown') + '</span>'
+      : '<span class="badge warn" data-release="' + esc(h) + '">not answering</span>';
+  }
+  function checkReleases(list) {
+    list.forEach(function (c) {
+      if (c.disabled_at) return;
+      installationHosts(c).forEach(function (h) {
+        if (releases[h]) return;
+        fetch('/version?host=' + encodeURIComponent(h)).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; }).then(function (r) {
+          releases[h] = r;
+          document.querySelectorAll('[data-release="' + h + '"]').forEach(function (el) { el.outerHTML = releaseBadge(h); });
+        });
+      });
+    });
+  }
+
   var clients = [];
   function render() {
     var q = $('search').value.trim().toLowerCase();
@@ -224,7 +252,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
   function loadClients() {
     return api('GET', '/admin/clients').then(function (list) {
       list.sort(function (a, b) { return (!!a.disabled_at - !!b.disabled_at) || a.name.localeCompare(b.name); });
-      clients = list; render();
+      clients = list; releases = {}; render(); checkReleases(list);
     }).catch(function (e) { $('clients').innerHTML = '<p class="msg error">' + esc(e.message) + '</p>'; });
   }
 
@@ -245,7 +273,10 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     var hosts = shownHosts(c);
     return '<div class="client' + (c.disabled_at ? ' disabled' : '') + '">' +
       '<div class="top"><div class="name">' + esc(c.shown_name || c.name) + '</div><div class="row">' + badges + '</div></div>' +
-      (hosts.length ? '<div class="hosts">' + hosts.map(function (h) { return '<a href="https://' + esc(h) + '" target="_blank" rel="noopener noreferrer">' + esc(h) + '</a>'; }).join('') + '</div>' : '') +
+      (hosts.length ? '<div class="hosts">' + hosts.map(function (h) {
+        var release = !c.disabled_at && installationHosts(c).indexOf(h) >= 0 ? ' ' + releaseBadge(h) : '';
+        return '<span class="host"><a href="https://' + esc(h) + '" target="_blank" rel="noopener noreferrer">' + esc(h) + '</a>' + release + '</span>';
+      }).join('') + '</div>' : '') +
       '<div class="facts">' +
         (c.owner_email ? '<div>Owner ' + esc(c.owner_email) + '</div>' : '') +
         '<div>Last used ' + esc(when(c.last_used_at)) + ' · ' + c.active_users + ' active ' + (c.active_users === 1 ? 'user' : 'users') + ' in 30 days</div>' +

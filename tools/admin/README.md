@@ -39,7 +39,10 @@ The page shows which instance it is and what protection is
 off (Turnstile, mail - `/admin/info`), and lets you:
 
 - see every client: open or restricted, passkey required, owner, last used,
-  active users in the last 30 days
+  active users in the last 30 days, the addresses that tell it apart (its own
+  domains, else its one workers.dev address), and for an Arcanum
+  installation which release each address runs (its public `/version`, or
+  "not answering") - what the bootstrapper's Installaties page used to show
 - create one (the secret is shown once, with a button to copy issuer, id
   and secret), open or restrict it, require a passkey, edit its addresses,
   disable it, delete a disabled one for good

@@ -6,6 +6,8 @@
 //   /oidc          where to sign in (arcanum-auth's discovery document)
 //   /exchange      the sign-in's code for a token (the built-in admin client,
 //                  no secret - PKCE; arcanum-auth's /token has no CORS)
+//   /version?host= an Arcanum installation's public /version (its release),
+//                  asked from here: a page can't read it across origins
 //   /admin/*       passed on as a fresh request: the path, the method,
 //                  Authorization, Content-Type and the body - nothing else
 import PAGE from './page.html';
@@ -46,6 +48,19 @@ export default {
       const data = await res.json().catch(() => ({}));
       // Only what the page needs: the access token and how long it lasts.
       return Response.json(res.ok ? { access_token: data.access_token, expires_in: data.expires_in } : { error: data.error_description || data.error || `HTTP ${res.status}` }, { status: res.ok ? 200 : 400 });
+    }
+    if (url.pathname === '/version' && request.method === 'GET') {
+      // A public hostname only (no IP, no localhost), https, 5 seconds.
+      const asked = url.searchParams.get('host') || '';
+      if (!/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(asked)) return Response.json({ error: 'host must be a hostname' }, { status: 400 });
+      try {
+        const res = await fetch(`https://${asked}/version`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000), redirect: 'manual' });
+        if (!res.ok) return Response.json({ ok: false, status: res.status });
+        const body = await res.json().catch(() => null);
+        return Response.json({ ok: true, release: typeof body?.release === 'string' ? body.release.slice(0, 40) : null });
+      } catch {
+        return Response.json({ ok: false });
+      }
     }
     if (!url.pathname.startsWith('/admin/')) return Response.json({ error: 'Only /admin/… goes through' }, { status: 404 });
     const headers = new Headers();
