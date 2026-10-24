@@ -212,28 +212,42 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
   function shownHosts(c) { return c.hosts || []; }
 
   // Arcanum installations: which release each address runs (its bff's public
-  // /version, asked through this tool's Worker). Only the addresses an
-  // installation signs in through (a /callback there); other apps have none.
+  // /version, asked through this tool's Worker). arcanum-auth doesn't mark a
+  // client as an installation, so it's told by its addresses: an installation
+  // signs in at <its address>/callback (the bff) and its installer at
+  // .../auth/callback (or it's self-hosted: instance 'kubernetes'/'docker').
+  // The bootstrapper's own client has only a /callback, an app like Webstudio
+  // only its own. Every /callback address is asked; a release is always shown,
+  // "not answering" only for an installation.
   var releases = {};
-  function installationHosts(c) {
-    return shownHosts(c).filter(function (h) {
-      return c.redirect_uris.some(function (u) { try { var x = new URL(u); return x.host === h && x.pathname === '/callback'; } catch (e) { return false; } });
-    });
+  function paths(c, path) {
+    return c.redirect_uris.filter(function (u) { try { return new URL(u).pathname === path; } catch (e) { return false; } });
   }
-  function releaseBadge(h) {
-    var r = releases[h];
-    if (!r) return '<span class="badge" data-release="' + esc(h) + '">…</span>';
-    return r.ok ? '<span class="badge ok" data-release="' + esc(h) + '">' + esc(r.release || 'version unknown') + '</span>'
-      : '<span class="badge warn" data-release="' + esc(h) + '">not answering</span>';
+  function isInstallation(c) {
+    return (paths(c, '/callback').length > 0 && paths(c, '/auth/callback').length > 0) || c.instance_url === 'kubernetes' || c.instance_url === 'docker';
+  }
+  function callbackHosts(c) {
+    var hosts = paths(c, '/callback').map(function (u) { return new URL(u).host; });
+    return shownHosts(c).filter(function (h) { return hosts.indexOf(h) >= 0; });
+  }
+  function releaseBadge(c, h) {
+    var r = releases[h], attr = ' data-release="' + esc(h) + '" data-client="' + esc(c.client_id) + '"';
+    if (!r) return '<span' + attr + '></span>';
+    if (r.ok && r.release) return '<span class="badge ok"' + attr + '>' + esc(r.release) + '</span>';
+    return isInstallation(c) ? '<span class="badge warn"' + attr + '>not answering</span>' : '<span' + attr + '></span>';
   }
   function checkReleases(list) {
     list.forEach(function (c) {
       if (c.disabled_at) return;
-      installationHosts(c).forEach(function (h) {
+      callbackHosts(c).forEach(function (h) {
         if (releases[h]) return;
+        releases[h] = null;
         fetch('/version?host=' + encodeURIComponent(h)).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; }).then(function (r) {
           releases[h] = r;
-          document.querySelectorAll('[data-release="' + h + '"]').forEach(function (el) { el.outerHTML = releaseBadge(h); });
+          document.querySelectorAll('[data-release="' + h + '"]').forEach(function (el) {
+            var owner = clients.filter(function (x) { return x.client_id === el.dataset.client; })[0];
+            if (owner) el.outerHTML = releaseBadge(owner, h);
+          });
         });
       });
     });
@@ -274,7 +288,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     return '<div class="client' + (c.disabled_at ? ' disabled' : '') + '">' +
       '<div class="top"><div class="name">' + esc(c.shown_name || c.name) + '</div><div class="row">' + badges + '</div></div>' +
       (hosts.length ? '<div class="hosts">' + hosts.map(function (h) {
-        var release = !c.disabled_at && installationHosts(c).indexOf(h) >= 0 ? ' ' + releaseBadge(h) : '';
+        var release = !c.disabled_at && callbackHosts(c).indexOf(h) >= 0 ? ' ' + releaseBadge(c, h) : '';
         return '<span class="host"><a href="https://' + esc(h) + '" target="_blank" rel="noopener noreferrer">' + esc(h) + '</a>' + release + '</span>';
       }).join('') + '</div>' : '') +
       '<div class="facts">' +
