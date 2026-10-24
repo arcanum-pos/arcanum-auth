@@ -1,5 +1,6 @@
 # Weekly updates (HARDENING.md, phase 2). Security fixes come as soon as
-# they're published, whatever the schedule.
+# they're published, whatever the schedule - the ignores below only hold
+# back the regular version updates.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -9,6 +10,14 @@ updates:
     groups:
       dev-tooling:
         dependency-type: development
+    ignore:
+      # Major versions are upgraded by hand (they change APIs).
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      # The test pool needs the miniflare that package.json pins (overrides):
+      # a newer pool doesn't start with it. Upgraded together, by hand.
+      - dependency-name: '@cloudflare/vitest-pool-workers'
+      - dependency-name: miniflare
   - package-ecosystem: github-actions
     directory: /
     schedule:
