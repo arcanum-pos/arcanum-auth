@@ -53,8 +53,41 @@
 			"binding": "MAILER",
 			"service": "arcanum-platform-mailer"
 		}
-	]
+	],
 	// Secrets (wrangler secret put …): SIGNING_KEY, ADMIN_API_KEY,
 	// MAILER_INTERNAL_KEY, MAIL_SMTP (JSON), GOOGLE_CLIENT_ID,
 	// GOOGLE_CLIENT_SECRET — see README.md.
+
+	// Other instances, each on its own Cloudflare account (`--env <name>`).
+	// Bindings and vars are not inherited from above: each block names its
+	// own database, limits and mail - no MAILER here means no mailer needed
+	// on that account. README.md, "Another instance".
+	"env": {
+		// zap: the target of an active ZAP scan (bertkaboutersoft account),
+		// never for real users. No mail ever leaves it (MAIL_SENDING), no
+		// Turnstile (no keys set), so the scan reaches what's behind them;
+		// the hourly protection_off event says so. Workers Builds there, deploy command:
+		// `npx wrangler d1 migrations apply DB --remote --env zap && npx wrangler deploy --env zap`.
+		// (The MAILER warning on deploy is expected: no mailer here on purpose.)
+		"zap": {
+			"name": "arcanum-auth-zap",
+			"workers_dev": true,
+			"routes": [],
+			// No mailer on that account: codes only in its log (wrangler tail).
+			"services": [],
+			"ratelimits": [{ "name": "PUBLIC_RATE_LIMITER", "namespace_id": "3001", "simple": { "limit": 20, "period": 60 } }],
+			"vars": {
+				"ISSUER": "https://arcanum-auth-zap.bertkaboutersoft.workers.dev",
+				"MAIL_SENDING": "off"
+			},
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "arcanum-auth-zap",
+					"database_id": "TODO-zap-database-id",
+					"migrations_dir": "migrations"
+				}
+			]
+		}
+	}
 }

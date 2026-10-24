@@ -9,5 +9,9 @@
 	"compatibility_date": "2026-09-11",
 	"workers_dev": false,
 	"dev": { "port": 8799, "ip": "127.0.0.1" },
-	"services": [{ "binding": "AUTH", "service": "arcanum-auth", "remote": true }]
+	"services": [{ "binding": "AUTH", "service": "arcanum-auth", "remote": true }],
+	"env": {
+		// The ZAP scan target (wrangler.jsonc env.zap), logged in to the bertkaboutersoft account.
+		"zap": { "services": [{ "binding": "AUTH", "service": "arcanum-auth-zap", "remote": true }] }
+	}
 }

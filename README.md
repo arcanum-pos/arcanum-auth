@@ -281,6 +281,28 @@ The issuer is `ISSUER` in `wrangler.jsonc`: `https://login.kaboutersoft.be`,
 **no trailing slash**. Clients must be configured with exactly that string —
 arcanum-bff compares the id_token's `iss` to it character for character.
 
+## Another instance (another Cloudflare account)
+
+Each extra instance is an env block in `wrangler.jsonc` (`env.<name>`): its
+own Worker name, address (`ISSUER`), D1 database, rate limits and mail -
+bindings and vars are not inherited from the top. Today: **`zap`**, the
+target of an active ZAP scan at `https://arcanum-auth-zap.bertkaboutersoft.workers.dev`
+(mail off, no Turnstile, no mailer on that account).
+
+Setting one up, logged in to that account (`npx wrangler login`, `whoami`):
+
+1. `npx wrangler d1 create arcanum-auth-<name>` → put its id in the block,
+   push.
+2. Secrets: `npm run generate-key | npx wrangler secret put SIGNING_KEY --env <name>`,
+   `openssl rand -base64 32 | npx wrangler secret put CODE_HASH_KEY --env <name>`,
+   `openssl rand -base64 32 | npx wrangler secret put ADMIN_API_KEY --env <name>`
+   (keep it somewhere: the way back in), and `ADMIN_EMAILS` (your address).
+   For real users also `SETTINGS_KEY`, mail and Turnstile, as above.
+3. Workers & Pages → Create → Import a repository → `arcanum-pos/arcanum-auth`,
+   deploy command `npx wrangler d1 migrations apply DB --remote --env <name> && npx wrangler deploy --env <name>`.
+   Every push to main then deploys there too, migrations first.
+4. Manage it with `tools/admin` (`--env <name>`): sign in with a passkey.
+
 ## Test it
 
 ### 1. Automated tests
