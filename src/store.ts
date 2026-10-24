@@ -121,8 +121,14 @@ const ADMIN_CLIENT: Client = {
   require_passkey: 1,
 };
 
+// Forgiving about how the list was typed: commas, semicolons, spaces or new
+// lines between addresses, quotes or <> around them, a note next to them -
+// only what looks like an address counts.
 export const adminEmails = (env: Env): string[] =>
-  (env.ADMIN_EMAILS || '').split(',').map((e) => normalizeEmail(e)).filter(Boolean);
+  (env.ADMIN_EMAILS || '')
+    .split(/[\s,;]+/)
+    .map((e) => normalizeEmail(e.replace(/^["'<(]+|[">)']+$/g, '')))
+    .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
 export const isAdminEmail = (env: Env, email: string): boolean => adminEmails(env).includes(normalizeEmail(email));
 
 export async function clientById(env: Env, id: string | null | undefined): Promise<Client | null> {

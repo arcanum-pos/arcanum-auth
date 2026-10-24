@@ -535,5 +535,8 @@ describe('the admin API by signing in (tools/admin)', () => {
     const asked = () => new Request(`${ISSUER}/admin/info`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
     expect(await adminCaller(asked(), env)).toBe('third@example.test');
     expect(await adminCaller(asked(), { ...env, ADMIN_EMAILS: 'tool-admin@example.test' })).toBeNull();
+    // However the list was typed: quotes, semicolons, a note next to it.
+    for (const typed of ['"third@example.test"', 'x@example.test; <THIRD@example.test>', 'third@example.test   (sic)', 'third@example.test\n'])
+      expect(await adminCaller(asked(), { ...env, ADMIN_EMAILS: typed })).toBe('third@example.test');
   });
 });
