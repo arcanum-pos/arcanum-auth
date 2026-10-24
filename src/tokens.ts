@@ -23,9 +23,14 @@ export async function issueTokens(
   const now = unixNow();
   // The client is in use (the platform's overview, an owner's /account) — at most one write an hour.
   const nowText = new Date(now * 1000).toISOString();
-  await env.DB.prepare('UPDATE clients SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)')
-    .bind(nowText, params.clientId, new Date((now - 3600) * 1000).toISOString())
-    .run();
+  const hourAgo = new Date((now - 3600) * 1000).toISOString();
+  // And by whom (client_users: "active users") - also at most once an hour per person.
+  await env.DB.batch([
+    env.DB.prepare('UPDATE clients SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)').bind(nowText, params.clientId, hourAgo),
+    env.DB.prepare(
+      'INSERT INTO client_users (client_id, user_id, last_used_at) VALUES (?, ?, ?) ON CONFLICT (client_id, user_id) DO UPDATE SET last_used_at = excluded.last_used_at WHERE client_users.last_used_at < ?'
+    ).bind(params.clientId, params.user.id, nowText, hourAgo),
+  ]);
   const accessToken = await new SignJWT({ scope: params.scope, client_id: params.clientId })
     .setProtectedHeader({ alg: 'RS256', kid, typ: 'at+jwt' })
     .setIssuer(env.ISSUER)

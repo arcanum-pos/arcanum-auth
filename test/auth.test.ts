@@ -124,6 +124,22 @@ describe('admin API', () => {
     expect(list.find((c) => c.client_id === bare.client_id)!.hosts).toEqual(['arcanum-bff.bare-thing-12ab.workers.dev']);
   });
 
+  it('active users: everyone who got tokens in 30 days - also from an app that never asks for a refresh token', async () => {
+    const client = await newClient('No refresh');
+    for (const who of ['active-a', 'active-b']) {
+      const cookie = await signUp(`${who}-${Date.now()}@example.test`);
+      const { verifier, challenge } = await pkce();
+      const res = await call(authorizeUrl(client.client_id, challenge, { scope: 'openid email' }), { headers: { Cookie: cookie } });
+      const code = new URL(res.headers.get('Location')!).searchParams.get('code')!;
+      const tokens = (await (await post('/token', { grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: client.client_id, client_secret: client.client_secret, code_verifier: verifier })).json()) as Record<string, unknown>;
+      expect(tokens.refresh_token).toBeUndefined();
+    }
+    const list = (await (await call('/admin/clients', { headers: { Authorization: 'Bearer test-admin-key' } })).json()) as { client_id: string; active_users: number; last_used_at: string | null }[];
+    const mine = list.find((c) => c.client_id === client.client_id)!;
+    expect(mine.last_used_at).not.toBeNull();
+    expect(mine.active_users).toBe(2);
+  });
+
   it('/admin/info: which instance, and what protection is off (tools/admin shows it)', async () => {
     expect((await call('/admin/info')).status).toBe(401);
     const info = (await (await call('/admin/info', { headers: { Authorization: 'Bearer test-admin-key' } })).json()) as { issuer: string; protections_off: string[] };

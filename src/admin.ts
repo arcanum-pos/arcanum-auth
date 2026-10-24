@@ -137,7 +137,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
   if (path === '/admin/clients' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
       `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, require_passkey, created_at, disabled_at, last_used_at,
-         (SELECT COUNT(DISTINCT user_id) FROM refresh_tokens WHERE refresh_tokens.client_id = clients.id AND refresh_tokens.created_at > ?) AS active_users
+         (SELECT COUNT(*) FROM client_users WHERE client_users.client_id = clients.id AND client_users.last_used_at > ?) AS active_users
        FROM clients ORDER BY created_at`
     )
       .bind(new Date(Date.now() - 30 * 86400_000).toISOString())
@@ -306,6 +306,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
         env.DB.prepare('DELETE FROM auth_codes WHERE client_id = ?').bind(id),
         env.DB.prepare('DELETE FROM device_codes WHERE client_id = ?').bind(id),
         env.DB.prepare('DELETE FROM client_access WHERE client_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM client_users WHERE client_id = ?').bind(id),
         env.DB.prepare('DELETE FROM clients WHERE id = ?').bind(id),
       ]);
       return json({ ok: true, deleted: true });
