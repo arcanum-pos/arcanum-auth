@@ -114,6 +114,16 @@ describe('admin API', () => {
     expect(mine.require_passkey).toBe(false);
   });
 
+  it('the list names each client as /account does: its own domains, else its one workers.dev address', async () => {
+    const make = (name: string, redirect_uris: string[], post_logout_redirect_uris: string[] = []) =>
+      call('/admin/clients', { method: 'POST', headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ name, redirect_uris, post_logout_redirect_uris, instance_url: redirect_uris[0] }) }).then((r) => r.json() as Promise<{ client_id: string }>);
+    const own = await make('Arcanum - mine.workers.dev', ['https://arcanum-bff.mine.workers.dev/callback', 'https://pos.example.be/callback', 'http://localhost:8787/callback'], ['https://pos.example.be']);
+    const bare = await make('Arcanum - bare-thing-12ab.workers.dev', ['https://arcanum-bff.bare-thing-12ab.workers.dev/callback', 'https://arcanum-installer.bare-thing-12ab.workers.dev/auth/callback']);
+    const list = (await (await call('/admin/clients', { headers: { Authorization: 'Bearer test-admin-key' } })).json()) as { client_id: string; shown_name: string; hosts: string[] }[];
+    expect(list.find((c) => c.client_id === own.client_id)).toMatchObject({ shown_name: 'Arcanum - pos.example.be', hosts: ['pos.example.be'] });
+    expect(list.find((c) => c.client_id === bare.client_id)!.hosts).toEqual(['arcanum-bff.bare-thing-12ab.workers.dev']);
+  });
+
   it('/admin/info: which instance, and what protection is off (tools/admin shows it)', async () => {
     expect((await call('/admin/info')).status).toBe(401);
     const info = (await (await call('/admin/info', { headers: { Authorization: 'Bearer test-admin-key' } })).json()) as { issuer: string; protections_off: string[] };

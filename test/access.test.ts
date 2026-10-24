@@ -767,6 +767,13 @@ describe("shownName", () => {
         ],
       ),
     ).toBe("Arcanum - arcanum.esvvzw.be");
+    // Named with a long dash (older installations): the same.
+    expect(
+      shownName("Arcanum \u2014 bertcarels.workers.dev", "https://arcanum-bff.bertcarels.workers.dev", [
+        "https://arcanum-bff.bertcarels.workers.dev/callback",
+        "https://demo.arcanum.kaboutersoft.be/callback",
+      ]),
+    ).toBe("Arcanum - demo.arcanum.kaboutersoft.be");
     expect(
       shownName(
         "Arcanum - x.workers.dev",

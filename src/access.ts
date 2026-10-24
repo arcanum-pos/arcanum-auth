@@ -5,7 +5,7 @@ import { sendMail } from './mail';
 import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
 import { ADMIN_CLIENT_ID, clientById, currentSession, isAdminEmail, recordAttempt, shownName, tooManyAttempts, type Client, type User } from './store';
 import { validUris } from './admin';
-import { hostsOf, isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
+import { distinctiveHosts, hostsOf, isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
 
 // Restricted clients: only the people assigned to one may sign in to it
 // (every grant checks, not only /authorize). Assigned by
@@ -260,10 +260,9 @@ export async function managedClients(env: Env, user: User): Promise<{ id: string
   )
     .bind(user.email)
     .all<{ id: string; name: string; instance_url: string | null; redirect_uris: string; last_used_at: string | null }>();
-  // Only the addresses that tell one installation from another: its own
-  // domains, not the *.workers.dev ones every Cloudflare installation has.
+  // Only the addresses that tell one installation from another (util.ts).
   return (results || []).map((c) => {
     const redirects = JSON.parse(c.redirect_uris) as string[];
-    return { id: c.id, name: shownName(c.name, c.instance_url, redirects), hosts: hostsOf(redirects).filter((h) => !h.endsWith('.workers.dev')), lastUsedAt: c.last_used_at };
+    return { id: c.id, name: shownName(c.name, c.instance_url, redirects), hosts: distinctiveHosts(redirects), lastUsedAt: c.last_used_at };
   });
 }

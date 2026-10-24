@@ -95,7 +95,8 @@ interface ClientRow {
 // once it has a domain of its own, that says which one it is — "Arcanum —
 // kassa.club.be". The stored name stays as it is (the bootstrapper lists it).
 export function shownName(name: string, instanceUrl: string | null, redirectUris: string[]): string {
-  const generic = name.match(/^(.*?)\s+-\s+[^\s]+\.workers\.dev$/);
+  // Any dash: older installations were named with a long one.
+  const generic = name.match(/^(.*?)\s+[-–—]\s+[^\s]+\.workers\.dev$/);
   if (!instanceUrl || !generic) return name;
   const own = hostsOf(redirectUris).find((h) => !h.endsWith('.workers.dev') && !/^(localhost|127\.0\.0\.1)(:|$)/.test(h));
   return own ? `${generic[1]} - ${own}` : name;

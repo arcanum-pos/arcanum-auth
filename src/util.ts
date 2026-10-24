@@ -102,6 +102,15 @@ export function hostsOf(uris: string[]): string[] {
   return hosts;
 }
 
+// The addresses that tell one client from another: its own domains; only
+// when it has none, its one *.workers.dev address (every Cloudflare
+// installation has one, long and alike). Never localhost.
+export function distinctiveHosts(uris: string[]): string[] {
+  const hosts = hostsOf(uris).filter((h) => !/^(localhost|127\.0\.0\.1)(:|$)/.test(h));
+  const own = hosts.filter((h) => !h.endsWith('.workers.dev'));
+  return own.length ? own : hosts.slice(0, 1);
+}
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

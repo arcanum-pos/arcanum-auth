@@ -27,6 +27,9 @@ button:disabled{opacity:.5;cursor:default}
 code{font:12.5px ui-monospace,monospace;word-break:break-all}
 .client{border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:grid;gap:8px}
 .client.disabled{opacity:.6}
+.client .name{font-size:15px;font-weight:650}
+.hosts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14.5px}.hosts a{color:var(--fg);text-decoration:none;font-weight:500}.hosts a:hover{text-decoration:underline}
+.facts{display:grid;gap:1px;font-size:12.5px;color:var(--muted)}.facts code{font-size:12px}
 .clients{display:grid;gap:10px}
 .meta{font-size:12.5px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -64,7 +67,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 
 <div id="app" hidden>
 <section>
-  <div class="top"><h2>Clients</h2><button class="secondary" id="reload">Refresh</button></div>
+  <div class="top"><h2>Clients</h2><div class="row"><input id="search" type="search" placeholder="Search name, address, owner, id" aria-label="Search clients" style="width:260px"><button class="secondary" id="reload">Refresh</button></div></div>
   <div class="clients" id="clients"></div>
 </section>
 
@@ -124,7 +127,8 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function lines(v) { return v.split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
-  function when(iso) { return iso ? new Date(iso).toLocaleString() : 'never'; }
+  function when(iso) { return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'; }
+  function day(iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) : ''; }
   function show(el, text, error) { el.textContent = text; el.className = 'msg' + (error ? ' error' : ''); el.hidden = !text; }
 
   function api(method, path, body) {
@@ -203,10 +207,24 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     });
   }
 
+  // The addresses that tell a client apart (arcanum-auth's distinctiveHosts):
+  // its own domains, or only its one workers.dev address. All: under "Addresses".
+  function shownHosts(c) { return c.hosts || []; }
+
+  var clients = [];
+  function render() {
+    var q = $('search').value.trim().toLowerCase();
+    var list = clients.filter(function (c) {
+      return !q || [c.name, c.shown_name || '', c.client_id, c.owner_email || ''].concat(c.redirect_uris, c.post_logout_redirect_uris).join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    $('clients').innerHTML = list.length ? list.map(clientHtml).join('') : '<p>' + (clients.length ? 'No client matches.' : 'No clients yet.') + '</p>';
+  }
+  $('search').addEventListener('input', render);
+
   function loadClients() {
     return api('GET', '/admin/clients').then(function (list) {
       list.sort(function (a, b) { return (!!a.disabled_at - !!b.disabled_at) || a.name.localeCompare(b.name); });
-      $('clients').innerHTML = list.length ? list.map(clientHtml).join('') : '<p>No clients yet.</p>';
+      clients = list; render();
     }).catch(function (e) { $('clients').innerHTML = '<p class="msg error">' + esc(e.message) + '</p>'; });
   }
 
@@ -224,10 +242,15 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
       '<div class="grid2"><div><label>Redirect URIs</label><textarea name="r" rows="' + Math.max(2, c.redirect_uris.length) + '">' + esc(c.redirect_uris.join('\n')) + '</textarea></div>' +
       '<div><label>Logout return addresses</label><textarea name="l" rows="' + Math.max(2, c.post_logout_redirect_uris.length) + '">' + esc(c.post_logout_redirect_uris.join('\n')) + '</textarea></div></div>' +
       '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save addresses</button></div></form></details>';
+    var hosts = shownHosts(c);
     return '<div class="client' + (c.disabled_at ? ' disabled' : '') + '">' +
-      '<div class="top"><div><strong>' + esc(c.name) + '</strong> <code class="meta">' + id + '</code></div><div class="row">' + badges + '</div></div>' +
-      '<div class="meta">' + (c.owner_email ? 'Owner ' + esc(c.owner_email) + ' · ' : '') + (c.instance_url ? esc(c.instance_url) + ' · ' : '') +
-      'last used ' + esc(when(c.last_used_at)) + ' · ' + c.active_users + ' active users (30 days) · created ' + esc(when(c.created_at)) + '</div>' +
+      '<div class="top"><div class="name">' + esc(c.shown_name || c.name) + '</div><div class="row">' + badges + '</div></div>' +
+      (hosts.length ? '<div class="hosts">' + hosts.map(function (h) { return '<a href="https://' + esc(h) + '" target="_blank" rel="noopener noreferrer">' + esc(h) + '</a>'; }).join('') + '</div>' : '') +
+      '<div class="facts">' +
+        (c.owner_email ? '<div>Owner ' + esc(c.owner_email) + '</div>' : '') +
+        '<div>Last used ' + esc(when(c.last_used_at)) + ' · ' + c.active_users + ' active ' + (c.active_users === 1 ? 'user' : 'users') + ' in 30 days</div>' +
+        '<div>Created ' + esc(day(c.created_at)) + ' · <code>' + id + '</code></div>' +
+      '</div>' +
       '<div class="row">' + actions + '</div>' + edit + '<p class="msg" data-msg="' + id + '" hidden></p></div>';
   }
 

@@ -1,10 +1,10 @@
 import type { Env } from './env';
 import { currentMail, mailProvider, sendMail, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
-import { ADMIN_CLIENT_ID, clientById, createGuest, isAdminEmail, userById } from './store';
+import { ADMIN_CLIENT_ID, clientById, createGuest, isAdminEmail, shownName, userById } from './store';
 import { verifyAccessToken } from './tokens';
 import { texts } from './pages';
-import { inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
+import { distinctiveHosts, inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 import { protectionsOff } from './protections';
 
 const LOGIN_LINK_SECONDS = 60;
@@ -160,6 +160,9 @@ export async function admin(request: Request, env: Env, path: string, by: string
       (results || []).map((c) => ({
         client_id: c.id,
         name: c.name,
+        // As /account shows it: named after its own domain where it has one, and the addresses that tell it apart.
+        shown_name: shownName(c.name, c.instance_url, JSON.parse(c.redirect_uris)),
+        hosts: distinctiveHosts([...JSON.parse(c.redirect_uris), ...JSON.parse(c.post_logout_redirect_uris)]),
         redirect_uris: JSON.parse(c.redirect_uris),
         post_logout_redirect_uris: JSON.parse(c.post_logout_redirect_uris),
         instance_url: c.instance_url,
