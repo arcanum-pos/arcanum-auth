@@ -108,9 +108,9 @@ const T = {
     sessionsTitle: 'Waar je aangemeld bent',
     sessionsIntro: 'Op deze site. Wie 7 dagen niets doet, wordt afgemeld; na 14 dagen sowieso.',
     thisBrowser: 'deze browser',
-    sessionMeta: (since: string, seen: string, how: string) => `Sinds ${since} · laatst ${seen} · ${how}`,
+    sessionMeta: (since: string, seen: string | null, how: string | null) => [`Sinds ${since}`, seen && `laatst ${seen}`, how].filter(Boolean).join(' · '),
+    unknownBrowser: 'Onbekende browser',
     amrLabel: { otp: 'met een code via e-mail', fed: 'met Google', passkey: 'met een passkey', link: 'met een eenmalige link' } as Record<string, string>,
-    amrUnknown: 'aangemeld',
     endSession: 'Afmelden',
     endEverywhere: 'Overal afmelden',
     endEverywhereText: 'Meldt je af in alle andere browsers en in elke toepassing: daar meld je je opnieuw aan.',
@@ -262,9 +262,9 @@ const T = {
     sessionsTitle: 'Où vous êtes connecté',
     sessionsIntro: 'Sur ce site. Après 7 jours sans activité, vous êtes déconnecté ; après 14 jours de toute façon.',
     thisBrowser: 'ce navigateur',
-    sessionMeta: (since: string, seen: string, how: string) => `Depuis ${since} · dernière fois ${seen} · ${how}`,
+    sessionMeta: (since: string, seen: string | null, how: string | null) => [`Depuis ${since}`, seen && `dernière fois ${seen}`, how].filter(Boolean).join(' · '),
+    unknownBrowser: 'Navigateur inconnu',
     amrLabel: { otp: 'avec un code par e-mail', fed: 'avec Google', passkey: 'avec une clé d’accès', link: 'avec un lien unique' } as Record<string, string>,
-    amrUnknown: 'connecté',
     endSession: 'Déconnecter',
     endEverywhere: 'Me déconnecter partout',
     endEverywhereText: 'Vous déconnecte de tous les autres navigateurs et de chaque application : vous vous y reconnectez.',
@@ -416,9 +416,9 @@ const T = {
     sessionsTitle: 'Where you are signed in',
     sessionsIntro: 'On this site. After 7 days without use you are signed out; after 14 days in any case.',
     thisBrowser: 'this browser',
-    sessionMeta: (since: string, seen: string, how: string) => `Since ${since} · last ${seen} · ${how}`,
+    sessionMeta: (since: string, seen: string | null, how: string | null) => [`Since ${since}`, seen && `last ${seen}`, how].filter(Boolean).join(' · '),
+    unknownBrowser: 'Unknown browser',
     amrLabel: { otp: 'with a code by e-mail', fed: 'with Google', passkey: 'with a passkey', link: 'with a one-time link' } as Record<string, string>,
-    amrUnknown: 'signed in',
     endSession: 'Sign out',
     endEverywhere: 'Sign out everywhere',
     endEverywhereText: 'Signs you out of every other browser and of every application: you sign in there again.',
@@ -671,9 +671,10 @@ export interface SessionItem {
   current: boolean;
 }
 
-// "Safari on macOS" from a User-Agent, roughly - enough to tell one's own browsers apart.
-function browserOf(ua: string | null): string {
-  if (!ua) return '?';
+// "Safari on macOS" from a User-Agent, roughly - enough to tell one's own
+// browsers apart. Sessions from before 2026-10-24 didn't keep it.
+function browserOf(t: Texts, ua: string | null): string {
+  if (!ua) return t.unknownBrowser;
   const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
   const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
   return os ? `${browser} · ${os}` : browser;
@@ -683,8 +684,9 @@ export function accountPage(request: Request, opts: { email: string; passkeys: P
   const t = texts(request);
   const sessionItems = (opts.sessions ?? [])
     .map(
-      (x) => `<li class="stack" data-testid="session"><div><div class="key-name">${esc(browserOf(x.user_agent))}${x.current ? ` (${t.thisBrowser})` : ''}</div><div class="key-meta">${esc(
-        t.sessionMeta(when(request, x.created_at), when(request, x.last_seen_at ?? x.created_at), (x.amr && t.amrLabel[x.amr]) || t.amrUnknown)
+      (x) => `<li class="stack" data-testid="session"><div><div class="key-name">${esc(browserOf(t, x.user_agent))}${x.current ? ` (${t.thisBrowser})` : ''}</div><div class="key-meta">${esc(
+        // Only what's known: a session from before 2026-10-24 has no "last" or "how".
+        t.sessionMeta(when(request, x.created_at), x.last_seen_at && x.last_seen_at !== x.created_at ? when(request, x.last_seen_at) : null, (x.amr && t.amrLabel[x.amr]) || null)
       )}</div></div>${x.current ? '' : `<form method="post" action="/account/sessions">${hidden('id', x.id)}<button type="submit" name="action" value="end" class="secondary">${t.endSession}</button></form>`}</li>`
     )
     .join('');

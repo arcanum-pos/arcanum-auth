@@ -153,9 +153,22 @@ export async function createSession(env: Env, userId: string, authTime: number, 
   const expiresAt = opts.until && opts.until < standard ? opts.until : standard;
   const maxAge = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000));
   const now = nowIso();
-  await env.DB.prepare('INSERT INTO sessions (id_hash, user_id, auth_time, created_at, expires_at, amr, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(await sha256(token), userId, authTime, now, expiresAt, opts.amr, now, opts.request?.headers.get('User-Agent')?.slice(0, 300) ?? null)
-    .run();
+  // Signing in again in this browser replaces its cookie: its previous
+  // session ends too, rather than lingering unused until it expires.
+  const previous = opts.request ? (cookieValue(opts.request, SESSION_COOKIE) ?? cookieValue(opts.request, OLD_SESSION_COOKIE)) : null;
+  await env.DB.batch([
+    ...(previous ? [env.DB.prepare('DELETE FROM sessions WHERE id_hash = ?').bind(await sha256(previous))] : []),
+    env.DB.prepare('INSERT INTO sessions (id_hash, user_id, auth_time, created_at, expires_at, amr, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(
+      await sha256(token),
+      userId,
+      authTime,
+      now,
+      expiresAt,
+      opts.amr,
+      now,
+      opts.request?.headers.get('User-Agent')?.slice(0, 300) ?? null
+    ),
+  ]);
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 

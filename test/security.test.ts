@@ -184,6 +184,33 @@ describe('sessions', () => {
   });
 });
 
+describe('sessions, continued', () => {
+  it('signing in again in the same browser ends its previous session (no unused ones piling up)', async () => {
+    const email = uniqueEmail('again');
+    const first = (await signInWithCode(post, email)).cookie;
+    // The same browser (it sends its cookie along) signs in once more.
+    const second = (await signInWithCode((p, f, h) => post(p, f, { ...h, Cookie: first }), email)).cookie;
+    expect(second).not.toBe(first);
+    expect((await call('/account', { headers: { Cookie: first } })).status).toBe(302);
+    const userId = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>())!.id;
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?').bind(userId).first<{ n: number }>();
+    expect(n!.n).toBe(1);
+  });
+
+  it('a session from before browsers and sign-in methods were kept: "Unknown browser", only what is known', async () => {
+    const email = uniqueEmail('old-session');
+    const now = (await signInWithCode(post, email)).cookie;
+    const userId = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>())!.id;
+    await env.DB.prepare("INSERT INTO sessions (id_hash, user_id, auth_time, created_at, expires_at) VALUES ('old-one', ?, 0, ?, ?)")
+      .bind(userId, new Date().toISOString(), new Date(Date.now() + 86400_000).toISOString())
+      .run();
+    const html = await (await call('/account', { headers: { Cookie: now, 'Accept-Language': 'en' } })).text();
+    const old = html.match(/Unknown browser<\/div><div class="key-meta">([^<]*)</)![1];
+    expect(old).toMatch(/^Since [^·]+$/);
+    expect(html).not.toContain('>?<');
+  });
+});
+
 async function hash(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
