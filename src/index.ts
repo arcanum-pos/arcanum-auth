@@ -11,7 +11,7 @@
 // Clients — one per installation — are created by the installer via /admin.
 import { account, devicePage, deviceConfirm, googleCallback, googleStart, login, loginCode, loginLink, loginName, loginOnce } from './account';
 import { manageAccess, requestAccess } from './access';
-import { admin } from './admin';
+import { admin, adminCaller } from './admin';
 import { cleanup } from './cleanup';
 import { clientSelf } from './clients';
 import type { Env } from './env';
@@ -123,8 +123,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
           securityEvent('admin_from_internet', { method, path, ip: request.headers.get('CF-Connecting-IP') });
           return json({ error: 'Not found' }, 404);
         }
-        const res = await admin(request, env, path);
-        if (method !== 'GET') securityEvent('admin', { method, path, status: res.status });
+        const by = await adminCaller(request, env);
+        if (!by) return json({ error: 'Unauthorized' }, 401);
+        const res = await admin(request, env, path, by);
+        if (method !== 'GET') securityEvent('admin', { method, path, status: res.status, by });
         return res;
       }
       if (path === '/' && method === 'GET') return redirect('/account');

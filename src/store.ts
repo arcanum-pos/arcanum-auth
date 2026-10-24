@@ -1,5 +1,5 @@
 import type { Env } from './env';
-import { hostsOf, inSeconds, nowIso, randomToken, sha256, timingSafeEqual } from './util';
+import { hostsOf, inSeconds, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
 export interface User {
   id: string;
@@ -101,8 +101,33 @@ export function shownName(name: string, instanceUrl: string | null, redirectUris
   return own ? `${generic[1]} - ${own}` : name;
 }
 
+// tools/admin's own client, built in (not a row: the admin API can't change
+// or remove it, and it exists before anything is set up). A local app, so no
+// secret - PKCE and the one exact address on this computer stand in for it
+// (RFC 8252). Only the ADMIN_EMAILS, only with a passkey, no refresh tokens:
+// its access token is what the admin API accepts instead of the key (admin.ts).
+export const ADMIN_CLIENT_ID = 'arcanum-auth-admin';
+export const ADMIN_TOOL_CALLBACK = 'http://127.0.0.1:8799/callback';
+const ADMIN_CLIENT: Client = {
+  id: ADMIN_CLIENT_ID,
+  secret_hash: '',
+  name: 'arcanum-auth admin',
+  redirect_uris: [ADMIN_TOOL_CALLBACK],
+  post_logout_redirect_uris: [],
+  instance_url: null,
+  owner_email: null,
+  owner_sub: null,
+  restricted: 1,
+  require_passkey: 1,
+};
+
+export const adminEmails = (env: Env): string[] =>
+  (env.ADMIN_EMAILS || '').split(',').map((e) => normalizeEmail(e)).filter(Boolean);
+export const isAdminEmail = (env: Env, email: string): boolean => adminEmails(env).includes(normalizeEmail(email));
+
 export async function clientById(env: Env, id: string | null | undefined): Promise<Client | null> {
   if (!id) return null;
+  if (id === ADMIN_CLIENT_ID) return ADMIN_CLIENT;
   const row = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(id).first<ClientRow>();
   if (!row || row.disabled_at) return null;
   const redirects = JSON.parse(row.redirect_uris) as string[];
@@ -129,6 +154,8 @@ export async function authenticateClient(env: Env, request: Request, form: Recor
     }
   }
   const client = await clientById(env, id);
+  // The built-in admin client has no secret (and can't be given one).
+  if (client?.id === ADMIN_CLIENT_ID) return secret ? null : client;
   return client && (await clientSecretMatches(client, secret)) ? client : null;
 }
 

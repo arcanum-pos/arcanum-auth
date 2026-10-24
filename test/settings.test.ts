@@ -94,9 +94,9 @@ describe('the platform mail account (/admin/mail)', () => {
   it('without SETTINGS_KEY nothing is stored or read', async () => {
     const { admin: handler } = await import('../src/admin');
     const noKey = { ...env, SETTINGS_KEY: undefined };
-    const put = await handler(new Request(`${ISSUER}/admin/mail`, { method: 'PUT', headers: ADMIN, body: JSON.stringify({ provider: 'brevo', settings: {} }) }), noKey, '/admin/mail');
+    const put = await handler(new Request(`${ISSUER}/admin/mail`, { method: 'PUT', headers: ADMIN, body: JSON.stringify({ provider: 'brevo', settings: {} }) }), noKey, '/admin/mail', 'key');
     expect(put.status).toBe(409);
-    const get = await handler(new Request(`${ISSUER}/admin/mail`, { headers: ADMIN }), noKey, '/admin/mail');
+    const get = await handler(new Request(`${ISSUER}/admin/mail`, { headers: ADMIN }), noKey, '/admin/mail', 'key');
     expect(await get.json()).toMatchObject({ canStore: false, active: 'secret' });
   });
 });

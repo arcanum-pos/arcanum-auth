@@ -196,7 +196,9 @@ has an account. Guests never get into a restricted client.
 
 The admin API (clients, mail, passkey resets) only answers another Worker on
 the same account - the bootstrapper on kaboutersoft's, **`tools/admin`**
-(its README) from your laptop on any account.
+(its README) from your laptop on any account. There you sign in with a
+passkey if your address is in the variable **`ADMIN_EMAILS`**
+(comma-separated); `ADMIN_API_KEY` stays the way back in.
 
 1. **Database**
    ```sh

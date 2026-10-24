@@ -3,7 +3,7 @@ import { needsPasskey, passkeyStep } from './passkeys';
 import type { Env } from './env';
 import { sendMail } from './mail';
 import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
-import { clientById, currentSession, recordAttempt, shownName, tooManyAttempts, type Client, type User } from './store';
+import { ADMIN_CLIENT_ID, clientById, currentSession, isAdminEmail, recordAttempt, shownName, tooManyAttempts, type Client, type User } from './store';
 import { validUris } from './admin';
 import { hostsOf, isEmail, normalizeEmail, nowIso, readForm, redirect, sameOrigin } from './util';
 
@@ -46,6 +46,8 @@ export function accessRow(env: Env, clientId: string, email: string) {
 export async function mayUse(env: Env, client: Client, user: User): Promise<boolean> {
   if (!client.restricted) return true;
   if (user.guest) return false;
+  // The built-in admin client (store.ts): its list is ADMIN_EMAILS, nothing to ask for.
+  if (client.id === ADMIN_CLIENT_ID) return isAdminEmail(env, user.email);
   return (await accessRow(env, client.id, user.email))?.status === 'assigned';
 }
 
@@ -88,6 +90,7 @@ const appUrl = (client: Client) => (client.instance_url?.startsWith('https://') 
 // added — or that they already did.
 export async function noAccess(request: Request, env: Env, client: Client, user: User): Promise<Response> {
   if (user.guest) return messagePage(request, texts(request).accessGuest(client.name), 403);
+  if (client.id === ADMIN_CLIENT_ID) return messagePage(request, texts(request).errors.notAdmin, 403);
   const row = await accessRow(env, client.id, user.email);
   return accessPage(request, { clientId: client.id, clientName: client.name, email: user.email, requested: row?.status === 'requested' }, 403);
 }
@@ -98,7 +101,7 @@ export async function requestAccess(request: Request, env: Env, clientId: string
   if (!session) return redirect('/login');
   if (!sameOrigin(request, env.ISSUER)) return messagePage(request, t.errors.request, 403);
   const client = await clientById(env, clientId);
-  if (!client || !client.restricted) return messagePage(request, t.errors.request, 404);
+  if (!client || !client.restricted || client.id === ADMIN_CLIENT_ID) return messagePage(request, t.errors.request, 404);
   const user = session.user;
   if (user.guest) return messagePage(request, t.accessGuest(client.name), 403);
   const page = (requested: boolean, status = 200) => accessPage(request, { clientId: client.id, clientName: client.name, email: user.email, requested }, status);

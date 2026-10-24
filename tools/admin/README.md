@@ -17,8 +17,25 @@ npx wrangler login        # the account of the instance (npx wrangler whoami)
 npx wrangler dev -c tools/admin/wrangler.jsonc
 ```
 
-Then open **http://127.0.0.1:8799** and give that instance's
-`ADMIN_API_KEY`. The page shows which instance it is and what protection is
+Then open **http://127.0.0.1:8799** and **sign in with a passkey**: the
+instance's own sign-in page, back on this page with a token for an hour.
+Only the addresses in that instance's **`ADMIN_EMAILS`** variable get in
+(comma-separated, set in the dashboard or `wrangler.jsonc` - never through
+the API, so an admin can't make another one), and only with a passkey (none
+yet: you add one on the way). No refresh: after the hour, sign in again.
+Every change is logged as a security event `admin` with `by: <your address>`.
+
+**The admin key** (`ADMIN_API_KEY`, under "Use the admin key instead") stays
+the way back in: signing in broken, your passkeys lost, a new instance
+without `ADMIN_EMAILS` yet. The bootstrapper keeps using it too.
+
+The token comes from arcanum-auth's built-in client `arcanum-auth-admin`
+(src/store.ts): no secret (PKCE), one return address
+`http://127.0.0.1:8799/callback` - so the port stays 8799 - and it can't be
+changed or removed through the API. A token still only works through this
+tool: the admin API never answers from the internet.
+
+The page shows which instance it is and what protection is
 off (Turnstile, mail - `/admin/info`), and lets you:
 
 - see every client: open or restricted, passkey required, owner, last used,
@@ -29,8 +46,8 @@ off (Turnstile, mail - `/admin/info`), and lets you:
 - remove someone's passkeys (they're told by mail)
 - see which mail account it sends with, and send a test mail
 
-The key stays in that browser tab only (sessionStorage, "Forget key" clears
-it). The Worker answers only as localhost (`127.0.0.1:8799`, also against a
+The token or key stays in that browser tab only (sessionStorage, "Sign out"
+clears it). The Worker answers only as localhost (`127.0.0.1:8799`, also against a
 DNS name pointed at it), and another site can't send it the key. Stop it
 with `x` or Ctrl-C.
 

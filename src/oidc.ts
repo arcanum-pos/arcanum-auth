@@ -6,7 +6,7 @@ import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
 import { logoutConfirmPage, messagePage, texts } from './pages';
 import { needsPasskey, passkeyStep } from './passkeys';
-import { authenticateClient, clientById, currentSession, endSession, userById, type Amr, type Client } from './store';
+import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, userById, type Amr, type Client } from './store';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
 import { withinLimit } from './ratelimit';
 import { inSeconds, json, newUserCode, nowIso, oauthError, pkceMatches, randomToken, readForm, redirect, sameOrigin, sha256, unixNow } from './util';
@@ -42,7 +42,7 @@ export function discovery(env: Env): Response {
       id_token_signing_alg_values_supported: ['RS256'],
       scopes_supported: SUPPORTED_SCOPES,
       claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'auth_time', 'nonce', 'email', 'email_verified', 'name'],
-      token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
+      token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic', 'none'],
       code_challenge_methods_supported: ['S256'],
       // RFC 9207: every authorization response says who answered (mix-up attacks).
       authorization_response_iss_parameter_supported: true,
@@ -116,6 +116,8 @@ export async function token(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
   const client = await authenticateClient(env, request, form);
   if (!client) return oauthError('invalid_client', 'Unknown client or wrong secret', 401);
+  // The built-in admin client: one sign-in at a time, nothing else.
+  if (client.id === ADMIN_CLIENT_ID && form.grant_type !== 'authorization_code') return oauthError('unauthorized_client', 'Only authorization_code for this client');
 
   switch (form.grant_type) {
     case 'authorization_code':
@@ -161,7 +163,9 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
   const user = await userById(env, row.user_id);
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
   if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
-  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, nonce: row.nonce, amr: row.amr }));
+  // No refresh token for the admin client: after an hour, a passkey again.
+  const scope = client.id === ADMIN_CLIENT_ID ? row.scope.split(' ').filter((s) => s !== 'offline_access').join(' ') : row.scope;
+  return json(await issueTokens(env, { clientId: client.id, user, scope, authTime: row.auth_time, nonce: row.nonce, amr: row.amr }));
 }
 
 // A rotated-away refresh token presented again within this window counts as
@@ -255,7 +259,7 @@ async function deviceGrant(env: Env, client: Client, form: Record<string, string
 export async function deviceAuthorization(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
   const client = await clientById(env, form.client_id);
-  if (!client) return oauthError('invalid_client', 'Unknown client', 401);
+  if (!client || client.id === ADMIN_CLIENT_ID) return oauthError('invalid_client', 'Unknown client', 401);
   // Per client (installation), not per IP: the kassas' requests come from
   // their installation's bff, i.e. Cloudflare's shared addresses. A client_id
   // is public; this keeps one from being used to flood the database.

@@ -1,7 +1,8 @@
 import type { Env } from './env';
 import { currentMail, mailProvider, sendMail, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
-import { clientById, createGuest, userById } from './store';
+import { ADMIN_CLIENT_ID, clientById, createGuest, isAdminEmail, userById } from './store';
+import { verifyAccessToken } from './tokens';
 import { texts } from './pages';
 import { inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 import { protectionsOff } from './protections';
@@ -62,9 +63,20 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 //   DELETE /admin/mail       → back to MAIL_CONFIG / MAIL_SMTP
 //   POST   /admin/mail/test  { to } → the mailer's answer (a sign-in code mail; 10 an hour)
 
-function authorized(request: Request, env: Env): boolean {
+// Who calls: 'key' (ADMIN_API_KEY - the bootstrapper, and the way back in
+// when signing in doesn't work), or the e-mail address of an admin signed in
+// through tools/admin: an access token of ours, for the built-in admin client
+// (passkey required, store.ts), of someone on ADMIN_EMAILS right now - taking
+// an address off the list takes effect at once. null: neither.
+export async function adminCaller(request: Request, env: Env): Promise<string | null> {
   const auth = request.headers.get('Authorization') || '';
-  return !!env.ADMIN_API_KEY && auth.startsWith('Bearer ') && timingSafeEqual(auth.slice(7), env.ADMIN_API_KEY);
+  if (!auth.startsWith('Bearer ')) return null;
+  const bearer = auth.slice(7);
+  if (env.ADMIN_API_KEY && timingSafeEqual(bearer, env.ADMIN_API_KEY)) return 'key';
+  const token = await verifyAccessToken(env, bearer);
+  if (!token || token.clientId !== ADMIN_CLIENT_ID) return null;
+  const user = await userById(env, token.sub);
+  return user && !user.guest && isAdminEmail(env, user.email) ? user.email : null;
 }
 
 export function validUris(value: unknown): string[] | null {
@@ -83,8 +95,8 @@ export function validUris(value: unknown): string[] | null {
   return uris;
 }
 
-export async function admin(request: Request, env: Env, path: string): Promise<Response> {
-  if (!authorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+// `by`: adminCaller's answer (index.ts checks it first).
+export async function admin(request: Request, env: Env, path: string, by: string): Promise<Response> {
 
   if (path === '/admin/clients' && request.method === 'POST') {
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -165,7 +177,7 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
 
   // Which instance this is and what isn't on (protections.ts) - for tools/admin's page.
   if (path === '/admin/info' && request.method === 'GET') {
-    return json({ issuer: env.ISSUER, protections_off: await protectionsOff(env) });
+    return json({ issuer: env.ISSUER, protections_off: await protectionsOff(env), you: by });
   }
 
   if (path === '/admin/guests' && request.method === 'POST') {
@@ -298,10 +310,11 @@ export async function admin(request: Request, env: Env, path: string): Promise<R
     const res = await env.DB.prepare('UPDATE clients SET disabled_at = ? WHERE id = ? AND disabled_at IS NULL').bind(nowIso(), id).run();
     if (!res.meta.changes) return json({ error: 'Not found' }, 404);
     // Someone else's: its owner hears of it — a client never disappears silently.
-    const by = (query.get('by') || '').trim().toLowerCase();
-    if (row.owner_email && by && row.owner_email.toLowerCase() !== by) {
+    // ?by= for the key's callers (the bootstrapper says who); a signed-in admin is who they are.
+    const who = (query.get('by') || (by === 'key' ? '' : by)).trim().toLowerCase();
+    if (row.owner_email && who && row.owner_email.toLowerCase() !== who) {
       const t = texts(request);
-      await sendMail(env, row.owner_email, t.mailClientDisabledSubject(row.name), t.mailClientDisabled(row.name, by, new URL(env.ISSUER).host)).catch((err) => console.error('client disabled mail failed', err));
+      await sendMail(env, row.owner_email, t.mailClientDisabledSubject(row.name), t.mailClientDisabled(row.name, who, new URL(env.ISSUER).host)).catch((err) => console.error('client disabled mail failed', err));
     }
     return json({ ok: true });
   }

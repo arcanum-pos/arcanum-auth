@@ -36,6 +36,7 @@ code{font:12.5px ui-monospace,monospace;word-break:break-all}
 .secret code{color:var(--fg)}
 details summary{cursor:pointer;font-weight:600;font-size:13px}
 .check{display:flex;gap:8px;align-items:center;font-weight:400;font-size:13.5px;margin-top:12px}.check input{width:auto;margin:0}
+.signin{display:grid;gap:8px;justify-items:end;min-width:min(100%,360px)}.signin details{width:100%;text-align:right}.signin form{margin-top:6px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -43,12 +44,20 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 <main>
 <section>
   <div class="top">
-    <div><h1>arcanum-auth admin</h1><p id="instance">Not connected yet</p><div id="protections" class="row"></div></div>
-    <form id="keyForm" class="row" style="min-width:min(100%,420px)">
-      <input id="key" type="password" placeholder="ADMIN_API_KEY of this instance" autocomplete="off" aria-label="Admin API key">
-      <button type="submit">Connect</button>
-      <button type="button" id="forget" class="secondary" hidden>Forget key</button>
-    </form>
+    <div><h1>arcanum-auth admin</h1><p id="instance">Not signed in</p><div id="protections" class="row"></div></div>
+    <div class="signin">
+      <div class="row" id="signedOut">
+        <button type="button" id="signIn">Sign in with a passkey</button>
+      </div>
+      <div class="row" id="signedIn" hidden><span id="who" class="meta"></span><button type="button" id="signOut" class="secondary">Sign out</button></div>
+      <details id="keyBox"><summary class="meta">Use the admin key instead</summary>
+        <p class="meta" style="margin-top:6px">The way back in when signing in doesn't work: this instance's ADMIN_API_KEY.</p>
+        <form id="keyForm" class="row">
+          <input id="key" type="password" placeholder="ADMIN_API_KEY" autocomplete="off" aria-label="Admin API key">
+          <button type="submit" class="secondary">Use key</button>
+        </form>
+      </details>
+    </div>
   </div>
   <p class="msg error" id="keyError" hidden></p>
 </section>
@@ -103,9 +112,15 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var KEY = 'arcanum-auth-admin-key';
-  var key = '';
-  try { key = sessionStorage.getItem(KEY) || ''; } catch (e) {}
+  // What the admin API gets as Bearer: a token from signing in (an hour,
+  // a passkey each time) or the admin key. Only in this tab.
+  var STORE = 'arcanum-auth-admin';
+  var SIGNIN = 'arcanum-auth-admin-signin';
+  function read(name) { try { return JSON.parse(sessionStorage.getItem(name) || 'null'); } catch (e) { return null; } }
+  function write(name, v) { try { if (v) sessionStorage.setItem(name, JSON.stringify(v)); else sessionStorage.removeItem(name); } catch (e) {} }
+  var cred = read(STORE); // { bearer, kind: 'token'|'key', expires? }
+  if (cred && cred.expires && cred.expires < Date.now()) cred = null;
+  var key = cred ? cred.bearer : '';
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function lines(v) { return v.split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
@@ -117,6 +132,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
     return fetch(path, init).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
+        if (res.status === 401 && path !== '/admin/info') signedOut('The sign-in ran out (an hour) - sign in again.');
         if (!res.ok) { var e = new Error(data.error || ('HTTP ' + res.status)); e.status = res.status; throw e; }
         return data;
       });
@@ -128,20 +144,62 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     mail_off: 'Mail switched off', mail_unset: 'No mailer or mail account'
   };
 
+  function b64u(bytes) { var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function random() { return b64u(crypto.getRandomValues(new Uint8Array(32))); }
+
+  // Sign in: arcanum-auth's own page (a passkey), back to /callback with a code.
+  $('signIn').addEventListener('click', function () {
+    show($('keyError'), '');
+    fetch('/oidc').then(function (r) { return r.json(); }).then(function (o) {
+      if (o.error) throw new Error(o.error);
+      var verifier = random(), state = random();
+      return crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then(function (hash) {
+        write(SIGNIN, { verifier: verifier, state: state });
+        var q = new URLSearchParams({ response_type: 'code', client_id: o.client_id, redirect_uri: o.redirect_uri, scope: 'openid email', state: state, code_challenge: b64u(new Uint8Array(hash)), code_challenge_method: 'S256', prompt: 'login' });
+        location.href = o.authorization_endpoint + '?' + q;
+      });
+    }).catch(function (e) { show($('keyError'), 'Could not reach arcanum-auth: ' + e.message, true); });
+  });
+
+  function finishSignIn() {
+    var q = new URLSearchParams(location.search), pending = read(SIGNIN);
+    write(SIGNIN, null);
+    history.replaceState(null, '', '/');
+    if (q.get('error')) return Promise.resolve(show($('keyError'), 'Signing in did not work: ' + (q.get('error_description') || q.get('error')), true));
+    if (!pending || q.get('state') !== pending.state) return Promise.resolve(show($('keyError'), 'That sign-in was not started here - try again.', true));
+    return fetch('/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: q.get('code'), verifier: pending.verifier }) })
+      .then(function (r) { return r.json(); }).then(function (t) {
+        if (t.error) throw new Error(t.error);
+        cred = { bearer: t.access_token, kind: 'token', expires: Date.now() + (t.expires_in - 60) * 1000 };
+        write(STORE, cred); key = cred.bearer;
+        return connect();
+      }).catch(function (e) { show($('keyError'), 'Signing in did not work: ' + e.message, true); });
+  }
+
+  function signedOut(message) {
+    write(STORE, null); cred = null; key = '';
+    $('app').hidden = true; $('signedIn').hidden = true; $('signedOut').hidden = false; $('keyBox').hidden = false;
+    $('instance').textContent = 'Not signed in'; $('protections').innerHTML = '';
+    if (message) show($('keyError'), message, true);
+  }
+
   function connect() {
     show($('keyError'), '');
     return api('GET', '/admin/info').then(function (info) {
-      try { sessionStorage.setItem(KEY, key); } catch (e) {}
+      write(STORE, cred);
+      $('who').textContent = info.you === 'key' ? 'With the admin key' : 'Signed in as ' + info.you;
+      $('signedIn').hidden = false; $('signedOut').hidden = true; $('keyBox').hidden = true; $('keyBox').open = false;
       $('instance').innerHTML = 'Connected to <code>' + esc(info.issuer) + '</code>';
       $('protections').innerHTML = info.protections_off.length
         ? info.protections_off.map(function (p) { return '<span class="badge warn">' + esc(LABELS[p] || p) + '</span>'; }).join('')
         : '<span class="badge ok">Turnstile and mail on</span>';
-      $('app').hidden = false; $('forget').hidden = false; $('key').value = '';
-      $('key').placeholder = 'Connected - another key?';
+      $('app').hidden = false; $('key').value = '';
       loadClients(); loadMail();
     }).catch(function (e) {
-      $('app').hidden = true;
-      show($('keyError'), e.status === 401 ? 'That key is not this instance\'s ADMIN_API_KEY.' : e.status === 404 ? 'arcanum-auth refused the call as coming from the internet - is this the tools/admin Worker?' : 'Could not reach arcanum-auth: ' + e.message, true);
+      var was = cred && cred.kind;
+      signedOut(e.status === 401
+        ? (was === 'key' ? 'That key is not this instance\'s ADMIN_API_KEY.' : 'Not an admin here (ADMIN_EMAILS), or the sign-in ran out - sign in again.')
+        : e.status === 404 ? 'arcanum-auth refused the call as coming from the internet - is this the tools/admin Worker?' : 'Could not reach arcanum-auth: ' + e.message);
     });
   }
 
@@ -180,7 +238,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     var id = b.dataset.id, act = b.dataset.act, call;
     if (act === 'restricted') call = api('PATCH', '/admin/clients/' + encodeURIComponent(id), { restricted: b.dataset.value === 'true' });
     else if (act === 'passkey') call = api('PATCH', '/admin/clients/' + encodeURIComponent(id), { require_passkey: b.dataset.value === 'true' });
-    else if (act === 'disable') { if (!confirm('Disable ' + b.dataset.name + '? Nobody can sign in to it any more. Its owner is not mailed.')) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id)); }
+    else if (act === 'disable') { if (!confirm('Disable ' + b.dataset.name + '? Nobody can sign in to it any more.' + (cred && cred.kind === 'token' ? ' Its owner is mailed when that is not you.' : ''))) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id)); }
     else if (act === 'delete') { if (!confirm('Delete ' + b.dataset.name + ' for good, with its tokens and access list? This cannot be undone.')) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id) + '?hard=1'); }
     b.disabled = true;
     call.then(loadClients).catch(function (err) { b.disabled = false; clientMsg(id, err.message, true); });
@@ -249,10 +307,11 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
       .catch(function (err) { show($('tmMsg'), err.message, true); });
   });
 
-  $('keyForm').addEventListener('submit', function (e) { e.preventDefault(); if ($('key').value) { key = $('key').value; connect(); } });
-  $('forget').addEventListener('click', function () { try { sessionStorage.removeItem(KEY); } catch (e) {} location.reload(); });
+  $('keyForm').addEventListener('submit', function (e) { e.preventDefault(); if ($('key').value) { cred = { bearer: $('key').value, kind: 'key' }; key = cred.bearer; connect(); } });
+  $('signOut').addEventListener('click', function () { signedOut(''); show($('keyError'), ''); });
   $('reload').addEventListener('click', loadClients);
-  if (key) connect();
+  if (location.pathname === '/callback') finishSignIn();
+  else if (key) connect();
 })();
 </script>
 </body>

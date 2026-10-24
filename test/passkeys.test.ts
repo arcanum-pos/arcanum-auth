@@ -457,3 +457,81 @@ describe('managing passkeys once there is one', () => {
     expect((await call(`/admin/users/${encodeURIComponent(email)}/passkeys`, { method: 'DELETE', headers: { ...ADMIN_API, 'CF-Connecting-IP': '203.0.113.5' } })).status).toBe(404);
   });
 });
+
+// --- tools/admin's sign-in (2026-10-24): the built-in admin client, only the
+// ADMIN_EMAILS, only with a passkey; its access token is accepted by the admin
+// API instead of the key - still never from the internet.
+
+describe('the admin API by signing in (tools/admin)', () => {
+  const TOOL = 'arcanum-auth-admin';
+  const CALLBACK = 'http://127.0.0.1:8799/callback';
+
+  async function toolAuthorize(cookie: string, scope = 'openid email') {
+    const verifier = 'w'.repeat(20) + crypto.randomUUID().replace(/-/g, '');
+    const q = new URLSearchParams({ response_type: 'code', client_id: TOOL, redirect_uri: CALLBACK, scope, state: 's', code_challenge: b64u(await sha256(utf8(verifier))), code_challenge_method: 'S256' });
+    return { res: await call(`/authorize?${q}`, { headers: { Cookie: cookie } }), verifier };
+  }
+  async function toolToken(cookie: string, scope?: string, extra: Record<string, string> = {}) {
+    const { res, verifier } = await toolAuthorize(cookie, scope);
+    const code = new URL(res.headers.get('Location')!).searchParams.get('code')!;
+    return post('/token', { grant_type: 'authorization_code', code, redirect_uri: CALLBACK, client_id: TOOL, code_verifier: verifier, ...extra });
+  }
+  const info = (bearer: string, headers: Record<string, string> = {}) => call('/admin/info', { headers: { Authorization: `Bearer ${bearer}`, ...headers } });
+
+  it('an admin, with a passkey: a token without a secret, no refresh token, and the admin API knows who', async () => {
+    const { cookie: byCode } = await signUp('tool-admin@example.test');
+    // A mailed code is not enough: the passkey step first (none yet: add one).
+    const first = await toolAuthorize(byCode);
+    expect(first.res.headers.get('Location')).toMatch(/^\/login\/passkey\?continue=/);
+    await addPasskey(byCode);
+
+    const res = await toolToken(byCode, 'openid email offline_access');
+    expect(res.status).toBe(200);
+    const tokens = (await res.json()) as { access_token: string; refresh_token?: string };
+    expect(tokens.refresh_token).toBeUndefined();
+    expect(await (await info(tokens.access_token)).json()).toMatchObject({ you: 'tool-admin@example.test' });
+    // Every change says who made it.
+    const created = await call('/admin/clients', { method: 'POST', headers: { Authorization: `Bearer ${tokens.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'By token', redirect_uris: ['https://by-token.test/cb'] }) });
+    expect(created.status).toBe(201);
+    // Still never from the internet, token or not.
+    expect((await info(tokens.access_token, { 'CF-Connecting-IP': '203.0.113.9' })).status).toBe(404);
+    // The key keeps working: the bootstrapper, and the way back in.
+    expect(await (await info('test-admin-key')).json()).toMatchObject({ you: 'key' });
+  });
+
+  it('nobody else: not on ADMIN_EMAILS is refused at sign-in; a token of another client or a secret never counts', async () => {
+    const { cookie } = await signUp(uniqueEmail('not-admin'));
+    await addPasskey(cookie);
+    const { res } = await toolAuthorize(cookie);
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain('Je beheert deze toepassing niet');
+
+    // An admin's token for an ordinary client is no admin token.
+    const client = await strictClient();
+    const { cookie: adminCode } = await signUp('second@example.test');
+    const auth = await addPasskey(adminCode);
+    const byPasskey = await passkeySession(auth);
+    const { res: r2, verifier } = await authorize(client.client_id, byPasskey);
+    const code = new URL(r2.headers.get('Location')!).searchParams.get('code')!;
+    const other = (await (await post('/token', { grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: client.client_id, client_secret: client.client_secret, code_verifier: verifier })).json()) as { access_token: string };
+    expect((await info(other.access_token)).status).toBe(401);
+    expect((await info('not-a-token')).status).toBe(401);
+
+    // The admin client takes no secret, no refresh or device grant.
+    expect((await toolToken(byPasskey, undefined, { client_secret: 'guess' })).status).toBe(401);
+    expect((await post('/token', { grant_type: 'refresh_token', refresh_token: 'x', client_id: TOOL })).status).toBe(400);
+    expect((await call('/device/code', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: TOOL, scope: 'openid' }) })).status).toBe(401);
+    // Nothing to ask for, nothing to manage.
+    expect((await call(`/access/${TOOL}`, { headers: { Cookie: byPasskey } })).status).toBe(403);
+  });
+
+  it('off the list: the token stops working at once', async () => {
+    const { cookie } = await signUp('third@example.test');
+    const auth = await addPasskey(cookie);
+    const tokens = (await (await toolToken(await passkeySession(auth))).json()) as { access_token: string };
+    const { adminCaller } = await import('../src/admin');
+    const asked = () => new Request(`${ISSUER}/admin/info`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    expect(await adminCaller(asked(), env)).toBe('third@example.test');
+    expect(await adminCaller(asked(), { ...env, ADMIN_EMAILS: 'tool-admin@example.test' })).toBeNull();
+  });
+});

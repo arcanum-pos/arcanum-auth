@@ -78,6 +78,8 @@ export default defineConfig({
           MAIL_SMTP: JSON.stringify({ host: 'smtp.test', port: 465, username: 'u', password: 'p', fromAddress: 'noreply@test' }),
           GOOGLE_CLIENT_ID: 'google-client-id',
           GOOGLE_CLIENT_SECRET: 'google-secret',
+          // tools/admin's sign-in (store.ts, the built-in admin client).
+          ADMIN_EMAILS: 'Tool-Admin@example.test, second@example.test,third@example.test',
           GOOGLE_TOKEN_URL: 'https://google.test/token',
           PBKDF2_ITERATIONS: '10000',
         },

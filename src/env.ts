@@ -17,6 +17,10 @@ export interface Env {
   CODE_HASH_KEY: string;
   // Bearer key for /admin/* (creating clients — the installer uses this).
   ADMIN_API_KEY: string;
+  // Who may use the admin API by signing in (tools/admin, the built-in
+  // arcanum-auth-admin client, a passkey): e-mail addresses, comma-separated.
+  // Only here, never through the API - an admin can't make another one.
+  ADMIN_EMAILS?: string;
   // Sign in with Google (optional — the button only shows when both are set).
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

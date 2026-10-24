@@ -69,11 +69,11 @@ export async function issueTokens(
 }
 
 // One of our own access tokens (for /userinfo) → its subject and scope.
-export async function verifyAccessToken(env: Env, token: string): Promise<{ sub: string; scope: string } | null> {
+export async function verifyAccessToken(env: Env, token: string): Promise<{ sub: string; scope: string; clientId: string } | null> {
   try {
     const { payload, protectedHeader } = await jwtVerify(token, await verificationKey(env), { issuer: env.ISSUER, algorithms: ['RS256'] });
     if (protectedHeader.typ !== 'at+jwt' || typeof payload.sub !== 'string') return null;
-    return { sub: payload.sub, scope: String(payload.scope || '') };
+    return { sub: payload.sub, scope: String(payload.scope || ''), clientId: String(payload.client_id || '') };
   } catch {
     return null;
   }
