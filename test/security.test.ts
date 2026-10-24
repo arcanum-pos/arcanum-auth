@@ -111,6 +111,11 @@ describe('Turnstile on the sign-in form', () => {
     const page = await login(new Request(`${ISSUER}/login`), on);
     const html = await page.text();
     expect(html).toContain('data-sitekey="site-key"');
+    // Checked on Continue and shown only to ask a click, below the button: the
+    // browser's autofill under the e-mail field can't cover it.
+    expect(html).toContain('data-execution="execute"');
+    expect(html).toContain('data-appearance="interaction-only"');
+    expect(html.indexOf('class="cf-turnstile"')).toBeGreaterThan(html.indexOf('<button type="submit"'));
     expect(page.headers.get('Content-Security-Policy')).toContain('frame-src https://challenges.cloudflare.com');
     expect((await call('/login')).headers.get('Content-Security-Policy')).not.toContain('challenges.cloudflare.com');
 

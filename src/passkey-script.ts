@@ -4,6 +4,7 @@
 //   [data-passkey-login]     sign in with a passkey (and the e-mail field's autofill)
 //   [data-passkey-register]  add a passkey; [data-skip] = where to go when this browser can't
 //   [data-passkey-error]     where a failure is shown (the server words it)
+// And the sign-in form's Turnstile (turnstile.ts): checked on submit, not on load.
 // Kept as plain ES2017, no build step; no backticks or ${ in it (it lives in
 // a String.raw template).
 export const PASSKEY_SCRIPT = String.raw`(function () {
@@ -96,6 +97,26 @@ export const PASSKEY_SCRIPT = String.raw`(function () {
         if (ok) signIn(true).catch(function (e) { if (!quiet(e) && e.server) showError(e.message); });
       });
     }
+  }
+
+  // --- Turnstile on the sign-in form (data-execution="execute"): the check
+  // runs when Continue is pressed, then the form goes. Not loaded (blocked,
+  // slow): the form goes without a token and the server asks to try again.
+  var bot = $('form .cf-turnstile');
+  if (bot) {
+    var form = bot.closest('form'), checking = false;
+    var send = function () { form.submit(); };
+    window.arcanumTurnstileDone = send;
+    window.arcanumTurnstileFailed = send;
+    form.addEventListener('submit', function (e) {
+      if (!window.turnstile || !form.checkValidity()) return;
+      e.preventDefault();
+      if (checking) return;
+      checking = true;
+      var button = form.querySelector('button[type=submit]');
+      if (button) button.disabled = true;
+      window.turnstile.execute(bot);
+    });
   }
 
   // --- Adding one.

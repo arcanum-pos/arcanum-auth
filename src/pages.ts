@@ -502,10 +502,10 @@ main.wide{max-width:720px}main.wide ul.keys li{display:flex;flex-wrap:wrap;align
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}input{width:100%;height:42px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:0 12px;font:inherit}
 input.code{letter-spacing:.3em;text-align:center;font-size:20px;font-family:ui-monospace,monospace;text-transform:uppercase}
 button,.button{display:flex;align-items:center;justify-content:center;width:100%;height:44px;margin-top:18px;border-radius:10px;border:1px solid var(--primary);background:var(--primary);color:var(--on-primary);font:600 15px system-ui,sans-serif;text-decoration:none;cursor:pointer}
-.secondary{background:transparent;color:var(--fg);border-color:var(--border)}.row{display:flex;gap:10px}.row>*{flex:1}
+button:disabled{opacity:.6;cursor:default}.secondary{background:transparent;color:var(--fg);border-color:var(--border)}.row{display:flex;gap:10px}.row>*{flex:1}
 .error{color:var(--danger);font-size:14px;margin:12px 0 0}.hint{font-size:12.5px;margin:6px 0 0}.links{margin-top:18px;font-size:13.5px;display:flex;flex-direction:column;gap:6px}
 a{color:var(--fg)}.or{text-align:center;color:var(--muted);font-size:13px;margin:16px 0 0}
-.ok{color:var(--fg);font-size:14px}h2{font-size:16px;margin:22px 0 6px}ul.keys{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}
+.cf-turnstile{margin-top:12px}.ok{color:var(--fg);font-size:14px}h2{font-size:16px;margin:22px 0 6px}ul.keys{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:10px}
 ul.keys li{border:1px solid var(--border);border-radius:10px;padding:10px 12px}.key-name{font-weight:600}.key-meta{font-size:12.5px;color:var(--muted)}
 ul.keys form{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}ul.keys input{height:36px;flex:1 1 100%}
 textarea{width:100%;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:8px 12px;font:13px/1.5 ui-monospace,monospace;resize:vertical}code{font:12.5px ui-monospace,monospace;word-break:break-all}ul.keys button{width:auto;height:36px;margin:0;padding:0 12px;font-size:13.5px}
@@ -553,7 +553,9 @@ export function loginPage(request: Request, opts: { continueTo: string; email?: 
     // A passkey and Google first, the e-mail field last: the browser's autofill
     // (which offers the passkeys too) opens below the field and would cover
     // whatever comes after it. The passkey button stays for browsers without
-    // that autofill, security keys and a passkey on another phone.
+    // that autofill, security keys and a passkey on another phone. Turnstile
+    // checks only on Continue (the autofill is closed by then) and shows
+    // itself, below the button, only when it wants a click (/passkey.js).
     `<h1>${t.signIn}</h1>
 <div data-passkey-box hidden><button type="button" class="secondary" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button>${opts.google ? '' : `<p class="or">${t.or}</p>`}</div>
 <p class="error" role="alert" data-passkey-error hidden></p>
@@ -561,8 +563,8 @@ ${opts.google ? `<a class="button secondary" href="/google${q}">${t.withGoogle}<
 <form method="post" action="/login">${hidden('continue', opts.continueTo)}
 <label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="username webauthn" required value="${esc(opts.email ?? '')}">
 <p class="hint">${t.signInHint}</p>
-${opts.turnstile ? `<div class="cf-turnstile" data-sitekey="${esc(opts.turnstile)}" data-action="login" data-theme="auto" data-size="flexible"></div>` : ''}
-${error(t, opts.error)}<button type="submit">${t.continueEmail}</button></form>`,
+${error(t, opts.error)}<button type="submit">${t.continueEmail}</button>
+${opts.turnstile ? `<div class="cf-turnstile" data-sitekey="${esc(opts.turnstile)}" data-action="login" data-theme="auto" data-size="flexible" data-execution="execute" data-appearance="interaction-only" data-callback="arcanumTurnstileDone" data-error-callback="arcanumTurnstileFailed"></div>` : ''}</form>`,
     status,
     {},
     { passkeys: true, turnstile: !!opts.turnstile }
