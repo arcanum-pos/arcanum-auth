@@ -137,6 +137,7 @@ const T = {
     signInHere: 'Hier aanmelden',
     mailCodeSubject: 'Je aanmeldcode',
     mailCode: (code: string, link: string) => `Je code om je aan te melden: ${code}\n\nOf meld je aan met deze link: ${link}\n\nDe code en de link zijn 15 minuten geldig. Heb je dit niet gevraagd? Dan kan je deze e-mail negeren.`,
+    notAdminTool: (email: string) => `Je bent aangemeld als ${email}, en dat adres beheert deze aanmeldserver niet (ADMIN_EMAILS). Een ander adres? Meld je af op /account en meld je aan met dat adres.`,
     errors: {
       botCheck: 'We konden niet nagaan of je geen robot bent. Probeer het opnieuw.',
       urisInvalid: "Geef 1 tot 10 https-adressen, één per regel, zonder #.",
@@ -291,6 +292,7 @@ const T = {
     signInHere: 'Se connecter ici',
     mailCodeSubject: 'Votre code de connexion',
     mailCode: (code: string, link: string) => `Votre code pour vous connecter : ${code}\n\nOu connectez-vous avec ce lien : ${link}\n\nLe code et le lien sont valables 15 minutes. Vous n’avez rien demandé ? Ignorez cet e-mail.`,
+    notAdminTool: (email: string) => `Vous êtes connecté en tant que ${email}, et cette adresse ne gère pas ce serveur de connexion (ADMIN_EMAILS). Une autre adresse ? Déconnectez-vous sur /account et connectez-vous avec celle-là.`,
     errors: {
       botCheck: 'Nous n’avons pas pu vérifier que vous n’êtes pas un robot. Réessayez.',
       urisInvalid: "Indiquez 1 à 10 adresses https, une par ligne, sans #.",
@@ -445,6 +447,7 @@ const T = {
     signInHere: 'Sign in here',
     mailCodeSubject: 'Your sign-in code',
     mailCode: (code: string, link: string) => `Your code to sign in: ${code}\n\nOr sign in with this link: ${link}\n\nThe code and the link are valid for 15 minutes. Didn’t ask for this? Then ignore this email.`,
+    notAdminTool: (email: string) => `You're signed in as ${email}, and that address doesn't manage this sign-in server (ADMIN_EMAILS). Another address? Sign out on /account and sign in with that one.`,
     errors: {
       botCheck: 'We couldn’t check that you’re not a robot. Please try again.',
       urisInvalid: "Give 1 to 10 https addresses, one per line, without #.",

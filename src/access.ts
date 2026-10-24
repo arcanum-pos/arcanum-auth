@@ -90,7 +90,11 @@ const appUrl = (client: Client) => (client.instance_url?.startsWith('https://') 
 // added — or that they already did.
 export async function noAccess(request: Request, env: Env, client: Client, user: User): Promise<Response> {
   if (user.guest) return messagePage(request, texts(request).accessGuest(client.name), 403);
-  if (client.id === ADMIN_CLIENT_ID) return messagePage(request, texts(request).errors.notAdmin, 403);
+  // Which address was refused: a passkey can belong to another account than you think.
+  if (client.id === ADMIN_CLIENT_ID) {
+    securityEvent('admin_signin_refused', { email: user.email });
+    return messagePage(request, texts(request).notAdminTool(user.email), 403);
+  }
   const row = await accessRow(env, client.id, user.email);
   return accessPage(request, { clientId: client.id, clientName: client.name, email: user.email, requested: row?.status === 'requested' }, 403);
 }

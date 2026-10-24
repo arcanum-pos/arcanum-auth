@@ -104,7 +104,7 @@ sets up an installation, or by hand there for another application
 - **Security events**: one JSON line each in Workers Logs, `"event":
   "security"` - `refresh_reuse`, `code_reuse`, `turnstile_failed`,
   `login_limited`, `code_guesses_limited`, `rate_limited`, `admin`,
-  `client_self`, `admin_from_internet`, and once an hour (the cron)
+  `client_self`, `admin_from_internet`, `admin_signin_refused` (tools/admin, an address not on `ADMIN_EMAILS`), and once an hour (the cron)
   `protection_off` when Turnstile isn't set (`turnstile`), its keys are
   test keys or malformed (`turnstile_keys`), siteverify refuses its secret
   (`turnstile_secret`), mail is switched

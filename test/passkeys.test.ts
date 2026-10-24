@@ -504,7 +504,9 @@ describe('the admin API by signing in (tools/admin)', () => {
     await addPasskey(cookie);
     const { res } = await toolAuthorize(cookie);
     expect(res.status).toBe(403);
-    expect(await res.text()).toContain('Je beheert deze toepassing niet');
+    const refused = await res.text();
+    expect(refused).toContain('Je bent aangemeld als not-admin-');
+    expect(refused).toContain('ADMIN_EMAILS');
 
     // An admin's token for an ordinary client is no admin token.
     const client = await strictClient();
