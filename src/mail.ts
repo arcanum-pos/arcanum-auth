@@ -52,7 +52,11 @@ async function callMailer(env: Env, provider: { type: string } & Record<string, 
 }
 
 // A test mail (the bootstrapper's "Testmail sturen"): the mailer's answer as it is.
+// MAIL_SENDING "off" wins over every account, the stored one included.
+export const mailOff = (env: Env) => env.MAIL_SENDING?.trim().toLowerCase() === 'off';
+
 export async function sendTestMail(env: Env, to: string, subject: string, text: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (mailOff(env)) return { status: 409, body: { ok: false, code: 'mail_off', error: 'Mail is off on this instance (MAIL_SENDING)' } };
   const mail = await currentMail(env);
   if (!env.MAILER || !env.MAILER_INTERNAL_KEY) return { status: 409, body: { ok: false, code: 'invalid_config', error: 'No platform mailer bound (MAILER, MAILER_INTERNAL_KEY)' } };
   if (!mail) return { status: 409, body: { ok: false, code: 'invalid_config', error: 'No mail account set' } };
@@ -62,6 +66,10 @@ export async function sendTestMail(env: Env, to: string, subject: string, text: 
 }
 
 export async function sendMail(env: Env, to: string, subject: string, text: string): Promise<void> {
+  if (mailOff(env)) {
+    console.log(`[auth] mail is off (MAIL_SENDING) - mail to ${to}: ${subject}\n${text}`);
+    return;
+  }
   const provider = (await currentMail(env))?.provider;
   if (!env.MAILER || !env.MAILER_INTERNAL_KEY || !provider) {
     console.log(`[auth] no mailer configured - mail to ${to}: ${subject}\n${text}`);

@@ -28,6 +28,9 @@ export interface Env {
   // The mailed sign-in codes, via the platform's mailer (optional — without it,
   // codes are only logged).
   MAILER?: Fetcher;
+  // "off": no mail leaves this instance, whatever account is set - codes only
+  // in the log (an instance for an active security scan, a test instance).
+  MAIL_SENDING?: string;
   MAILER_INTERNAL_KEY?: string;
   // JSON: { host, port, username, password, fromAddress, fromName? }
   MAIL_SMTP?: string;

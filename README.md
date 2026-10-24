@@ -220,6 +220,13 @@ has an account. Guests never get into a restricted client.
    - Gmail API (a Google service account with domain-wide delegation):
      `{"provider":"gmail_api","credentials":{"clientEmail":"…@….iam.gserviceaccount.com","privateKey":"-----BEGIN PRIVATE KEY-----\n…","impersonatedUser":"noreply@kaboutersoft.be","fromName":"Arcanum"}}`
 
+   **No mail at all**: the var `MAIL_SENDING` = `off` (in `wrangler.jsonc`
+   `vars`, or the dashboard) - every mail is only logged, whatever account
+   is set, and the test mail answers `mail_off`. For an instance under an
+   active security scan (ZAP) or a test instance: no mail credits burnt, no
+   spam reputation. Its codes are in `npx wrangler tail`, so you can still
+   sign in.
+
    login.kaboutersoft.be sends through **iCloud+ with the custom domain**
    (since 2026-10-06): SMTP `smtp.mail.me.com`, port 587 (STARTTLS), an
    app-specific password (appleid.apple.com). The username must be the

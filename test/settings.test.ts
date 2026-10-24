@@ -1,6 +1,6 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { sendMail } from '../src/mail';
+import { sendMail, sendTestMail } from '../src/mail';
 
 // The platform's mail account set from the bootstrapper (/admin/e-mail):
 // stored encrypted in D1 (src/settings.ts), used before MAIL_CONFIG /
@@ -68,6 +68,12 @@ describe('the platform mail account (/admin/mail)', () => {
     expect(testMail).toMatchObject({ message: { subject: 'Testmail - Je aanmeldcode' }, provider: { type: 'resend', apiKey: 're_1' } });
     expect((testMail.message as any).text).toMatch(/^Dit is een testmail van login\.kaboutersoft\.be/);
     expect((await admin('POST', '/admin/mail/test', { to: 'geen-adres' })).status).toBe(400);
+
+    // MAIL_SENDING "off" (an instance under a security scan): nothing leaves, even with an account set.
+    const off = { ...env, MAIL_SENDING: 'off' };
+    await sendMail(off, 'off@example.test', 'Code', 'Je code');
+    expect(await mailTo('off@example.test')).toEqual([]);
+    expect(await sendTestMail(off, 'off@example.test', 'Test', 'Tekst')).toMatchObject({ status: 409, body: { code: 'mail_off' } });
   });
 
   it('at most 10 test mails an hour', async () => {
