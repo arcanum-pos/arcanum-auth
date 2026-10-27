@@ -92,6 +92,12 @@ describe('headers on every answer', () => {
     expect(policy).toContain('camera=()');
     expect(policy).not.toContain('publickey-credentials');
   });
+
+  it('pages keep other sites out of their window and their bytes', async () => {
+    const res = await call('/login');
+    expect(res.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin');
+    expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin');
+  });
 });
 
 // Turnstile on the sign-in form (2026-10-24): no code is mailed without a

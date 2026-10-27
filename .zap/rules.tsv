@@ -3,3 +3,7 @@
 10202	IGNORE	(no CSRF token - every form post is checked on Origin / Sec-Fetch-Site, cookies are SameSite=Lax; tested in auth.test.ts)
 10027	IGNORE	(a comment in passkey.js mentions autocomplete="username webauthn" - nothing secret)
 10109	IGNORE	(informational: a modern web application)
+10049	IGNORE	(informational: pages and redirects are no-store on purpose - sign-in state and codes must never be cached)
+10063	IGNORE	(Permissions-Policy on passkey.js - the header only means something on a document; every page sends it)
+90004	IGNORE	(COOP and CORP are set on pages; no COEP - require-corp would block Turnstile's cross-origin frame, and nothing here needs cross-origin isolation)
+90005	IGNORE	(about ZAP's own requests lacking Sec-Fetch-* - browsers send them; form posts are checked on them)

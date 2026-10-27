@@ -536,6 +536,10 @@ export function page(request: Request, title: string, body: string, status = 200
       // Nothing here needs the camera, microphone or location; passkeys
       // (publickey-credentials-*) stay allowed.
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+      // No other site's window keeps a handle on a sign-in page, and no other
+      // site may load it as a resource. No COEP: Turnstile's frame is cross-origin.
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Resource-Policy': 'same-origin',
       ...headers,
     },
   });
