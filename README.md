@@ -1,5 +1,8 @@
 # arcanum-auth
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16083/badge)](https://www.bestpractices.dev/projects/16083)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/arcanum-pos/arcanum-auth/badge)](https://scorecard.dev/viewer/?uri=github.com/arcanum-pos/arcanum-auth)
+
 A small OpenID Connect provider at **https://login.kaboutersoft.be**, for
 any application that registers a client — the default identity provider of
 the POS installations, among others. Its pages and mails name only
