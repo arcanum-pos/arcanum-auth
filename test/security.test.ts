@@ -114,6 +114,26 @@ describe('Turnstile on the sign-in form', () => {
     expect(await turnstilePasses(env, undefined, null, 'login')).toBe(true);
   });
 
+  it('codes are random without bias: device codes, mailed codes', async () => {
+    const { newEmailCode, newUserCode, randomChars } = await import('../src/util');
+    for (let i = 0; i < 50; i++) {
+      expect(newUserCode()).toMatch(/^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/);
+      expect(newEmailCode()).toMatch(/^\d{6}$/);
+    }
+    // 20 characters: 240 is the last whole multiple, so 240..255 are skipped.
+    const spy = vi.spyOn(crypto, 'getRandomValues').mockImplementation(((bytes: Uint8Array) => {
+      bytes.fill(250);
+      bytes[2] = 0;
+      bytes[4] = 239;
+      return bytes;
+    }) as typeof crypto.getRandomValues);
+    try {
+      expect(randomChars(2, 'BCDFGHJKLMNPQRSTVWXZ')).toBe('BZ');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('plain http goes on to https (path, query and a post kept), never locally; answers ask for https', async () => {
     const get = await SELF.fetch(`http://login.kaboutersoft.be/login?continue=%2Faccount`, { redirect: 'manual' });
     expect(get.status).toBe(308);

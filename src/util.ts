@@ -49,10 +49,23 @@ export async function pkceMatches(verifier: string, challenge: string): Promise<
 // look-alikes, shown as XXXX-XXXX. 20^8 ≈ 2.6·10^10 combinations.
 const USER_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
 
+// Random characters from an alphabet, each equally likely: bytes past the
+// last whole multiple of its length are skipped (a plain `byte % length`
+// would favour the first characters).
+export function randomChars(length: number, alphabet: string): string {
+  const limit = 256 - (256 % alphabet.length);
+  let out = '';
+  while (out.length < length) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(length + 8))) {
+      if (byte < limit && out.length < length) out += alphabet[byte % alphabet.length];
+    }
+  }
+  return out;
+}
+
 export function newUserCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  const chars = [...bytes].map((b) => USER_CODE_ALPHABET[b % USER_CODE_ALPHABET.length]);
-  return `${chars.slice(0, 4).join('')}-${chars.slice(4).join('')}`;
+  const chars = randomChars(8, USER_CODE_ALPHABET);
+  return `${chars.slice(0, 4)}-${chars.slice(4)}`;
 }
 
 export function normalizeUserCode(input: string): string {
@@ -60,8 +73,9 @@ export function normalizeUserCode(input: string): string {
   return letters.length === 8 ? `${letters.slice(0, 4)}-${letters.slice(4)}` : '';
 }
 
+// Six digits, each equally likely.
 export function newEmailCode(): string {
-  return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
+  return randomChars(6, '0123456789');
 }
 
 // --- Time.
