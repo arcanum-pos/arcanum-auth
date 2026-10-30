@@ -114,6 +114,19 @@ describe('Turnstile on the sign-in form', () => {
     expect(await turnstilePasses(env, undefined, null, 'login')).toBe(true);
   });
 
+  it('the kabouter icon on every page, allowed by the CSP, the files checked apart', async () => {
+    const page = await call('/login');
+    const html = await page.text();
+    expect(html).toContain('<link rel="icon" href="/favicon.ico"');
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/icons/icon-180.png">');
+    expect(html).toContain('<link rel="manifest" href="/site.webmanifest">');
+    const csp = page.headers.get('Content-Security-Policy')!;
+    expect(csp).toContain("img-src 'self'");
+    expect(csp).toContain("manifest-src 'self'");
+    // That the files exist in public/: test/check-icons.mjs (npm test).
+  });
+
   it('the form shows the widget (its script allowed for this page only), and a refused check mails nothing', async () => {
     const page = await login(new Request(`${ISSUER}/login`), on);
     const html = await page.text();

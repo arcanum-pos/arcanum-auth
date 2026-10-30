@@ -514,6 +514,9 @@ ul.keys form{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}ul.keys input{he
 textarea{width:100%;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);padding:8px 12px;font:13px/1.5 ui-monospace,monospace;resize:vertical}code{font:12.5px ui-monospace,monospace;word-break:break-all}ul.keys button{width:auto;height:36px;margin:0;padding:0 12px;font-size:13.5px}
 [hidden]{display:none!important}`;
 
+// The kabouter icon in every browser (public/, served as static assets).
+export const ICONS = '<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="icon" type="image/png" sizes="96x96" href="/icons/icon-96.png"><link rel="apple-touch-icon" href="/icons/icon-180.png"><link rel="manifest" href="/site.webmanifest">';
+
 // `wide`: a page to manage something (a client's access), not a sign-in form.
 // `turnstile`: the page shows Cloudflare's bot check (turnstile.ts) - its
 // script and frame come from challenges.cloudflare.com, allowed for this page only.
@@ -521,14 +524,14 @@ export function page(request: Request, title: string, body: string, status = 200
   const script = (opts.passkeys ? '<script src="/passkey.js" defer></script>' : '') + (opts.turnstile ? `<script src="${TURNSTILE_SCRIPT}" async defer></script>` : '');
   const challenge = opts.turnstile ? ` ${TURNSTILE_ORIGIN}` : '';
   const html = `<!doctype html><html lang="${language(request)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${esc(title)} · ${esc(new URL(request.url).host)}</title><style>${STYLE}</style>${script}</head>
+<meta name="robots" content="noindex"><title>${esc(title)} · ${esc(new URL(request.url).host)}</title>${ICONS}<style>${STYLE}</style>${script}</head>
 <body><main${opts.wide ? ' class="wide"' : ''}><div class="brand">${esc(new URL(request.url).host)}</div>${body}</main></body></html>`;
   return new Response(html, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': `default-src 'none'; script-src 'self'${challenge}; connect-src 'self'${challenge}; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'${challenge ? `; frame-src${challenge}` : ''}`,
+      'Content-Security-Policy': `default-src 'none'; script-src 'self'${challenge}; connect-src 'self'${challenge}; img-src 'self'; manifest-src 'self'; style-src 'unsafe-inline'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'${challenge ? `; frame-src${challenge}` : ''}`,
       'X-Frame-Options': 'DENY',
       // Not no-referrer: that makes browsers send `Origin: null` on our own
       // form posts. same-origin still leaks nothing to other sites (Google).
