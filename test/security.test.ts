@@ -114,6 +114,18 @@ describe('Turnstile on the sign-in form', () => {
     expect(await turnstilePasses(env, undefined, null, 'login')).toBe(true);
   });
 
+  it('plain http goes on to https (path, query and a post kept), never locally; answers ask for https', async () => {
+    const get = await SELF.fetch(`http://login.kaboutersoft.be/login?continue=%2Faccount`, { redirect: 'manual' });
+    expect(get.status).toBe(308);
+    expect(get.headers.get('Location')).toBe('https://login.kaboutersoft.be/login?continue=%2Faccount');
+    const post = await SELF.fetch('http://login.kaboutersoft.be/token', { method: 'POST', redirect: 'manual' });
+    expect(post.status).toBe(308);
+    expect((await call('/login')).headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+    const { toHttps } = await import('../src/index');
+    expect(toHttps(new URL('http://localhost:8788/login'))).toBeNull();
+    expect(toHttps(new URL('https://login.kaboutersoft.be/login'))).toBeNull();
+  });
+
   it('the kabouter icon on every page, allowed by the CSP, the files checked apart', async () => {
     const page = await call('/login');
     const html = await page.text();

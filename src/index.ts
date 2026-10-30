@@ -26,9 +26,16 @@ import { securityEvent } from './audit';
 
 export type { Env };
 
+// Plain http (a typed address, an old link): on to https, path and query
+// kept, 308 so a form post stays a post. Not for local development.
+export function toHttps(url: URL): Response | null {
+  if (url.protocol !== 'http:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return null;
+  return new Response(null, { status: 308, headers: { Location: `https://${url.host}${url.pathname}${url.search}` } });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const response = await handle(request, env);
+    const response = toHttps(new URL(request.url)) ?? (await handle(request, env));
     // Browsers only ever reach this over https; and no answer is ever read
     // as another type than it says it is.
     const out = new Response(response.body, response);
