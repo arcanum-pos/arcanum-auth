@@ -7,3 +7,4 @@
 10063	IGNORE	(Permissions-Policy on passkey.js - the header only means something on a document; every page sends it)
 90004	IGNORE	(COOP and CORP are set on pages; no COEP - require-corp would block Turnstile's cross-origin frame, and nothing here needs cross-origin isolation)
 90005	IGNORE	(about ZAP's own requests lacking Sec-Fetch-* - browsers send them; form posts are checked on them)
+10094	IGNORE	(Base64 in favicon.svg - the kabouter icon embedded as a PNG data URL, nothing secret)

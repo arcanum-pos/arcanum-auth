@@ -1,0 +1,4 @@
+# Static files (the favicon and icons): served as they are, never sniffed as
+# something else.
+/*
+  X-Content-Type-Options: nosniff
