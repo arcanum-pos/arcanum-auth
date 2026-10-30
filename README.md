@@ -414,6 +414,12 @@ one when it may have leaked, and the signing key once a year anyway.
 | a client's secret | that installation until its installer has it | the client rotates it itself: `POST /clients/self/secret` |
 
 
+## Contributing and security
+
+Bugs, questions and ideas: [issues](https://github.com/arcanum-pos/arcanum-auth/issues).
+How to contribute (and the test policy): [CONTRIBUTING.md](CONTRIBUTING.md).
+Security vulnerabilities: privately, see [SECURITY.md](SECURITY.md).
+
 ## License
 
 AGPL-3.0-or-later — see [LICENSE](LICENSE).
