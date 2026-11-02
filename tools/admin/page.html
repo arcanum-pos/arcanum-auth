@@ -284,7 +284,13 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
       '<details><summary>Addresses</summary><form data-uris="' + id + '">' +
       '<div class="grid2"><div><label>Redirect URIs</label><textarea name="r" rows="' + Math.max(2, c.redirect_uris.length) + '">' + esc(c.redirect_uris.join('\n')) + '</textarea></div>' +
       '<div><label>Logout return addresses</label><textarea name="l" rows="' + Math.max(2, c.post_logout_redirect_uris.length) + '">' + esc(c.post_logout_redirect_uris.join('\n')) + '</textarea></div></div>' +
-      '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save addresses</button></div></form></details>';
+      '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save addresses</button></div></form></details>' +
+      // Enrollment (enroll.ts): only domains whose mail this client's installation receives itself.
+      '<details><summary>Enrollment domains</summary><form data-enroll="' + id + '">' +
+      '<p class="meta">A first passkey without a mailed code, for addresses on these domains. Only list domains whose mail this installation receives itself (a mail server for its own domains) - never a public provider like gmail.com: its accounts work on every client.</p>' +
+      '<label>Domains (one per line)</label><textarea name="d" rows="' + Math.max(2, (c.enroll_domains || []).length) + '" placeholder="frigg.be">' + esc((c.enroll_domains || []).join('\n')) + '</textarea>' +
+      '<label class="check"><input type="checkbox" name="reset"' + (c.enroll_reset ? ' checked' : '') + '> Also reset an account that lost its passkeys (its passkeys, Google link and sessions go)</label>' +
+      '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save enrollment</button></div></form></details>';
     var hosts = shownHosts(c);
     return '<div class="client' + (c.disabled_at ? ' disabled' : '') + '">' +
       '<div class="top"><div class="name">' + esc(c.shown_name || c.name) + '</div><div class="row">' + badges + '</div></div>' +
@@ -314,6 +320,14 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
   });
 
   $('clients').addEventListener('submit', function (e) {
+    var enroll = e.target.closest('form[data-enroll]');
+    if (enroll) {
+      e.preventDefault();
+      var eid = enroll.dataset.enroll;
+      api('PATCH', '/admin/clients/' + encodeURIComponent(eid), { enroll_domains: lines(enroll.d.value), enroll_reset: enroll.reset.checked })
+        .then(loadClients).then(function () { clientMsg(eid, 'Enrollment saved.'); }).catch(function (err) { clientMsg(eid, err.message, true); });
+      return;
+    }
     var f = e.target.closest('form[data-uris]'); if (!f) return;
     e.preventDefault();
     var id = f.dataset.uris;

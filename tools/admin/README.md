@@ -45,7 +45,9 @@ off (Turnstile, mail - `/admin/info`), and lets you:
   "not answering") - what the bootstrapper's Installaties page used to show
 - create one (the secret is shown once, with a button to copy issuer, id
   and secret), open or restrict it, require a passkey, edit its addresses,
-  disable it, delete a disabled one for good
+  set its enrollment domains (a mail installation's own domains, whose users
+  get a first passkey without a mailed code) and whether it may reset an
+  account, disable it, delete a disabled one for good
 - remove someone's passkeys (they're told by mail)
 - see which mail account it sends with, and send a test mail
 
