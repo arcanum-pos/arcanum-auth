@@ -11,6 +11,7 @@ import {
   codeHash,
   inSeconds,
   isEmail,
+  loginHintOf,
   newEmailCode,
   normalizeEmail,
   normalizeUserCode,
@@ -73,7 +74,10 @@ const codeRow = (env: Env, id: string) => env.DB.prepare("SELECT * FROM email_co
 export async function login(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const turnstile = turnstileSiteKey(env);
-  if (request.method === 'GET') return loginPage(request, { continueTo: safeContinue(url.searchParams.get('continue')), google: googleEnabled(env), turnstile });
+  if (request.method === 'GET') {
+    const continueTo = safeContinue(url.searchParams.get('continue'));
+    return loginPage(request, { continueTo, email: loginHintOf(continueTo), google: googleEnabled(env), turnstile });
+  }
   const foreign = refuseForeign(request, env);
   if (foreign) return foreign;
 

@@ -176,7 +176,7 @@ has an account. Guests never get into a restricted client.
 |---|---|
 | `GET /.well-known/openid-configuration` | discovery |
 | `GET /.well-known/jwks.json` | public signing key(s) |
-| `GET /authorize` | authorization code flow (PKCE S256 required) |
+| `GET /authorize` | authorization code flow (PKCE S256 required); `prompt=login` asks for a fresh sign-in, `login_hint` (a valid address) fills in the login page's e-mail field |
 | `POST /token` | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code`; client auth `client_secret_post` or `client_secret_basic` |
 | `POST /device/code` | device authorization (`client_id` + `scope`; the secret is checked at `/token`) |
 | `GET /userinfo` | the user behind an access token |

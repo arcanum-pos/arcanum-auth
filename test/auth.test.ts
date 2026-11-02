@@ -232,6 +232,20 @@ describe('authorization code flow (the console)', () => {
     expect(mail.text).toContain('Webmail');
   });
 
+  it('fills in the address the application asks for (login_hint), and nothing that is not an address', async () => {
+    const client = await newClient();
+    const { challenge } = await pkce();
+    const page = async (hint: string) => {
+      const res = await call(`${authorizeUrl(client.client_id, challenge)}&login_hint=${encodeURIComponent(hint)}`);
+      const loginUrl = new URL(res.headers.get('Location')!, ISSUER);
+      return (await call(loginUrl.pathname + loginUrl.search)).text();
+    };
+    expect(await page(' Henk@Frigg.be ')).toContain('value="henk@frigg.be"');
+    const junk = await page('"><script>x</script>');
+    expect(junk).not.toContain('<script>x');
+    expect(junk).toContain('name="email" type="email" autocomplete="username webauthn" required value=""');
+  });
+
   it('sends a signed-out user to sign in, and back', async () => {
     const client = await newClient();
     const email = uniqueEmail('return');

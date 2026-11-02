@@ -153,6 +153,16 @@ export function safeContinue(value: string | null | undefined): string {
   return path === '/authorize' || path === '/device' || path === '/account' || path === '/login/passkey' ? value : '/account';
 }
 
+/**
+ * The address an application asked to sign in with (OpenID Connect `login_hint`), when the login page continues
+ * an /authorize request that carries one: it fills in the e-mail field. Only a valid address; anything else is ignored.
+ */
+export function loginHintOf(continueTo: string): string | undefined {
+  if (continueTo.split('?')[0] !== '/authorize') return undefined;
+  const hint = normalizeEmail(new URLSearchParams(continueTo.split('?')[1] || '').get('login_hint') || '');
+  return isEmail(hint) ? hint : undefined;
+}
+
 export async function readForm(request: Request): Promise<Record<string, string>> {
   const type = request.headers.get('Content-Type') || '';
   if (!type.includes('application/x-www-form-urlencoded') && !type.includes('multipart/form-data')) return {};
