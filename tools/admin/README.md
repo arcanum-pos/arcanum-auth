@@ -66,6 +66,7 @@ A="Authorization: Bearer $ADMIN_API_KEY"
 | list clients (with `last_used_at`, `active_users`) | `curl -H "$A" localhost:8799/admin/clients` |
 | create a client (secret shown once) | `node scripts/create-client.mjs "<name>" https://<app>` - or POST `/admin/clients` with `name`, `redirect_uris`, `post_logout_redirect_uris`, optional `instance_url`, `owner_email`, `restricted` (default true) |
 | open / restrict, passkey required, its addresses | `curl -H "$A" -H 'Content-Type: application/json' -X PATCH localhost:8799/admin/clients/<id> -d '{"restricted":false}'` (also `require_passkey`, `redirect_uris`, `post_logout_redirect_uris`) |
+| let a mail installation enroll its own domains | `curl -H "$A" -H 'Content-Type: application/json' -X PATCH localhost:8799/admin/clients/<id> -d '{"enroll_domains":["frigg.be"],"enroll_reset":true}'` - only domains whose mail that installation receives |
 | disable a client (`?by=<email>` mails its owner) | `curl -H "$A" -X DELETE localhost:8799/admin/clients/<id>` |
 | delete a disabled one for good | `curl -H "$A" -X DELETE 'localhost:8799/admin/clients/<id>?hard=1'` |
 | someone's passkeys, all gone (they're told) | `curl -H "$A" -X DELETE localhost:8799/admin/users/<email>/passkeys` |

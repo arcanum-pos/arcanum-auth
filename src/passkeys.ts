@@ -78,20 +78,23 @@ interface PasskeyRow {
   last_used_at: string | null;
 }
 
-const rp = (env: Env) => ({ id: new URL(env.ISSUER).hostname, origin: new URL(env.ISSUER).origin });
+export const rp = (env: Env) => ({ id: new URL(env.ISSUER).hostname, origin: new URL(env.ISSUER).origin });
 
 // JSON, posted by our own pages' script.
-function jsonFromHere(request: Request, env: Env): boolean {
+export function jsonFromHere(request: Request, env: Env): boolean {
   return sameOrigin(request, env.ISSUER) && (request.headers.get('Content-Type') || '').includes('application/json');
 }
 
-async function body(request: Request): Promise<Record<string, unknown>> {
+export async function body(request: Request): Promise<Record<string, unknown>> {
   return ((await request.json().catch(() => null)) as Record<string, unknown> | null) ?? {};
 }
 
-const fail = (request: Request, key: ErrorKey, status: number) => json({ error: texts(request).errors[key] }, status);
+export const fail = (request: Request, key: ErrorKey, status: number) => json({ error: texts(request).errors[key] }, status);
 
-async function saveChallenge(env: Env, challenge: string, purpose: 'register' | 'login', userId: string | null) {
+// 'enroll': a first passkey for an enrollment (enroll.ts), for the account it names.
+export type ChallengePurpose = 'register' | 'login' | 'enroll';
+
+export async function saveChallenge(env: Env, challenge: string, purpose: ChallengePurpose, userId: string | null) {
   await env.DB.prepare('INSERT INTO webauthn_challenges (challenge_hash, purpose, user_id, expires_at) VALUES (?, ?, ?, ?)')
     .bind(await sha256(challenge), purpose, userId, inSeconds(CHALLENGE_SECONDS))
     .run();
@@ -99,7 +102,7 @@ async function saveChallenge(env: Env, challenge: string, purpose: 'register' | 
 
 // The challenge the browser signed (from its clientDataJSON), taken: it
 // works once. null when it's unknown, used, expired or for something else.
-async function takeChallenge(env: Env, clientDataJSON: unknown, purpose: 'register' | 'login'): Promise<{ challenge: string; userId: string | null } | null> {
+export async function takeChallenge(env: Env, clientDataJSON: unknown, purpose: ChallengePurpose): Promise<{ challenge: string; userId: string | null } | null> {
   let challenge: unknown;
   try {
     challenge = JSON.parse(new TextDecoder().decode(fromBase64url(String(clientDataJSON)))).challenge;
@@ -216,6 +219,11 @@ export async function passkeyRegisterOptions(request: Request, env: Env): Promis
   const user = session.user;
   const existing = await passkeysOf(env, user.id);
   if (existing.length && session.amr !== 'passkey') return fail(request, 'passkeyStepUp', 403);
+  return json(await registrationOptions(env, 'register', { id: user.id, email: user.email, name: user.name }, existing));
+}
+
+// Options for navigator.credentials.create, for this account; the challenge saved for `purpose`.
+export async function registrationOptions(env: Env, purpose: ChallengePurpose, user: { id: string; email: string; name: string }, existing: PasskeyRow[] = []) {
   const options = await generateRegistrationOptions({
     // What the browser shows when saving it: this sign-in service's own host.
     rpName: rp(env).id,
@@ -228,8 +236,8 @@ export async function passkeyRegisterOptions(request: Request, env: Env): Promis
     authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     timeout: CHALLENGE_SECONDS * 1000,
   });
-  await saveChallenge(env, options.challenge, 'register', user.id);
-  return json(options);
+  await saveChallenge(env, options.challenge, purpose, user.id);
+  return options;
 }
 
 export async function passkeyRegister(request: Request, env: Env): Promise<Response> {
@@ -242,9 +250,29 @@ export async function passkeyRegister(request: Request, env: Env): Promise<Respo
   const b = await body(request);
   const response = b.response as RegistrationResponseJSON | undefined;
   if (!response?.response?.clientDataJSON) return fail(request, 'request', 400);
-  const taken = await takeChallenge(env, response.response.clientDataJSON, 'register');
-  if (!taken || taken.userId !== user.id) return fail(request, 'passkeyExpired', 400);
+  const verified = await verifiedRegistration(env, 'register', user.id, response);
+  if ('error' in verified) return fail(request, verified.error, verified.status);
+  const name = await storePasskey(request, env, user.id, verified, b.name);
+  // The first one, just made and used: this session now counts as made with a
+  // passkey (a client that requires one lets it through).
+  if (first) await env.DB.prepare("UPDATE sessions SET amr = 'passkey' WHERE id_hash = ?").bind(session.idHash).run();
+  // Told by mail: someone who got into the account can't quietly add a way back in.
+  const t = texts(request);
+  await sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${env.ISSUER}/account`)).catch((err) => console.error('passkey mail failed', err));
+  return json({ redirect: safeContinue(typeof b.continue === 'string' ? b.continue : null) });
+}
 
+// A new passkey, checked: its challenge (for `purpose` and this account),
+// this site, user verification - and not one we already have.
+type Verified = { info: NonNullable<Awaited<ReturnType<typeof verifyRegistrationResponse>>['registrationInfo']>; response: RegistrationResponseJSON };
+export async function verifiedRegistration(
+  env: Env,
+  purpose: ChallengePurpose,
+  userId: string,
+  response: RegistrationResponseJSON
+): Promise<Verified | { error: ErrorKey; status: number }> {
+  const taken = await takeChallenge(env, response.response.clientDataJSON, purpose);
+  if (!taken || taken.userId !== userId) return { error: 'passkeyExpired', status: 400 };
   let info;
   try {
     const result = await verifyRegistrationResponse({
@@ -258,17 +286,21 @@ export async function passkeyRegister(request: Request, env: Env): Promise<Respo
   } catch (err) {
     console.warn('passkey registration refused', (err as Error).message);
   }
-  if (!info) return fail(request, 'passkeyAddFailed', 400);
-  if (await env.DB.prepare('SELECT 1 FROM passkeys WHERE id = ?').bind(info.credential.id).first()) return fail(request, 'passkeyExists', 409);
+  if (!info) return { error: 'passkeyAddFailed', status: 400 };
+  if (await env.DB.prepare('SELECT 1 FROM passkeys WHERE id = ?').bind(info.credential.id).first()) return { error: 'passkeyExists', status: 409 };
+  return { info, response };
+}
 
+// Stored for the account → the name it got.
+export async function storePasskey(request: Request, env: Env, userId: string, { info, response }: Verified, browserName: unknown): Promise<string> {
   const transports = info.credential.transports ?? response.response.transports ?? [];
-  const name = defaultName(request, info.aaguid, transports, b.name);
+  const name = defaultName(request, info.aaguid, transports, browserName);
   await env.DB.prepare(
     'INSERT INTO passkeys (id, user_id, public_key, counter, transports, device_type, backed_up, name, aaguid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
     .bind(
       info.credential.id,
-      user.id,
+      userId,
       base64url(info.credential.publicKey),
       info.credential.counter,
       JSON.stringify(transports),
@@ -279,13 +311,7 @@ export async function passkeyRegister(request: Request, env: Env): Promise<Respo
       nowIso()
     )
     .run();
-  // The first one, just made and used: this session now counts as made with a
-  // passkey (a client that requires one lets it through).
-  if (first) await env.DB.prepare("UPDATE sessions SET amr = 'passkey' WHERE id_hash = ?").bind(session.idHash).run();
-  // Told by mail: someone who got into the account can't quietly add a way back in.
-  const t = texts(request);
-  await sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${env.ISSUER}/account`)).catch((err) => console.error('passkey mail failed', err));
-  return json({ redirect: safeContinue(typeof b.continue === 'string' ? b.continue : null) });
+  return name;
 }
 
 // --- The offer after signing in another way.

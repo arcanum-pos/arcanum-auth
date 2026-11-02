@@ -1,5 +1,6 @@
 import { unassign, accessRow } from './access';
 import { validUris } from './admin';
+import { createEnrollment } from './enroll';
 import type { Env } from './env';
 import { clientById, clientSecretMatches, type Client } from './store';
 import { isEmail, json, normalizeEmail, nowIso, randomToken, sha256 } from './util';
@@ -17,6 +18,9 @@ import { isEmail, json, normalizeEmail, nowIso, randomToken, sha256 } from './ut
 //   PUT    /clients/self/users/:email   { role? } → assigns it (a request becomes an assignment)
 //   DELETE /clients/self/users/:email   → unassigns it and revokes its refresh tokens;
 //          never an admin it didn't make ({ removed: false, reason: 'admin' })
+//   POST   /clients/self/users/:email/enrollment  { name?, continue_to, reset? } → 201 { url, expires_in }:
+//          its first passkey, for an address on the domains a platform admin
+//          listed for this client (enroll.ts)
 // role 'admin' makes someone an admin of the client (Arcanum: an admin of
 // one of its organisations); 'member' (the default) takes that back — only
 // from admins the application made (app_admin), never the owner or one an
@@ -122,7 +126,7 @@ export async function clientSelf(request: Request, env: Env, path: string): Prom
     return json({ assigned: users.length });
   }
 
-  const one = path.match(/^\/clients\/self\/users\/([^/]+)$/);
+  const one = path.match(/^\/clients\/self\/users\/([^/]+)(\/enrollment)?$/);
   if (one) {
     let email: string;
     try {
@@ -131,6 +135,7 @@ export async function clientSelf(request: Request, env: Env, path: string): Prom
       return json({ error: 'not an e-mail address' }, 400);
     }
     if (!isEmail(email)) return json({ error: 'not an e-mail address' }, 400);
+    if (one[2]) return request.method === 'POST' ? createEnrollment(request, env, client, email) : json({ error: 'Not found' }, 404);
     if (request.method === 'PUT') {
       const body = (await request.json().catch(() => ({}))) as { role?: unknown } | null;
       const users = usersOf([{ email, role: body?.role }]);

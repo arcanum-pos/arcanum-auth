@@ -13,6 +13,7 @@ import { account, devicePage, deviceConfirm, googleCallback, googleStart, login,
 import { manageAccess, requestAccess } from './access';
 import { admin, adminCaller } from './admin';
 import { cleanup } from './cleanup';
+import { enroll, enrollOptions } from './enroll';
 import { clientSelf } from './clients';
 import type { Env } from './env';
 import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
@@ -77,12 +78,14 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/userinfo' && (method === 'GET' || method === 'POST')) return userinfo(request, env);
       if (path === '/logout' && (method === 'GET' || method === 'POST')) return logout(request, env);
 
-      if (['/login', '/login/code', '/login/link', '/login/name', '/device', '/device/confirm', '/passkey/login', '/logout'].includes(path) && (await limited(env, request, path))) return tooMany();
+      if (['/login', '/login/code', '/login/link', '/login/name', '/device', '/device/confirm', '/passkey/login', '/logout', '/enroll', '/enroll/options'].includes(path) && (await limited(env, request, path))) return tooMany();
       if (path === '/login' && (method === 'GET' || method === 'POST')) return login(request, env);
       if (path === '/login/code' && (method === 'GET' || method === 'POST')) return loginCode(request, env);
       if (path === '/login/link' && (method === 'GET' || method === 'POST')) return loginLink(request, env);
       if (path === '/login/name' && method === 'POST') return loginName(request, env);
       if (path === '/login/passkey' && method === 'GET') return passkeyRequired(request, env);
+      if (path === '/enroll' && (method === 'GET' || method === 'POST')) return enroll(request, env);
+      if (path === '/enroll/options' && method === 'POST') return enrollOptions(request, env);
       // No passwords anymore: the old sign-up, verify and reset pages lead to sign-in.
       if (path === '/signup' || path === '/verify' || path === '/reset' || path === '/reset/confirm') {
         return redirect(`/login?continue=${encodeURIComponent(safeContinue(url.searchParams.get('continue')))}`, {}, 303);
@@ -112,7 +115,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       }
       if (path === '/clients/self' || path === '/clients/self/secret' || path.startsWith('/clients/self/users')) {
         const res = await clientSelf(request, env, path);
-        if (method !== 'GET') securityEvent('client_self', { method, path: path.replace(/\/users\/.+$/, '/users/:email'), status: res.status });
+        if (method !== 'GET') securityEvent('client_self', { method, path: path.replace(/\/users\/[^/]+/, '/users/:email'), status: res.status });
         return res;
       }
       const access = path.match(/^\/access\/([^/]+)(\/request)?$/);

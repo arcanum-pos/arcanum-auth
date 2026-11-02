@@ -2,7 +2,8 @@
 // browser's WebAuthn API needs one. It only adds to pages that work
 // without it: the passkey buttons stay hidden where the browser can't.
 //   [data-passkey-login]     sign in with a passkey (and the e-mail field's autofill)
-//   [data-passkey-register]  add a passkey; [data-skip] = where to go when this browser can't
+//   [data-passkey-register]  add a passkey; [data-skip] = where to go when this browser can't;
+//                            [data-options], [data-register] = an enrollment's endpoints (enroll.ts)
 //   [data-passkey-error]     where a failure is shown (the server words it)
 // And the sign-in form's Turnstile (turnstile.ts): checked on submit, not on load.
 // Kept as plain ES2017, no build step; no backticks or ${ in it (it lives in
@@ -131,7 +132,7 @@ export const PASSKEY_SCRIPT = String.raw`(function () {
       add.addEventListener('click', function () {
         add.disabled = true;
         clearError();
-        post('/passkey/register/options', {}).then(function (o) {
+        post(add.dataset.options || '/passkey/register/options', {}).then(function (o) {
           var publicKey = Object.assign({}, o, {
             challenge: dec(o.challenge),
             user: Object.assign({}, o.user, { id: dec(o.user.id) }),
@@ -139,7 +140,7 @@ export const PASSKEY_SCRIPT = String.raw`(function () {
           });
           return navigator.credentials.create({ publicKey: publicKey });
         }).then(function (c) {
-          return post('/passkey/register', {
+          return post(add.dataset.register || '/passkey/register', {
             name: deviceName(),
             continue: add.dataset.continue,
             response: {

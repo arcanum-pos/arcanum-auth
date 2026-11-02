@@ -105,6 +105,13 @@ const T = {
     mailPasskeyRule: (client: string, by: string, on: boolean, manage: string) => `${by} heeft ${on ? 'een passkey verplicht gemaakt' : 'de verplichte passkey uitgezet'} voor ${client}.\n\nBekijk het op ${manage}`,
     mailPasskeysResetSubject: 'Je passkeys zijn verwijderd',
     mailPasskeysReset: (accountUrl: string) => `Een beheerder heeft op jouw vraag al je passkeys verwijderd. Meld je aan met een code via e-mail en voeg een nieuwe passkey toe op ${accountUrl}.\n\nHeb je dit niet gevraagd? Meld het meteen aan de beheerder.`,
+    enrollTitle: 'Maak je passkey',
+    enrollText: (email: string, client: string) =>
+      `${client} heeft een account voor je klaargezet: <strong>${email}</strong>. Maak nu een passkey: daarmee meld je je voortaan aan, met je vingerafdruk, je gezicht of de pincode van je toestel. Geen wachtwoord, geen code.`,
+    enrollUnsupported: 'Deze browser ondersteunt geen passkeys. Open de uitnodiging op een toestel dat dat wel doet (een recente telefoon of computer), of vraag de beheerder om een nieuwe.',
+    mailSignInResetSubject: 'Je aanmelding werd opnieuw ingesteld',
+    mailSignInReset: (client: string, accountUrl: string) =>
+      `Op vraag van de beheerder van ${client} werd je aanmelding opnieuw ingesteld: je vorige passkeys en aanmeldingen zijn verwijderd en er werd een nieuwe passkey toegevoegd.\n\nWas jij dat niet? Meld het meteen aan de beheerder. Je passkeys staan op ${accountUrl}.`,
     sessionsTitle: 'Waar je aangemeld bent',
     sessionsIntro: 'Op deze site. Wie 7 dagen niets doet, wordt afgemeld; na 14 dagen sowieso.',
     thisBrowser: 'deze browser',
@@ -153,6 +160,7 @@ const T = {
       request: 'Deze aanvraag is ongeldig.',
       mail: 'De e-mail kon niet verstuurd worden. Probeer het later opnieuw.',
       linkInvalid: 'Deze aanmeldlink is al gebruikt of verlopen. Vraag een nieuwe aan.',
+      enrollInvalid: 'Deze link is al gebruikt of verlopen. Open de uitnodiging opnieuw.',
       passkeyFailed: 'Aanmelden met een passkey is niet gelukt. Probeer opnieuw.',
       passkeyUnknown: 'Deze passkey hoort bij geen account (meer). Meld je op een andere manier aan.',
       passkeyExpired: 'Dat duurde te lang. Probeer opnieuw.',
@@ -260,6 +268,13 @@ const T = {
     mailPasskeyRule: (client: string, by: string, on: boolean, manage: string) => `${by} a ${on ? 'rendu une clé d’accès obligatoire' : 'désactivé la clé d’accès obligatoire'} pour ${client}.\n\nVoir sur ${manage}`,
     mailPasskeysResetSubject: 'Vos clés d’accès ont été supprimées',
     mailPasskeysReset: (accountUrl: string) => `À votre demande, un administrateur a supprimé toutes vos clés d’accès. Connectez-vous avec un code par e-mail et ajoutez une nouvelle clé d’accès sur ${accountUrl}.\n\nVous ne l’avez pas demandé ? Signalez-le tout de suite à l’administrateur.`,
+    enrollTitle: 'Créez votre clé d’accès',
+    enrollText: (email: string, client: string) =>
+      `${client} a préparé un compte pour vous : <strong>${email}</strong>. Créez maintenant une clé d’accès : vous vous connecterez désormais avec elle, avec votre empreinte, votre visage ou le code de votre appareil. Pas de mot de passe, pas de code.`,
+    enrollUnsupported: 'Ce navigateur ne prend pas en charge les clés d’accès. Ouvrez l’invitation sur un appareil qui les prend en charge (un téléphone ou un ordinateur récent), ou demandez-en une nouvelle à l’administrateur.',
+    mailSignInResetSubject: 'Votre connexion a été réinitialisée',
+    mailSignInReset: (client: string, accountUrl: string) =>
+      `À la demande de l’administrateur de ${client}, votre connexion a été réinitialisée : vos clés d’accès et sessions précédentes ont été supprimées et une nouvelle clé d’accès a été ajoutée.\n\nCe n’était pas vous ? Signalez-le tout de suite à l’administrateur. Vos clés d’accès se trouvent sur ${accountUrl}.`,
     sessionsTitle: 'Où vous êtes connecté',
     sessionsIntro: 'Sur ce site. Après 7 jours sans activité, vous êtes déconnecté ; après 14 jours de toute façon.',
     thisBrowser: 'ce navigateur',
@@ -308,6 +323,7 @@ const T = {
       request: 'Cette demande n’est pas valable.',
       mail: 'L’e-mail n’a pas pu être envoyé. Réessayez plus tard.',
       linkInvalid: 'Ce lien de connexion a déjà été utilisé ou a expiré. Demandez-en un nouveau.',
+      enrollInvalid: 'Ce lien a déjà été utilisé ou a expiré. Rouvrez l’invitation.',
       passkeyFailed: 'La connexion avec une clé d’accès a échoué. Réessayez.',
       passkeyUnknown: 'Cette clé d’accès n’appartient (plus) à aucun compte. Connectez-vous autrement.',
       passkeyExpired: 'C’était trop long. Réessayez.',
@@ -415,6 +431,13 @@ const T = {
     mailPasskeyRule: (client: string, by: string, on: boolean, manage: string) => `${by} ${on ? 'made a passkey required' : 'stopped requiring a passkey'} for ${client}.\n\nSee it at ${manage}`,
     mailPasskeysResetSubject: 'Your passkeys were removed',
     mailPasskeysReset: (accountUrl: string) => `At your request, an administrator removed all your passkeys. Sign in with a code by e-mail and add a new passkey at ${accountUrl}.\n\nDidn’t ask for this? Tell the administrator right away.`,
+    enrollTitle: 'Create your passkey',
+    enrollText: (email: string, client: string) =>
+      `${client} has set up an account for you: <strong>${email}</strong>. Create a passkey now: from then on you sign in with it, using your fingerprint, your face or your device’s PIN. No password, no code.`,
+    enrollUnsupported: 'This browser doesn’t support passkeys. Open the invitation on a device that does (a recent phone or computer), or ask the administrator for a new one.',
+    mailSignInResetSubject: 'Your sign-in was reset',
+    mailSignInReset: (client: string, accountUrl: string) =>
+      `At the request of the administrator of ${client}, your sign-in was reset: your previous passkeys and sessions were removed and a new passkey was added.\n\nWasn’t you? Tell the administrator right away. Your passkeys are at ${accountUrl}.`,
     sessionsTitle: 'Where you are signed in',
     sessionsIntro: 'On this site. After 7 days without use you are signed out; after 14 days in any case.',
     thisBrowser: 'this browser',
@@ -463,6 +486,7 @@ const T = {
       request: 'This request is not valid.',
       mail: 'The email could not be sent. Try again later.',
       linkInvalid: 'This sign-in link has already been used or has expired. Ask for a new one.',
+      enrollInvalid: 'This link has already been used or has expired. Open the invitation again.',
       passkeyFailed: 'Signing in with a passkey failed. Try again.',
       passkeyUnknown: 'This passkey doesn’t belong to an account (any more). Sign in another way.',
       passkeyExpired: 'That took too long. Try again.',
@@ -669,8 +693,11 @@ const kindOf = (t: Texts, k: PasskeyItem) =>
   k.kind === 'securityKey' ? t.kindSecurityKey(k.transports.map((x) => x.toUpperCase().replace('BLE', 'Bluetooth')).join(', ')) : k.kind === 'synced' ? t.kindSynced : t.kindDevice;
 
 // The add-a-passkey button: shown by /passkey.js only where the browser can.
-const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string) =>
-  `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''} hidden>${t.addPasskey}</button>
+// `endpoints`: where the script asks the options and sends the passkey (an enrollment's own, enroll.ts).
+const addPasskeyButton = (t: Texts, continueTo: string, skipTo?: string, endpoints?: { options: string; register: string; label: string }) =>
+  `<button type="button" data-passkey-register data-continue="${esc(continueTo)}" data-exists="${esc(t.errors.passkeyExists)}"${skipTo ? ` data-skip="${esc(skipTo)}"` : ''}${
+    endpoints ? ` data-options="${esc(endpoints.options)}" data-register="${esc(endpoints.register)}"` : ''
+  } hidden>${endpoints ? esc(endpoints.label) : t.addPasskey}</button>
 <p class="error" role="alert" data-passkey-error hidden></p>`;
 
 export interface SessionItem {
@@ -883,4 +910,18 @@ export function passkeyRequiredPage(request: Request, opts: { continueTo: string
 <div data-passkey-box hidden><button type="button" data-passkey-login data-continue="${esc(opts.continueTo)}">${t.withPasskey}</button></div>
 <p class="error" role="alert" data-passkey-error hidden></p><p class="hint">${t.passkeyLost}</p>`;
   return page(request, opts.enroll ? t.passkeyEnrollTitle : t.passkeyRequiredTitle, body, 200, {}, { passkeys: true });
+}
+
+// An enrollment (enroll.ts): the account's first passkey, nothing else on offer.
+export function enrollPage(request: Request, opts: { email: string; clientName: string }) {
+  const t = texts(request);
+  return page(
+    request,
+    t.enrollTitle,
+    `<h1>${t.enrollTitle}</h1><p>${t.enrollText(esc(opts.email), esc(opts.clientName))}</p>
+${addPasskeyButton(t, '/account', undefined, { options: '/enroll/options', register: '/enroll', label: t.enrollTitle })}<p data-passkey-unsupported hidden>${t.enrollUnsupported}</p>`,
+    200,
+    {},
+    { passkeys: true }
+  );
 }

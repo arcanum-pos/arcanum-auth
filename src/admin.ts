@@ -6,6 +6,7 @@ import { verifyAccessToken } from './tokens';
 import { texts } from './pages';
 import { distinctiveHosts, inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 import { protectionsOff } from './protections';
+import { securityEvent } from './audit';
 
 const LOGIN_LINK_SECONDS = 60;
 
@@ -24,6 +25,18 @@ function overTestLimit(now = Date.now()): boolean {
 
 // An absolute https URL whose origin some (enabled) client registered a
 // redirect URI on — so a login link can never become an open redirect.
+// Domain names, lower case, one each; null when any isn't one (or too many).
+export function enrollDomains(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const out = new Set<string>();
+  for (const d of value) {
+    const domain = typeof d === 'string' ? d.trim().toLowerCase() : '';
+    if (!/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) return null;
+    out.add(domain);
+  }
+  return [...out];
+}
+
 export async function isRegisteredOrigin(env: Env, target: string): Promise<boolean> {
   let origin: string;
   try {
@@ -45,6 +58,9 @@ export async function isRegisteredOrigin(env: Env, target: string): Promise<bool
 //   GET    /admin/clients      → [{ client_id, name, redirect_uris, restricted, ... }]
 //   PATCH  /admin/clients/:id  { restricted?, redirect_uris?, post_logout_redirect_uris? } → open or restrict
 //          it; each URI list given replaces the old one (the bootstrapper's Applicaties)
+//          { enroll_domains?: string[], enroll_reset?: boolean } → the domains it may
+//          give a first passkey for (enroll.ts) — only those whose mail it receives
+//          itself — and whether it may start an account over; only here, never by the client
 //   DELETE /admin/clients/:id[?by=<email>]  → disables it (tokens it issued simply expire);
 //          its owner gets a mail when someone else (by) did it
 //   DELETE /admin/clients/:id?hard=1        → a disabled client gone for good: its
@@ -136,7 +152,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
 
   if (path === '/admin/clients' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
-      `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, require_passkey, created_at, disabled_at, last_used_at,
+      `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, require_passkey, enroll_domains, enroll_reset, created_at, disabled_at, last_used_at,
          (SELECT COUNT(*) FROM client_users WHERE client_users.client_id = clients.id AND client_users.last_used_at > ?) AS active_users
        FROM clients ORDER BY created_at`
     )
@@ -151,6 +167,8 @@ export async function admin(request: Request, env: Env, path: string, by: string
       owner_sub: string | null;
       restricted: number;
       require_passkey: number;
+      enroll_domains: string;
+      enroll_reset: number;
       created_at: string;
       disabled_at: string | null;
       last_used_at: string | null;
@@ -170,6 +188,8 @@ export async function admin(request: Request, env: Env, path: string, by: string
         owner_sub: c.owner_sub,
         restricted: !!c.restricted,
         require_passkey: !!c.require_passkey,
+        enroll_domains: JSON.parse(c.enroll_domains),
+        enroll_reset: !!c.enroll_reset,
         last_used_at: c.last_used_at,
         active_users: c.active_users,
         created_at: c.created_at,
@@ -257,10 +277,17 @@ export async function admin(request: Request, env: Env, path: string, by: string
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
   if (one && request.method === 'PATCH') {
-    const body = (await request.json().catch(() => null)) as { restricted?: unknown; require_passkey?: unknown; redirect_uris?: unknown; post_logout_redirect_uris?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as {
+      restricted?: unknown;
+      require_passkey?: unknown;
+      redirect_uris?: unknown;
+      post_logout_redirect_uris?: unknown;
+      enroll_domains?: unknown;
+      enroll_reset?: unknown;
+    } | null;
     const sets: string[] = [];
     const params: unknown[] = [];
-    for (const field of ['restricted', 'require_passkey'] as const) {
+    for (const field of ['restricted', 'require_passkey', 'enroll_reset'] as const) {
       if (body?.[field] === undefined) continue;
       if (typeof body[field] !== 'boolean') return json({ error: `${field} must be true or false` }, 400);
       sets.push(`${field} = ?`);
@@ -274,11 +301,28 @@ export async function admin(request: Request, env: Env, path: string, by: string
       sets.push(`${field} = ?`);
       params.push(JSON.stringify(uris));
     }
-    if (!sets.length) return json({ error: 'restricted, require_passkey, redirect_uris or post_logout_redirect_uris is required' }, 400);
+    if (body?.enroll_domains !== undefined) {
+      const domains = enrollDomains(body.enroll_domains);
+      if (!domains) return json({ error: 'enroll_domains: up to 20 domain names (e.g. "frigg.be")' }, 400);
+      sets.push('enroll_domains = ?');
+      params.push(JSON.stringify(domains));
+    }
+    if (!sets.length) return json({ error: 'restricted, require_passkey, redirect_uris, post_logout_redirect_uris, enroll_domains or enroll_reset is required' }, 400);
     const res = await env.DB.prepare(`UPDATE clients SET ${sets.join(', ')} WHERE id = ? AND disabled_at IS NULL`).bind(...params, decodeURIComponent(one[1])).run();
     if (!res.meta.changes) return json({ error: 'Not found' }, 404);
     const client = await clientById(env, decodeURIComponent(one[1]));
-    return json({ ok: true, restricted: !!client!.restricted, require_passkey: !!client!.require_passkey, redirect_uris: client!.redirect_uris, post_logout_redirect_uris: client!.post_logout_redirect_uris });
+    if (body?.enroll_domains !== undefined || body?.enroll_reset !== undefined) {
+      securityEvent('client_enrollment_changed', { client: client!.id, enroll_domains: client!.enroll_domains, enroll_reset: !!client!.enroll_reset, by });
+    }
+    return json({
+      ok: true,
+      restricted: !!client!.restricted,
+      require_passkey: !!client!.require_passkey,
+      redirect_uris: client!.redirect_uris,
+      post_logout_redirect_uris: client!.post_logout_redirect_uris,
+      enroll_domains: client!.enroll_domains,
+      enroll_reset: !!client!.enroll_reset,
+    });
   }
   // Someone lost all their passkeys (once they have one, managing them takes
   // a passkey sign-in - passkeys.ts): a platform admin removes them all; the

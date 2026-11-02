@@ -273,7 +273,8 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
   function clientHtml(c) {
     var id = esc(c.client_id);
     var badges = c.disabled_at ? '<span class="badge warn">Disabled ' + esc(when(c.disabled_at)) + '</span>'
-      : (c.restricted ? '<span class="badge">Restricted</span>' : '<span class="badge ok">Open</span>') + (c.require_passkey ? ' <span class="badge">Passkey required</span>' : '');
+      : (c.restricted ? '<span class="badge">Restricted</span>' : '<span class="badge ok">Open</span>') + (c.require_passkey ? ' <span class="badge">Passkey required</span>' : '') +
+        ((c.enroll_domains || []).length ? ' <span class="badge">Enrolls ' + esc(c.enroll_domains.join(', ')) + (c.enroll_reset ? ' (+ reset)' : '') + '</span>' : '');
     var actions = c.disabled_at
       ? '<button class="danger" data-act="delete" data-id="' + id + '" data-name="' + esc(c.name) + '">Delete for good</button>'
       : '<button class="secondary" data-act="restricted" data-id="' + id + '" data-value="' + !c.restricted + '">' + (c.restricted ? 'Open to everyone' : 'Restrict') + '</button>' +

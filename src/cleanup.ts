@@ -12,6 +12,7 @@ export async function cleanup(env: Env, now = new Date()): Promise<Record<string
     ['passkeys', `DELETE FROM passkeys WHERE user_id IN (${expiredGuests})`, [iso]],
     ['client_users', `DELETE FROM client_users WHERE last_used_at <= ? OR user_id IN (${expiredGuests})`, [ago(24 * 90), iso]],
     ['webauthn_challenges', 'DELETE FROM webauthn_challenges WHERE expires_at <= ?', [iso]],
+    ['enrollments', 'DELETE FROM enrollments WHERE expires_at <= ? AND (opened_until IS NULL OR opened_until <= ?)', [ago(1), ago(1)]],
     ['login_links', `DELETE FROM login_links WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [ago(1), iso]],
     ['sessions', `DELETE FROM sessions WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [iso, iso]],
     ['refresh_tokens', `DELETE FROM refresh_tokens WHERE expires_at <= ? OR user_id IN (${expiredGuests})`, [iso, iso]],

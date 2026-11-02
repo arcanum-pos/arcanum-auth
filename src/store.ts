@@ -34,6 +34,9 @@ export interface Client {
   restricted: number;
   // Only sessions made with a passkey may use it (oidc.ts, needsPasskey).
   require_passkey: number;
+  // The domains it may vouch for, and whether it may start over (enroll.ts).
+  enroll_domains: string[];
+  enroll_reset: number;
 }
 
 // How a session was made (sessions.amr): a mailed code or its link, Google,
@@ -63,8 +66,9 @@ export async function createGuest(env: Env, name: string, lifetimeHours: number)
   return (await userById(env, id))!;
 }
 
-export async function createUser(env: Env, fields: { email: string; name: string; googleSub?: string | null }): Promise<User> {
-  const id = crypto.randomUUID();
+// `id`: chosen beforehand (an enrollment's passkey already carries it).
+export async function createUser(env: Env, fields: { email: string; name: string; googleSub?: string | null; id?: string }): Promise<User> {
+  const id = fields.id ?? crypto.randomUUID();
   const now = nowIso();
   await env.DB.prepare(
     'INSERT INTO users (id, email, email_verified, name, password_hash, google_sub, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?, ?, ?)'
@@ -87,6 +91,8 @@ interface ClientRow {
   owner_sub: string | null;
   restricted: number;
   require_passkey: number;
+  enroll_domains: string;
+  enroll_reset: number;
   disabled_at: string | null;
 }
 
@@ -120,6 +126,8 @@ const ADMIN_CLIENT: Client = {
   owner_sub: null,
   restricted: 1,
   require_passkey: 1,
+  enroll_domains: [],
+  enroll_reset: 0,
 };
 
 // Forgiving about how the list was typed: commas, semicolons, spaces or new
@@ -138,7 +146,13 @@ export async function clientById(env: Env, id: string | null | undefined): Promi
   const row = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(id).first<ClientRow>();
   if (!row || row.disabled_at) return null;
   const redirects = JSON.parse(row.redirect_uris) as string[];
-  return { ...row, name: shownName(row.name, row.instance_url, redirects), redirect_uris: redirects, post_logout_redirect_uris: JSON.parse(row.post_logout_redirect_uris) };
+  return {
+    ...row,
+    name: shownName(row.name, row.instance_url, redirects),
+    redirect_uris: redirects,
+    post_logout_redirect_uris: JSON.parse(row.post_logout_redirect_uris),
+    enroll_domains: JSON.parse(row.enroll_domains ?? '[]'),
+  };
 }
 
 export async function clientSecretMatches(client: Client, secret: string | null | undefined): Promise<boolean> {

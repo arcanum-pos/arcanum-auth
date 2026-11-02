@@ -107,7 +107,8 @@ sets up an installation, or by hand there for another application
 - **Security events**: one JSON line each in Workers Logs, `"event":
   "security"` - `refresh_reuse`, `code_reuse`, `turnstile_failed`,
   `login_limited`, `code_guesses_limited`, `rate_limited`, `admin`,
-  `client_self`, `admin_from_internet`, `admin_signin_refused` (tools/admin, an address not on `ADMIN_EMAILS`), and once an hour (the cron)
+  `client_self`, `admin_from_internet`, `admin_signin_refused` (tools/admin, an address not on `ADMIN_EMAILS`),
+  `enrollment_created`, `enrollment_done`, `enrollment_refused`, `enrollment_limited`, `client_enrollment_changed`, and once an hour (the cron)
   `protection_off` when Turnstile isn't set (`turnstile`), its keys are
   test keys or malformed (`turnstile_keys`), siteverify refuses its secret
   (`turnstile_secret`), mail is switched
@@ -122,6 +123,21 @@ sets up an installation, or by hand there for another application
   removing one - and managing a client that requires one - takes a passkey
   sign-in, so a mailbox alone can't swap them. All lost: a platform admin
   removes them (`DELETE /admin/users/:email/passkeys`), and the user is told.
+- **Enrollment** (`enroll.ts`, migration 0013): a mail installation gets
+  its new user a first passkey without a code mailed into the mailbox they
+  can't open yet. Only for the domains a platform admin listed for that
+  client (`enroll_domains`, `PATCH /admin/clients/:id`; never the client
+  itself) - domains whose mail it receives, so it can already read every
+  code mailed there and vouching adds nothing. The application asks the link
+  at the moment its user clicks (`POST /clients/self/users/:email/enrollment`,
+  its own id + secret): opened once within 2 minutes, then only in the
+  browser that opened it for 10 minutes; it signs in to nothing - the only
+  session is the one the new passkey makes, and it continues only to the
+  client's own `/authorize`. Only for an address assigned to the client,
+  and only while its account has no passkey or Google; `reset` (allowed per
+  client, `enroll_reset`) starts an account over - passkeys, Google,
+  sessions and refresh tokens go, and the account is told by mail. 30 links
+  an hour per client, 5 per address. No long-lived code anywhere.
 - **Sessions** end after 7 days without use (14 at most). `/account` lists
   them (browser, since when, how), ends one, or signs out everywhere else -
   every application's refresh tokens included.
@@ -192,6 +208,8 @@ has an account. Guests never get into a restricted client.
 | `POST /admin/login-links` | a **one-time sign-in link** for a guest (single use, 60 s) that continues to an address on an origin some client registered |
 | `GET /login/once?token=…` | where that link leads: starts the guest's session, then continues |
 | `GET/POST /access/:clientId`, `POST /access/:clientId/request` | a restricted client's admin page; asking for access (see Restricted clients) |
+| `POST /clients/self/users/:email/enrollment` | `{ name?, continue_to, reset? }` → `{ url, expires_in }`: a first passkey for an address on the client's `enroll_domains` (see Security notes) |
+| `GET/POST /enroll`, `POST /enroll/options` | the enrollment page: opens the link once (a cookie for this browser), creates the passkey, continues to `continue_to` |
 | `GET/POST /clients/self/users`, `PUT/DELETE /clients/self/users/:email` | who may use a restricted client, and who manages it (`role`) — the application itself, HTTP Basic with its id + secret (bulk: up to 500 `{ email, role? }`) |
 | `GET/PATCH /clients/self`, `POST /clients/self/secret` | **client self-service** with the client's own id + secret (HTTP Basic): read/replace its redirect and logout URIs, rotate its secret — what an installation's installer uses after setting a custom domain |
 
