@@ -118,6 +118,15 @@ describe('e-mail addresses', () => {
       }),
     );
   });
+
+  it('isEmail answers quickly on input built to backtrack', () => {
+    const start = performance.now();
+    expect(isEmail('!@!.' + '!.'.repeat(5000))).toBe(false);
+    expect(isEmail('a@' + 'b.'.repeat(120) + 'c')).toBe(true);
+    expect(isEmail('a@b..c')).toBe(false);
+    expect(isEmail('a@b.')).toBe(false);
+    expect(performance.now() - start).toBeLessThan(50);
+  });
 });
 
 describe('safeContinue', () => {

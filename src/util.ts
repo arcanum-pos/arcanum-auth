@@ -129,8 +129,10 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+// Domain labels can't contain a dot, so each character has one way to match
+// (no polynomial backtracking on input like '!@!.!.!.!.').
 export function isEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+  return email.length <= 254 && /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email);
 }
 
 // Form posts must come from this very origin (with SameSite=Lax cookies,
