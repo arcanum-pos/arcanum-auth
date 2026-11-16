@@ -12,12 +12,12 @@
     "check": "npm run typecheck && npm test && npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^14.0.3",
-    "jose": "^6.2.15"
+    "@simplewebauthn/server": "^14.1.0",
+    "jose": "^6.2.17"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20261108.1",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "@vitest/runner": "^4.1.11",
     "@vitest/snapshot": "^4.1.11",
     "fast-check": "^4.10.2",
