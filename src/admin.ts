@@ -10,6 +10,7 @@ import { protectionsOff } from './protections';
 import { securityEvent } from './audit';
 import { adminApis } from './apis';
 import { adminUsers } from './users';
+import { adminSecrets, newMachineSecret } from './machine';
 
 const LOGIN_LINK_SECONDS = 60;
 
@@ -119,6 +120,21 @@ export async function admin(request: Request, env: Env, path: string, by: string
 
   if (path === '/admin/clients' && request.method === 'POST') {
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    // A machine client (machine.ts): a name, nothing to sign in to; its secret shown once.
+    if (body?.kind === 'machine') {
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 100) : '';
+      if (!name) return json({ error: 'name is required' }, 400);
+      const clientId = `arc_${randomToken(12)}`;
+      const secret = newMachineSecret();
+      const now = nowIso();
+      await env.DB.prepare(
+        "INSERT INTO clients (id, secret_hash, name, redirect_uris, post_logout_redirect_uris, created_at, restricted, kind, secret_created_at) VALUES (?, ?, ?, '[]', '[]', ?, 1, 'machine', ?)"
+      )
+        .bind(clientId, await sha256(secret), name, now, now)
+        .run();
+      return json({ client_id: clientId, client_secret: secret, name, kind: 'machine', issuer: env.ISSUER }, 201);
+    }
+    if (body?.kind !== undefined && body.kind !== 'user') return json({ error: "kind must be 'user' or 'machine'" }, 400);
     const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
     const redirects = validUris(body?.redirect_uris);
     const logouts = validUris(body?.post_logout_redirect_uris ?? []);
@@ -156,6 +172,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
   if (path === '/admin/clients' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
       `SELECT id, name, redirect_uris, post_logout_redirect_uris, instance_url, owner_email, owner_sub, restricted, require_passkey, enroll_domains, enroll_reset, created_at, disabled_at, last_used_at,
+         kind, secret_created_at, previous_secret_expires_at,
          (SELECT COUNT(*) FROM client_users WHERE client_users.client_id = clients.id AND client_users.last_used_at > ?) AS active_users
        FROM clients ORDER BY created_at`
     )
@@ -176,6 +193,9 @@ export async function admin(request: Request, env: Env, path: string, by: string
       disabled_at: string | null;
       last_used_at: string | null;
       active_users: number;
+      kind: string;
+      secret_created_at: string | null;
+      previous_secret_expires_at: string | null;
     }>();
     return json(
       (results || []).map((c) => ({
@@ -197,6 +217,10 @@ export async function admin(request: Request, env: Env, path: string, by: string
         active_users: c.active_users,
         created_at: c.created_at,
         disabled_at: c.disabled_at,
+        // Machine clients (machine.ts), and how old the secret is (never the secret).
+        kind: c.kind,
+        secret_created_at: c.secret_created_at ?? c.created_at,
+        previous_secret_expires_at: c.previous_secret_expires_at && c.previous_secret_expires_at > nowIso() ? c.previous_secret_expires_at : null,
       }))
     );
   }
@@ -287,7 +311,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 
-  const apis = (await adminApis(request, env, path, by)) ?? (await adminUsers(request, env, path));
+  const apis = (await adminApis(request, env, path, by)) ?? (await adminUsers(request, env, path)) ?? (await adminSecrets(request, env, path, by));
   if (apis) return apis;
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
@@ -300,6 +324,10 @@ export async function admin(request: Request, env: Env, path: string, by: string
       enroll_domains?: unknown;
       enroll_reset?: unknown;
     } | null;
+    // A machine client has no addresses (nothing signs in to it).
+    if ((body?.redirect_uris !== undefined || body?.post_logout_redirect_uris !== undefined) && (await env.DB.prepare("SELECT 1 FROM clients WHERE id = ? AND kind = 'machine'").bind(decodeURIComponent(one[1])).first())) {
+      return json({ error: 'A machine client has no redirect or logout URIs' }, 400);
+    }
     const sets: string[] = [];
     const params: unknown[] = [];
     for (const field of ['restricted', 'require_passkey', 'enroll_reset'] as const) {
@@ -366,6 +394,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
         env.DB.prepare('DELETE FROM device_codes WHERE client_id = ?').bind(id),
         env.DB.prepare('DELETE FROM client_access WHERE client_id = ?').bind(id),
         env.DB.prepare('DELETE FROM client_users WHERE client_id = ?').bind(id),
+        env.DB.prepare('DELETE FROM client_api_access WHERE client_id = ?').bind(id),
         env.DB.prepare('DELETE FROM clients WHERE id = ?').bind(id),
       ]);
       return json({ ok: true, deleted: true });

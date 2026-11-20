@@ -381,6 +381,37 @@ machine clients).
 - Every admin change (not reads, not the demo's guests) is also written to
   `audit_log` (kept a year) for tools/admin's audit log.
 
+### Machine clients (`src/machine.ts`, migration 0015)
+
+A client of kind `machine` (`POST /admin/clients` `{ kind: "machine", name }`):
+a worker calling an API for itself. No redirect URIs, no people, no
+sign-in; it can only use **`grant_type=client_credentials`** at `/token`
+(and user clients can't use that grant).
+
+- Client id + secret in the body or HTTP Basic, `audience=X` required;
+  refused unless the client has `client` access to at least one permission
+  on X. `client_secret` in the URL's query string is refused (URLs end up in
+  logs).
+- Access token: `aud = X`, `sub = "<client_id>@clients"`, `gty =
+  "client-credentials"`, its permissions on X in both `permissions` and
+  `scope`; one hour; no id token, no refresh token. Disabling the client
+  stops new tokens at once.
+- Limited per client and per IP in memory, before D1 is asked: the
+  `CLIENT_CREDENTIALS_RATE_LIMITER` binding when there is one (set a limit
+  that suits the workers), else `PUBLIC_RATE_LIMITER` (20 a minute). Workers
+  should cache their token until shortly before it expires.
+- **Secrets**: `scs_` + 43 characters (256 random bits, recognizable when
+  leaked), stored as SHA-256 only, shown once. `POST /admin/clients/:id/secret`
+  rotates (any client): the old secret keeps working 24 hours
+  (`previous_secret_expires_at`); `DELETE /admin/clients/:id/secret/previous`
+  ends that at once. Rotations, revocations and failed attempts are in the
+  audit log and security events (`client_secret_rotated`,
+  `client_secret_revoked`, `client_credentials_failed`, `secret_in_url`) -
+  never a secret. `GET /admin/clients` shows each one's `kind`,
+  `secret_created_at` and the overlap, never a hash.
+- `client_credentials` is not in discovery's `grant_types_supported`
+  (unchanged for the shared instance).
+
 ## Test it
 
 ### 1. Automated tests
@@ -490,6 +521,7 @@ one when it may have leaked, and the signing key once a year anyway.
 | `TURNSTILE_SECRET` | the sign-in form until both match | rotate in the dashboard (Turnstile → widget → Rotate secret), then here |
 | `MAILER_INTERNAL_KEY` | sign-in mails until both match | the same new value here and in arcanum-platform-mailer |
 | a client's secret | that installation until its installer has it | the client rotates it itself: `POST /clients/self/secret` |
+| a machine client's secret (dedicated instance) | nothing for 24 hours | tools/admin → Applications → Credentials → Rotate secret (`POST /admin/clients/:id/secret`); put the new one in the worker (`wrangler secret put`); "Revoke now" once it runs |
 
 
 ## Contributing and security

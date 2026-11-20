@@ -4,6 +4,10 @@ export interface Env {
   // Google sign-in's state, a passkey challenge): limited per caller in
   // memory — no D1 write to count them, so they can't eat the daily quota.
   PUBLIC_RATE_LIMITER?: RateLimit;
+  // Optional: the limit for grant_type=client_credentials per machine client
+  // and per IP (machine.ts) - a dedicated instance with busy workers. Unbound:
+  // PUBLIC_RATE_LIMITER's.
+  CLIENT_CREDENTIALS_RATE_LIMITER?: RateLimit;
   // The issuer URL, exactly as clients are configured with. `iss` is exactly
   // this; a trailing slash (Auth0's style) is allowed, URLs are built without it.
   ISSUER: string;

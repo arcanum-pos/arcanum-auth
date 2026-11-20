@@ -38,7 +38,15 @@ export interface Client {
   // The domains it may vouch for, and whether it may start over (enroll.ts).
   enroll_domains: string[];
   enroll_reset: number;
+  // 'machine': only client credentials, for itself (machine.ts); else 'user'
+  // (migration 0015 - before it, undefined: a user client).
+  kind?: 'user' | 'machine';
+  // After a rotation the old secret works until then (machine.ts).
+  previous_secret_hash?: string | null;
+  previous_secret_expires_at?: string | null;
 }
+
+export const isMachine = (client: Client | null | undefined): boolean => client?.kind === 'machine';
 
 // How a session was made (sessions.amr): a mailed code or its link, Google,
 // a passkey, or a guest's one-time link (admin.ts).
@@ -160,8 +168,12 @@ export async function clientById(env: Env, id: string | null | undefined): Promi
   };
 }
 
+// The secret, or - for 24 hours after a rotation (machine.ts) - the one before it.
 export async function clientSecretMatches(client: Client, secret: string | null | undefined): Promise<boolean> {
-  return !!secret && timingSafeEqual(await sha256(secret), client.secret_hash);
+  if (!secret) return false;
+  const hash = await sha256(secret);
+  if (timingSafeEqual(hash, client.secret_hash)) return true;
+  return !!client.previous_secret_hash && !!client.previous_secret_expires_at && client.previous_secret_expires_at > nowIso() && timingSafeEqual(hash, client.previous_secret_hash);
 }
 
 // The token endpoint's client authentication: client_secret_basic or

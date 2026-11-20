@@ -2,7 +2,7 @@ import { unassign, accessRow } from './access';
 import { validUris } from './admin';
 import { createEnrollment } from './enroll';
 import type { Env } from './env';
-import { clientById, clientSecretMatches, type Client } from './store';
+import { clientById, clientSecretMatches, isMachine, type Client } from './store';
 import { isEmail, json, normalizeEmail, nowIso, randomToken, sha256 } from './util';
 
 // Client self-service — an application managing its own client
@@ -78,7 +78,8 @@ async function authenticated(request: Request, env: Env): Promise<Client | null>
   try {
     const [id, secret] = atob(auth.slice(6)).split(':').map(decodeURIComponent);
     const client = await clientById(env, id);
-    return client && (await clientSecretMatches(client, secret)) ? client : null;
+    // A machine client is managed by the admin only.
+    return client && !isMachine(client) && (await clientSecretMatches(client, secret)) ? client : null;
   } catch {
     return null;
   }

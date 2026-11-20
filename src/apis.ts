@@ -420,7 +420,6 @@ export async function adminApis(request: Request, env: Env, path: string, by: st
 // Which kinds of API access a client can have: a user client asks on behalf
 // of its users, a machine client (machine.ts) only for itself.
 async function accessKinds(env: Env, clientId: string): Promise<('user' | 'client')[]> {
-  void env;
-  void clientId;
-  return ['user', 'client'];
+  const row = await env.DB.prepare('SELECT kind FROM clients WHERE id = ?').bind(clientId).first<{ kind: string }>();
+  return row?.kind === 'machine' ? ['client'] : ['user'];
 }

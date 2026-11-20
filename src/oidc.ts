@@ -7,7 +7,8 @@ import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
 import { logoutConfirmPage, messagePage, texts } from './pages';
 import { needsPasskey, passkeyStep } from './passkeys';
-import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, userById, type Amr, type Client } from './store';
+import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, isMachine, userById, type Amr, type Client } from './store';
+import { CLIENT_CREDENTIALS, clientCredentialsGrant } from './machine';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
 import { audienceCheck, userAccessTo } from './apis';
 import { withinLimit } from './ratelimit';
@@ -71,7 +72,7 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
   const client = await clientById(env, p.get('client_id'));
   const redirectUri = p.get('redirect_uri') || '';
   // A bad client or redirect_uri never redirects (RFC 6749 §4.1.2.1).
-  if (!client || !client.redirect_uris.includes(redirectUri)) return messagePage(request, texts(request).errors.request, 400);
+  if (!client || isMachine(client) || !client.redirect_uris.includes(redirectUri)) return messagePage(request, texts(request).errors.request, 400);
 
   const back = (params: Record<string, string>) => {
     const target = new URL(redirectUri);
@@ -133,8 +134,12 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
 
 export async function token(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
+  // A machine client for itself (machine.ts): limited before the client is looked up.
+  if (form.grant_type === CLIENT_CREDENTIALS) return clientCredentialsGrant(request, env, form);
   const client = await authenticateClient(env, request, form);
   if (!client) return oauthError('invalid_client', 'Unknown client or wrong secret', 401);
+  // A machine client gets nothing but client credentials.
+  if (isMachine(client)) return oauthError('unauthorized_client', 'A machine client may only use client_credentials');
   // The built-in admin client: one sign-in at a time, nothing else.
   if (client.id === ADMIN_CLIENT_ID && form.grant_type !== 'authorization_code') return oauthError('unauthorized_client', 'Only authorization_code for this client');
 
@@ -286,7 +291,7 @@ async function deviceGrant(env: Env, client: Client, form: Record<string, string
 export async function deviceAuthorization(request: Request, env: Env): Promise<Response> {
   const form = await readForm(request);
   const client = await clientById(env, form.client_id);
-  if (!client || client.id === ADMIN_CLIENT_ID) return oauthError('invalid_client', 'Unknown client', 401);
+  if (!client || client.id === ADMIN_CLIENT_ID || isMachine(client)) return oauthError('invalid_client', 'Unknown client', 401);
   // Per client (installation), not per IP: the kassas' requests come from
   // their installation's bff, i.e. Cloudflare's shared addresses. A client_id
   // is public; this keeps one from being used to flood the database.
