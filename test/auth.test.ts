@@ -528,7 +528,8 @@ describe('sign in with Google', () => {
     expect(target.origin).toBe('https://accounts.google.com');
     expect(target.searchParams.get('redirect_uri')).toBe(`${ISSUER}/callback/google`);
 
-    const back = await call(`/callback/google?code=${encodeURIComponent(email)}&state=${target.searchParams.get('state')}`, { headers: { Cookie: cookieOf(start) } });
+    // A Workspace account of the address's own domain (hd): Google speaks for it.
+    const back = await call(`/callback/google?code=${encodeURIComponent(`hd:example.test:${email}`)}&state=${target.searchParams.get('state')}`, { headers: { Cookie: cookieOf(start) } });
     expect(back.status).toBe(302);
     expect(cookieOf(back)).toMatch(/^__Host-session=/);
     const after = await env.DB.prepare('SELECT id, google_sub FROM users WHERE email = ?').bind(email).first<{ id: string; google_sub: string }>();
@@ -540,7 +541,7 @@ describe('sign in with Google', () => {
     await signUp(email);
     const start = await call('/google?continue=%2Faccount');
     const state = new URL(start.headers.get('Location')!).searchParams.get('state');
-    expect((await call(`/callback/google?code=${encodeURIComponent(email)}&state=${state}`, { headers: { Cookie: cookieOf(start) } })).status).toBe(302);
+    expect((await call(`/callback/google?code=${encodeURIComponent(`hd:example.test:${email}`)}&state=${state}`, { headers: { Cookie: cookieOf(start) } })).status).toBe(302);
     const linked = (await mails()).filter((m) => m.body.message.to === email && m.body.message.subject === 'Google gekoppeld aan je account');
     expect(linked).toHaveLength(1);
     expect(linked[0].body.message.text).toContain(`${ISSUER}/account`);
@@ -557,7 +558,7 @@ describe('sign in with Google', () => {
     await signUp(email);
     const start = await call('/google?continue=%2Faccount');
     const state = new URL(start.headers.get('Location')!).searchParams.get('state');
-    const back = await call(`/callback/google?code=${encodeURIComponent(email)}&state=${state}`, { headers: { Cookie: cookieOf(start) } });
+    const back = await call(`/callback/google?code=${encodeURIComponent(`hd:example.test:${email}`)}&state=${state}`, { headers: { Cookie: cookieOf(start) } });
     const session = cookieOf(back);
     expect(await (await call('/account', { headers: { Cookie: session } })).text()).toContain('Google ontkoppelen');
 
@@ -572,6 +573,36 @@ describe('sign in with Google', () => {
     expect(page).toContain('Google is ontkoppeld');
     expect(page).not.toContain('Google ontkoppelen');
     expect((await signInWithCode(post, email)).cookie).toMatch(/^__Host-session=/);
+  });
+
+  it('a Google account on someone else\'s domain is linked only from a browser signed in to the account', async () => {
+    const email = uniqueEmail('foreign-google');
+    await signUp(email);
+    const viaGoogle = async (cookie = '') => {
+      const start = await call('/google?continue=%2Faccount', cookie ? { headers: { Cookie: cookie } } : {});
+      const state = new URL(start.headers.get('Location')!).searchParams.get('state');
+      return call(`/callback/google?code=${encodeURIComponent(email)}&state=${state}`, { headers: { Cookie: [cookieOf(start), cookie].filter(Boolean).join('; ') } });
+    };
+    // A consumer Google account made on this address (no hd): not linked, nobody signed in.
+    const refused = await viaGoogle();
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toContain('Meld je eerst aan met de code');
+    expect(cookieOf(refused)).not.toMatch(/__Host-session=/);
+    expect((await env.DB.prepare('SELECT google_sub FROM users WHERE email = ?').bind(email).first<{ google_sub: string | null }>())!.google_sub).toBeNull();
+    // Signed in by a mailed code: the account page offers it, and then it links.
+    const { cookie } = await signInWithCode(post, email);
+    expect(await (await call('/account', { headers: { Cookie: cookie } })).text()).toContain('Google koppelen');
+    expect((await viaGoogle(cookie)).status).toBe(302);
+    expect((await env.DB.prepare('SELECT google_sub FROM users WHERE email = ?').bind(email).first<{ google_sub: string | null }>())!.google_sub).toBe(`google-${email}`);
+  });
+
+  it('a Gmail address links by itself', async () => {
+    const email = `linked-${Date.now()}-${Math.random().toString(36).slice(2)}@gmail.com`;
+    await signUp(email);
+    const start = await call('/google?continue=%2Faccount');
+    const state = new URL(start.headers.get('Location')!).searchParams.get('state');
+    expect((await call(`/callback/google?code=${encodeURIComponent(email)}&state=${state}`, { headers: { Cookie: cookieOf(start) } })).status).toBe(302);
+    expect((await env.DB.prepare('SELECT google_sub FROM users WHERE email = ?').bind(email).first<{ google_sub: string | null }>())!.google_sub).toBe(`google-${email}`);
   });
 
   it('refuses an unverified Google address and a replayed state', async () => {

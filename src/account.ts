@@ -32,7 +32,7 @@ const MAX_CODE_TRIES = 5;
 // Per e-mail address, per hour: wrong codes (all its codes together), and codes asked.
 const MAX_CODE_TRIES_PER_ADDRESS = 10;
 const MAX_CODES_PER_ADDRESS = 5;
-const googleEnabled = (env: Env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+export const googleEnabled = (env: Env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
 // Signed in with a mailed code or Google: on to `continueTo` —
 // by way of the offer to add a passkey, when that's due (passkeys.ts).
@@ -315,6 +315,19 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
       securityEvent('google_relink_refused', { user: byEmail.id });
       return messagePage(request, t.errors.google, 403);
     }
+    // Linked by itself only when Google speaks for the address: a Gmail
+    // address, or a Workspace account of the address's own domain (hd).
+    // Anyone can make a Google account on any other address (verified once,
+    // maybe years ago, maybe by someone who no longer has it): that one is
+    // linked only from a browser already signed in to the account - a code
+    // mailed to the address now, or a passkey (security review 2026-11-20).
+    if (byEmail && !googleSpeaksFor(email, claims.hd)) {
+      const session = await currentSession(env, request);
+      if (session?.user.id !== byEmail.id) {
+        securityEvent('google_link_needs_signin', { user: byEmail.id });
+        return messagePage(request, t.errors.googleLinkFirst, 403);
+      }
+    }
     if (byEmail) {
       await env.DB.prepare('UPDATE users SET google_sub = ?, email_verified = 1, updated_at = ? WHERE id = ?').bind(claims.sub, nowIso(), byEmail.id).run();
       user = byEmail;
@@ -325,6 +338,11 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
     }
   }
   return signIn(request, env, user, saved.continue_to, 'fed');
+}
+
+export function googleSpeaksFor(email: string, hd: unknown): boolean {
+  const domain = email.split('@')[1] || '';
+  return domain === 'gmail.com' || domain === 'googlemail.com' || (typeof hd === 'string' && hd.toLowerCase() === domain);
 }
 
 function safeDecode(token: string): Record<string, unknown> | null {

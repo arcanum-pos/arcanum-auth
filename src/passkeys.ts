@@ -353,7 +353,7 @@ export async function accountWithPasskeys(request: Request, env: Env, user: User
       transports: transports.filter((t) => t === 'usb' || t === 'nfc' || t === 'ble'),
     };
   });
-  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, managed: await managedClients(env, user), sessions: await sessionsOf(env, request, user), ...opts }, status);
+  return accountPage(request, { email: user.email, passkeys, google: !!user.google_sub, googleAvailable: !user.guest && !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), managed: await managedClients(env, user), sessions: await sessionsOf(env, request, user), ...opts }, status);
 }
 
 export async function managePasskey(request: Request, env: Env): Promise<Response> {

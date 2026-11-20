@@ -40,6 +40,8 @@ const T = {
     googleTitle: 'Google',
     googleLinkedText: 'Je kunt je ook aanmelden met je Google-account.',
     unlinkGoogle: 'Google ontkoppelen',
+    linkGoogle: 'Google koppelen',
+    googleNotLinkedText: 'Koppel je Google-account om je daarmee aan te melden.',
     googleUnlinked: 'Google is ontkoppeld. Je meldt je nog aan met een code per e-mail of een passkey.',
     addPasskey: 'Passkey toevoegen',
     passkeyAdded: 'Passkey toegevoegd.',
@@ -158,6 +160,7 @@ const T = {
       deviceCode: 'Deze code klopt niet of is verlopen. Kijk nog eens op het toestel.',
       google: 'Aanmelden met Google is niet gelukt.',
       googleUnverified: 'Dit Google-account heeft geen bevestigd e-mailadres.',
+      googleLinkFirst: 'Er bestaat al een account met dit e-mailadres. Meld je eerst aan met de code die we je mailen (of met je passkey), en koppel daarna Google op je accountpagina.',
       googleDomain: 'Dit Google-account hoort niet bij de organisatie van deze aanmeldserver. Meld je aan met je account van de organisatie.',
       request: 'Deze aanvraag is ongeldig.',
       mail: 'De e-mail kon niet verstuurd worden. Probeer het later opnieuw.',
@@ -205,6 +208,8 @@ const T = {
     googleTitle: 'Google',
     googleLinkedText: 'Vous pouvez aussi vous connecter avec votre compte Google.',
     unlinkGoogle: 'Délier Google',
+    linkGoogle: 'Lier Google',
+    googleNotLinkedText: 'Liez votre compte Google pour vous connecter avec celui-ci.',
     googleUnlinked: 'Google est délié. Vous vous connectez toujours avec un code par e-mail ou une clé d’accès.',
     addPasskey: 'Ajouter une clé d’accès',
     passkeyAdded: 'Clé d’accès ajoutée.',
@@ -323,6 +328,7 @@ const T = {
       deviceCode: 'Ce code est incorrect ou expiré. Vérifiez l’appareil.',
       google: 'La connexion avec Google a échoué.',
       googleUnverified: 'Ce compte Google n’a pas d’adresse e-mail confirmée.',
+      googleLinkFirst: 'Un compte existe déjà avec cette adresse e-mail. Connectez-vous d’abord avec le code que nous vous envoyons (ou avec votre clé d’accès), puis liez Google sur la page de votre compte.',
       googleDomain: 'Ce compte Google n’appartient pas à l’organisation de ce serveur de connexion. Connectez-vous avec le compte de l’organisation.',
       request: 'Cette demande n’est pas valable.',
       mail: 'L’e-mail n’a pas pu être envoyé. Réessayez plus tard.',
@@ -370,6 +376,8 @@ const T = {
     googleTitle: 'Google',
     googleLinkedText: 'You can also sign in with your Google account.',
     unlinkGoogle: 'Unlink Google',
+    linkGoogle: 'Link Google',
+    googleNotLinkedText: 'Link your Google account to sign in with it.',
     googleUnlinked: 'Google is unlinked. You still sign in with a code by email or a passkey.',
     addPasskey: 'Add a passkey',
     passkeyAdded: 'Passkey added.',
@@ -488,6 +496,7 @@ const T = {
       deviceCode: 'This code is incorrect or has expired. Check the device again.',
       google: 'Signing in with Google failed.',
       googleUnverified: 'This Google account has no confirmed email address.',
+      googleLinkFirst: 'An account with this email address already exists. First sign in with the code we email you (or with your passkey), then link Google on your account page.',
       googleDomain: "This Google account doesn't belong to this sign-in server's organisation. Sign in with your organisation's account.",
       request: 'This request is not valid.',
       mail: 'The email could not be sent. Try again later.',
@@ -733,7 +742,7 @@ function browserOf(t: Texts, ua: string | null): string {
   return os ? `${browser} · ${os}` : browser;
 }
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; sessions?: SessionItem[]; added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null; reduced?: boolean }, status = 200) {
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; googleAvailable?: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; sessions?: SessionItem[]; added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null; reduced?: boolean }, status = 200) {
   const t = texts(request);
   const sessionItems = (opts.sessions ?? [])
     .map(
@@ -766,7 +775,11 @@ ${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidd
 ${sessionItems ? `<ul class="keys">${sessionItems}</ul>` : ''}
 <form method="post" action="/account/sessions"><p class="hint">${t.endEverywhereText}</p><button type="submit" name="action" value="everywhere" class="secondary">${t.endEverywhere}</button></form>
 ${opts.googleUnlinked ? `<p class="ok" role="status">${t.googleUnlinked}</p>` : ''}${
-      opts.google ? `<h2>${t.googleTitle}</h2><p>${t.googleLinkedText}</p><form method="post" action="/account/google"><button type="submit" name="action" value="unlink" class="secondary">${t.unlinkGoogle}</button></form>` : ''
+      opts.google
+        ? `<h2>${t.googleTitle}</h2><p>${t.googleLinkedText}</p><form method="post" action="/account/google"><button type="submit" name="action" value="unlink" class="secondary">${t.unlinkGoogle}</button></form>`
+        : opts.googleAvailable
+          ? `<h2>${t.googleTitle}</h2><p>${t.googleNotLinkedText}</p><a class="button secondary" href="/google?continue=%2Faccount">${t.linkGoogle}</a>`
+          : ''
     }
 ${
       opts.managed.length
