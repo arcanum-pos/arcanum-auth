@@ -10,6 +10,7 @@ import { protectionsOff } from './protections';
 import { securityEvent } from './audit';
 import { adminApis } from './apis';
 import { adminUsers } from './users';
+import { adminDashboard } from './dashboard';
 import { adminSecrets, newMachineSecret } from './machine';
 
 const LOGIN_LINK_SECONDS = 60;
@@ -311,7 +312,8 @@ export async function admin(request: Request, env: Env, path: string, by: string
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 
-  const apis = (await adminApis(request, env, path, by)) ?? (await adminUsers(request, env, path)) ?? (await adminSecrets(request, env, path, by));
+  const apis =
+    (await adminApis(request, env, path, by)) ?? (await adminUsers(request, env, path)) ?? (await adminSecrets(request, env, path, by)) ?? (await adminDashboard(request, env, path, by));
   if (apis) return apis;
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
@@ -323,6 +325,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
       post_logout_redirect_uris?: unknown;
       enroll_domains?: unknown;
       enroll_reset?: unknown;
+      name?: unknown;
     } | null;
     // A machine client has no addresses (nothing signs in to it).
     if ((body?.redirect_uris !== undefined || body?.post_logout_redirect_uris !== undefined) && (await env.DB.prepare("SELECT 1 FROM clients WHERE id = ? AND kind = 'machine'").bind(decodeURIComponent(one[1])).first())) {
@@ -344,13 +347,19 @@ export async function admin(request: Request, env: Env, path: string, by: string
       sets.push(`${field} = ?`);
       params.push(JSON.stringify(uris));
     }
+    if (body?.name !== undefined) {
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 100) : '';
+      if (!name) return json({ error: 'name must not be empty' }, 400);
+      sets.push('name = ?');
+      params.push(name);
+    }
     if (body?.enroll_domains !== undefined) {
       const domains = enrollDomains(body.enroll_domains);
       if (!domains) return json({ error: 'enroll_domains: up to 20 domain names (e.g. "frigg.be")' }, 400);
       sets.push('enroll_domains = ?');
       params.push(JSON.stringify(domains));
     }
-    if (!sets.length) return json({ error: 'restricted, require_passkey, redirect_uris, post_logout_redirect_uris, enroll_domains or enroll_reset is required' }, 400);
+    if (!sets.length) return json({ error: 'name, restricted, require_passkey, redirect_uris, post_logout_redirect_uris, enroll_domains or enroll_reset is required' }, 400);
     const res = await env.DB.prepare(`UPDATE clients SET ${sets.join(', ')} WHERE id = ? AND disabled_at IS NULL`).bind(...params, decodeURIComponent(one[1])).run();
     if (!res.meta.changes) return json({ error: 'Not found' }, 404);
     const client = await clientById(env, decodeURIComponent(one[1]));

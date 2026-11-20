@@ -5,118 +5,124 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>arcanum-auth admin</title>
 <style>
-:root{--bg:#fafafa;--card:#fff;--fg:#0a0a0a;--muted:#737373;--border:#e5e5e5;--primary:#0a0a0a;--on-primary:#fff;--danger:#b91c1c;--warn-bg:#fef3c7;--warn-fg:#92400e;--ok-bg:#dcfce7;--ok-fg:#166534}
-@media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--card:#171717;--fg:#fafafa;--muted:#a3a3a3;--border:#262626;--primary:#fafafa;--on-primary:#0a0a0a;--danger:#f87171;--warn-bg:#422006;--warn-fg:#fcd34d;--ok-bg:#052e16;--ok-fg:#86efac}}
+/* Left menu (follows the instance's settings, /admin/instance), content on
+   the right; a top bar on phones. The colour tokens of the previous page,
+   light and dark. */
+:root{--bg:#fafafa;--card:#fff;--fg:#0a0a0a;--muted:#737373;--border:#e5e5e5;--primary:#0a0a0a;--on-primary:#fff;--danger:#b91c1c;--warn-bg:#fef3c7;--warn-fg:#92400e;--ok-bg:#dcfce7;--ok-fg:#166534;--side:#f3f3f2;--side-active:#e6e6e4;--info-bg:#e0ecff;--info-fg:#1e40af;--bar:#e8e8e6;--bar-fill:#15803d}
+@media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--card:#171717;--fg:#fafafa;--muted:#a3a3a3;--border:#262626;--primary:#fafafa;--on-primary:#0a0a0a;--danger:#f87171;--warn-bg:#422006;--warn-fg:#fcd34d;--ok-bg:#052e16;--ok-fg:#86efac;--side:#111;--side-active:#222;--info-bg:#172554;--info-fg:#93c5fd;--bar:#2a2a2a;--bar-fill:#22c55e;color-scheme:dark}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px}
-main{max-width:960px;margin:0 auto;display:grid;gap:16px}
-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px}
-h1{font-size:20px;margin:0;letter-spacing:-.02em}h2{font-size:16px;margin:0 0 12px}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+code,.mono{font:12.5px ui-monospace,"SF Mono",Menlo,monospace;word-break:break-all}
+h1{font-size:22px;line-height:1.25;margin:0;font-weight:650;letter-spacing:-.02em}h2{font-size:15px;margin:0;font-weight:600}
 p{margin:0 0 10px;color:var(--muted)}
-label{display:block;font-size:12.5px;font-weight:600;margin:10px 0 4px}
-input,textarea{width:100%;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--fg);padding:8px 10px;font:inherit}
-textarea{font:12.5px/1.5 ui-monospace,monospace;resize:vertical}
-button{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--primary);background:var(--primary);color:var(--on-primary);font:600 13.5px system-ui,sans-serif;cursor:pointer;white-space:nowrap}
-button.secondary{background:transparent;color:var(--fg);border-color:var(--border)}
-button.danger{background:transparent;color:var(--danger);border-color:var(--border)}
-button:disabled{opacity:.5;cursor:default}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>input{flex:1 1 220px;width:auto}
-.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
-.badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--border);color:var(--fg)}
-.badge.warn{background:var(--warn-bg);color:var(--warn-fg)}.badge.ok{background:var(--ok-bg);color:var(--ok-fg)}
-code{font:12.5px ui-monospace,monospace;word-break:break-all}
-.client{border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:grid;gap:8px}
-.client.disabled{opacity:.6}
-.client .name{font-size:15px;font-weight:650}
-.hosts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14.5px;align-items:center}.hosts .host{display:inline-flex;gap:6px;align-items:center}.hosts a{color:var(--fg);text-decoration:none;font-weight:500}.hosts a:hover{text-decoration:underline}
-.facts{display:grid;gap:1px;font-size:12.5px;color:var(--muted)}.facts code{font-size:12px}
-.clients{display:grid;gap:10px}
-.meta{font-size:12.5px;color:var(--muted)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media (max-width:640px){.grid2{grid-template-columns:1fr}}
-.msg{font-size:13px;margin-top:10px}.msg.error{color:var(--danger)}
-.secret{border:1px solid var(--warn-fg);background:var(--warn-bg);color:var(--warn-fg);border-radius:10px;padding:12px;margin-top:12px}
-.secret code{color:var(--fg)}
-details summary{cursor:pointer;font-weight:600;font-size:13px}
-.check{display:flex;gap:8px;align-items:center;font-weight:400;font-size:13.5px;margin-top:12px}.check input{width:auto;margin:0}
-.signin{display:grid;gap:8px;justify-items:end;min-width:min(100%,360px)}.signin details{width:100%;text-align:right}.signin form{margin-top:6px}
+label.f{display:block;font-size:12.5px;font-weight:600;margin:10px 0 4px}
+input,textarea,select{font:inherit;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);padding:7px 10px}
+input[type=checkbox],input[type=radio]{accent-color:var(--fg)}
+textarea{width:100%;font:12.5px/1.5 ui-monospace,monospace;resize:vertical}
+button,.btn{font:500 13.5px system-ui,sans-serif;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 12px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+button:hover{background:var(--side)}button.pri{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}button.pri:hover{opacity:.9}
+button.danger{color:var(--danger)}button.sm{padding:2px 8px;font-size:12px}button:disabled{opacity:.5;cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--info-fg);outline-offset:2px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:500;background:var(--side-active);color:var(--fg);white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok-fg)}.chip.warn{background:var(--warn-bg);color:var(--warn-fg)}.chip.info{background:var(--info-bg);color:var(--info-fg)}
+.idbox{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:1px 4px 1px 8px;background:var(--card);max-width:100%}
+.app{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100%}
+aside{background:var(--side);border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:14px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.inst{padding:0 8px;display:grid;gap:2px}.inst .t{font-weight:650}.inst .s{font-size:12px;color:var(--muted);word-break:break-all}
+nav{display:grid;gap:2px}
+nav a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;color:var(--fg);text-decoration:none}
+nav a:hover{background:var(--side-active)}nav a.on{background:var(--side-active);font-weight:600}
+nav a .n{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+nav .group{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:12px 10px 4px}
+.who{margin-top:auto;font-size:12px;color:var(--muted);padding:0 8px;display:grid;gap:6px}.who b{color:var(--fg);font-weight:500;word-break:break-all}
+main{min-width:0;padding:24px 32px 64px}
+.wrap{max-width:1040px;display:grid;gap:20px}
+.crumb{color:var(--muted);font-size:13px;display:flex;gap:6px;flex-wrap:wrap}.crumb a{color:var(--muted);text-decoration:none}.crumb a:hover{color:var(--fg)}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.sub{color:var(--muted);margin:4px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px}
+.card>.ch{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.card>.ch:last-child{border-bottom:0}
+.card>.cb{padding:16px}.card>.cb.top{border-top:1px solid var(--border)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);overflow-x:auto}
+.tabs a{padding:8px 12px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs a.on{color:var(--fg);border-color:var(--fg);font-weight:600}
+.tscroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:10px 16px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tr.click{cursor:pointer}tr.click:hover td{background:var(--side)}
+td .t{font-weight:600}td .s,.s{color:var(--muted);font-size:12px}
+.num{font-variant-numeric:tabular-nums}.right{text-align:right}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{padding:14px 16px}.stat .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}.stat .l{color:var(--muted);font-size:12px}
+.access{display:grid;gap:6px;min-width:150px}.access .row{display:flex;align-items:center;gap:6px;font-size:13px}
+.bar{height:6px;border-radius:3px;background:var(--bar);overflow:hidden}.bar i{display:block;height:100%;background:var(--bar-fill)}
+.dot{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--muted);display:inline-block;flex:none}.dot.on{border-color:var(--bar-fill);background:var(--bar-fill)}
+.na{color:var(--muted);font-size:13px}
+.checks{display:grid;gap:2px}
+.checks label{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-radius:6px;cursor:pointer}
+.checks label:hover{background:var(--side)}.checks input{margin-top:3px}.checks .d{color:var(--muted);font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>input,.row>select{flex:1 1 220px;min-width:0}
+dl.kv{display:grid;grid-template-columns:180px minmax(0,1fr);gap:10px 16px;margin:0}
+dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.drawer-bg{position:fixed;inset:0;background:rgb(0 0 0 / .35);display:flex;justify-content:flex-end;z-index:20}
+.drawer{background:var(--card);width:min(480px,100%);height:100%;overflow-y:auto;border-left:1px solid var(--border);padding:20px;display:grid;gap:14px;align-content:start}
+.toast{position:fixed;right:20px;bottom:20px;background:var(--primary);color:var(--on-primary);padding:8px 14px;border-radius:6px;z-index:30;max-width:calc(100% - 40px)}
+.secret{border:1px solid var(--warn-fg);background:var(--warn-bg);color:var(--warn-fg);border-radius:10px;padding:12px;display:grid;gap:6px}.secret code{color:var(--fg)}
+.msg{font-size:13px;margin:8px 0 0;color:var(--muted)}.msg.error{color:var(--danger)}
+.hosts{display:flex;flex-wrap:wrap;gap:4px 12px}.hosts a{color:var(--fg);text-decoration:none}.hosts a:hover{text-decoration:underline}
+#tabBody{display:grid;gap:16px}
+.login{max-width:520px;margin:10vh auto;padding:0 16px}
+.login .card{padding:24px;display:grid;gap:12px}
+details summary{cursor:pointer;font-size:13px;color:var(--muted)}
 [hidden]{display:none!important}
+@media (max-width:760px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  aside{position:static;height:auto;border-right:0;border-bottom:1px solid var(--border);padding:12px 16px}
+  nav{grid-auto-flow:column;overflow-x:auto}nav .group{display:none}
+  main{padding:16px 16px 48px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}
+  dl.kv{grid-template-columns:minmax(0,1fr);gap:2px 0}dl.kv dd{margin-bottom:8px}
+}
 </style>
 </head>
 <body>
-<main>
-<section>
-  <div class="top">
-    <div><h1>arcanum-auth admin</h1><p id="instance">Not signed in</p><div id="protections" class="row"></div></div>
-    <div class="signin">
-      <div class="row" id="signedOut">
-        <button type="button" id="signIn">Sign in with a passkey</button>
-      </div>
-      <div class="row" id="signedIn" hidden><span id="who" class="meta"></span><button type="button" id="signOut" class="secondary">Sign out</button></div>
-      <details id="keyBox"><summary class="meta">Use the admin key instead</summary>
-        <p class="meta" style="margin-top:6px">The way back in when signing in doesn't work: this instance's ADMIN_API_KEY.</p>
-        <form id="keyForm" class="row">
-          <input id="key" type="password" placeholder="ADMIN_API_KEY" autocomplete="off" aria-label="Admin API key">
-          <button type="submit" class="secondary">Use key</button>
-        </form>
-      </details>
-    </div>
+
+<div class="login" id="login">
+  <div class="card">
+    <h1>arcanum-auth admin</h1>
+    <p>Sign in with this instance's own sign-in page: a passkey on the shared instance, Google on a Google-only one. Only the addresses in its <code>ADMIN_EMAILS</code> get in.</p>
+    <div class="row"><button type="button" class="pri" id="signIn">Sign in</button></div>
+    <details id="keyBox"><summary>Use the admin key instead</summary>
+      <p class="s" style="margin-top:6px">The way back in when signing in doesn't work: this instance's ADMIN_API_KEY.</p>
+      <form id="keyForm" class="row">
+        <input id="key" type="password" placeholder="ADMIN_API_KEY" autocomplete="off" aria-label="Admin API key">
+        <button type="submit">Use key</button>
+      </form>
+    </details>
+    <p class="msg error" id="loginError" hidden></p>
   </div>
-  <p class="msg error" id="keyError" hidden></p>
-</section>
-
-<div id="app" hidden>
-<section>
-  <div class="top"><h2>Clients</h2><div class="row"><input id="search" type="search" placeholder="Search name, address, owner, id" aria-label="Search clients" style="width:260px"><button class="secondary" id="reload">Refresh</button></div></div>
-  <div class="clients" id="clients"></div>
-</section>
-
-<section>
-  <h2>New client</h2>
-  <form id="newClient">
-    <div class="grid2">
-      <div><label for="ncName">Name</label><input id="ncName" required maxlength="100" placeholder="Scouts Elewijt"></div>
-      <div><label for="ncApp">App address (fills in the two lists)</label><input id="ncApp" placeholder="https://arcanum.example.be"></div>
-    </div>
-    <div class="grid2">
-      <div><label for="ncRedirects">Redirect URIs, one per line</label><textarea id="ncRedirects" rows="2" required placeholder="https://arcanum.example.be/callback"></textarea></div>
-      <div><label for="ncLogouts">Logout return addresses, one per line</label><textarea id="ncLogouts" rows="2" placeholder="https://arcanum.example.be"></textarea></div>
-    </div>
-    <div class="grid2">
-      <div><label for="ncOwner">Owner e-mail (first admin of its access list)</label><input id="ncOwner" type="email" placeholder="optional"></div>
-      <div><label for="ncInstance">Instance address (for support)</label><input id="ncInstance" placeholder="optional"></div>
-    </div>
-    <label class="check"><input id="ncRestricted" type="checkbox" checked> Restricted: only addresses on its access list can sign in</label>
-    <div class="row" style="margin-top:12px"><button type="submit">Create client</button></div>
-    <p class="msg" id="ncMsg" hidden></p>
-    <div class="secret" id="ncSecret" hidden></div>
-  </form>
-</section>
-
-<div class="grid2">
-<section>
-  <h2>Passkeys lost</h2>
-  <p>Removes all passkeys of an account; they're told by mail and sign in with a mailed code.</p>
-  <form id="passkeys" class="row"><input id="pkEmail" type="email" required placeholder="someone@example.be" aria-label="E-mail"><button type="submit" class="danger">Remove passkeys</button></form>
-  <p class="msg" id="pkMsg" hidden></p>
-</section>
-
-<section>
-  <h2>Mail</h2>
-  <div id="mail"><p>…</p></div>
-  <form id="testMail" class="row" style="margin-top:10px"><input id="tmTo" type="email" required placeholder="send a test mail to" aria-label="Test mail address"><button type="submit" class="secondary">Send test mail</button></form>
-  <p class="msg" id="tmMsg" hidden></p>
-</section>
 </div>
+
+<div class="app" id="app" hidden>
+  <aside>
+    <div class="inst"><span class="t" id="instName">arcanum-auth</span><span class="s" id="instIssuer"></span><div class="row" id="protections" style="margin-top:6px"></div></div>
+    <nav id="nav"></nav>
+    <div class="who"><span>Signed in as</span><b id="who"></b><span>local only (127.0.0.1)</span><button type="button" id="signOut">Sign out</button></div>
+  </aside>
+  <main><div class="wrap" id="view"></div></main>
 </div>
-</main>
 
 <script>
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  // What the admin API gets as Bearer: a token from signing in (an hour,
-  // a passkey each time) or the admin key. Only in this tab.
+  // What the admin API gets as Bearer: a token from signing in (an hour) or
+  // the admin key. Only in this tab.
   var STORE = 'arcanum-auth-admin';
   var SIGNIN = 'arcanum-auth-admin-signin';
   function read(name) { try { return JSON.parse(sessionStorage.getItem(name) || 'null'); } catch (e) { return null; } }
@@ -124,36 +130,43 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
   var cred = read(STORE); // { bearer, kind: 'token'|'key', expires? }
   if (cred && cred.expires && cred.expires < Date.now()) cred = null;
   var key = cred ? cred.bearer : '';
+  var info = null; // /admin/instance
+  var cache = {};  // what the views last loaded
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function lines(v) { return v.split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
   function when(iso) { return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'; }
   function day(iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) : ''; }
-  function show(el, text, error) { el.textContent = text; el.className = 'msg' + (error ? ' error' : ''); el.hidden = !text; }
+  function ago(iso) {
+    if (!iso) return 'never';
+    var s = (Date.now() - Date.parse(iso)) / 1000;
+    if (s < 90) return 'just now'; if (s < 5400) return Math.round(s / 60) + ' min ago'; if (s < 129600) return Math.round(s / 3600) + ' h ago';
+    if (s < 86400 * 60) return Math.round(s / 86400) + ' days ago'; return Math.round(s / 86400 / 30) + ' months ago';
+  }
+  function months(iso) { return iso ? (Date.now() - Date.parse(iso)) / (86400000 * 30.44) : 0; }
+  function toast(text) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = text; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2200); }
+  function enc(v) { return encodeURIComponent(v); }
 
   function api(method, path, body) {
     var init = { method: method, headers: { Authorization: 'Bearer ' + key } };
     if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
     return fetch(path, init).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
-        if (res.status === 401 && path !== '/admin/info') signedOut('The sign-in ran out (an hour) - sign in again.');
+        if (res.status === 401 && path !== '/admin/instance') signedOut('The sign-in ran out (an hour) - sign in again.');
         if (!res.ok) { var e = new Error(data.error || ('HTTP ' + res.status)); e.status = res.status; throw e; }
         return data;
       });
     });
   }
+  function fail(e) { toast(e.message); }
 
-  var LABELS = {
-    turnstile: 'Turnstile not set', turnstile_keys: 'Turnstile: test or malformed keys', turnstile_secret: 'Turnstile: secret refused',
-    mail_off: 'Mail switched off', mail_unset: 'No mailer or mail account'
-  };
-
+  // --- Signing in: arcanum-auth's own page, back to /callback with a code.
   function b64u(bytes) { var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
   function random() { return b64u(crypto.getRandomValues(new Uint8Array(32))); }
+  function loginError(text) { var el = $('loginError'); el.textContent = text || ''; el.hidden = !text; }
 
-  // Sign in: arcanum-auth's own page (a passkey), back to /callback with a code.
   $('signIn').addEventListener('click', function () {
-    show($('keyError'), '');
+    loginError('');
     fetch('/oidc').then(function (r) { return r.json(); }).then(function (o) {
       if (o.error) throw new Error(o.error);
       var verifier = random(), state = random();
@@ -162,43 +175,48 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
         var q = new URLSearchParams({ response_type: 'code', client_id: o.client_id, redirect_uri: o.redirect_uri, scope: 'openid email', state: state, code_challenge: b64u(new Uint8Array(hash)), code_challenge_method: 'S256', prompt: 'login' });
         location.href = o.authorization_endpoint + '?' + q;
       });
-    }).catch(function (e) { show($('keyError'), 'Could not reach arcanum-auth: ' + e.message, true); });
+    }).catch(function (e) { loginError('Could not reach arcanum-auth: ' + e.message); });
   });
 
   function finishSignIn() {
     var q = new URLSearchParams(location.search), pending = read(SIGNIN);
     write(SIGNIN, null);
     history.replaceState(null, '', '/');
-    if (q.get('error')) return Promise.resolve(show($('keyError'), 'Signing in did not work: ' + (q.get('error_description') || q.get('error')), true));
-    if (!pending || q.get('state') !== pending.state) return Promise.resolve(show($('keyError'), 'That sign-in was not started here - try again.', true));
-    return fetch('/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: q.get('code'), verifier: pending.verifier }) })
+    if (q.get('error')) return loginError('Signing in did not work: ' + (q.get('error_description') || q.get('error')));
+    if (!pending || q.get('state') !== pending.state) return loginError('That sign-in was not started here - try again.');
+    fetch('/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: q.get('code'), verifier: pending.verifier }) })
       .then(function (r) { return r.json(); }).then(function (t) {
         if (t.error) throw new Error(t.error);
         cred = { bearer: t.access_token, kind: 'token', expires: Date.now() + (t.expires_in - 60) * 1000 };
         write(STORE, cred); key = cred.bearer;
-        return connect();
-      }).catch(function (e) { show($('keyError'), 'Signing in did not work: ' + e.message, true); });
+        connect();
+      }).catch(function (e) { loginError('Signing in did not work: ' + e.message); });
   }
 
   function signedOut(message) {
-    write(STORE, null); cred = null; key = '';
-    $('app').hidden = true; $('signedIn').hidden = true; $('signedOut').hidden = false; $('keyBox').hidden = false;
-    $('instance').textContent = 'Not signed in'; $('protections').innerHTML = '';
-    if (message) show($('keyError'), message, true);
+    write(STORE, null); cred = null; key = ''; info = null; cache = {};
+    $('app').hidden = true; $('login').hidden = false;
+    loginError(message || '');
   }
 
+  var LABELS = {
+    turnstile: 'Turnstile not set', turnstile_keys: 'Turnstile: test or malformed keys', turnstile_secret: 'Turnstile: secret refused',
+    mail_off: 'Mail switched off', mail_unset: 'No mailer or mail account'
+  };
+
   function connect() {
-    show($('keyError'), '');
-    return api('GET', '/admin/info').then(function (info) {
+    loginError('');
+    return Promise.all([api('GET', '/admin/instance'), api('GET', '/admin/info'), api('GET', '/admin/overview')]).then(function (r) {
+      info = r[0]; info.protections_off = r[1].protections_off; cache.overview = r[2];
       write(STORE, cred);
-      $('who').textContent = info.you === 'key' ? 'With the admin key' : 'Signed in as ' + info.you;
-      $('signedIn').hidden = false; $('signedOut').hidden = true; $('keyBox').hidden = true; $('keyBox').open = false;
-      $('instance').innerHTML = 'Connected to <code>' + esc(info.issuer) + '</code>';
-      $('protections').innerHTML = info.protections_off.length
-        ? info.protections_off.map(function (p) { return '<span class="badge warn">' + esc(LABELS[p] || p) + '</span>'; }).join('')
-        : '<span class="badge ok">Turnstile and mail on</span>';
-      $('app').hidden = false; $('key').value = '';
-      loadClients(); loadMail();
+      $('who').textContent = info.you === 'key' ? 'the admin key' : info.you;
+      $('instName').textContent = info.product_name || new URL(info.issuer).host;
+      $('instIssuer').textContent = info.issuer;
+      $('protections').innerHTML = info.sign_in === 'google' ? '' : info.protections_off.length
+        ? info.protections_off.map(function (p) { return '<span class="chip warn">' + esc(LABELS[p] || p) + '</span>'; }).join('')
+        : '<span class="chip ok">Turnstile and mail on</span>';
+      $('login').hidden = true; $('app').hidden = false; $('key').value = '';
+      route();
     }).catch(function (e) {
       var was = cred && cred.kind;
       signedOut(e.status === 401
@@ -207,192 +225,583 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
     });
   }
 
-  // The addresses that tell a client apart (arcanum-auth's distinctiveHosts):
-  // its own domains, or only its one workers.dev address. All: under "Addresses".
-  function shownHosts(c) { return c.hosts || []; }
+  // --- The menu: what this instance has (its settings, /admin/instance).
+  // Google only (a dedicated instance): APIs, roles, machine clients. The
+  // shared one: clients with owners, access requests, passkeys, mail - and
+  // APIs and roles only once it has any.
+  function dedicated() { return info && info.sign_in === 'google'; }
+  function hasApis() { return dedicated() || (cache.overview && (cache.overview.apis > 0 || cache.overview.roles > 0 || cache.overview.machine_clients > 0)); }
+  function menu() {
+    var o = cache.overview || {};
+    var items = [['overview', 'Overview'], null, ['apps', dedicated() ? 'Applications' : 'Clients', (o.applications || 0) + (o.machine_clients || 0)]];
+    if (hasApis()) items.push(['apis', 'APIs', o.apis], ['roles', 'Roles', o.roles]);
+    items.push(['users', 'Users', o.people]);
+    if (!dedicated()) items.push(['requests', 'Access requests', o.access_requests], ['passkeys', 'Passkeys'], null, ['mail', 'Mail']);
+    else items.push(null);
+    items.push(['audit', 'Audit log'], ['instance', 'Instance']);
+    return items;
+  }
+  var GROUPS = ['', 'Access', 'Platform'];
+  function renderNav(page) {
+    var g = 0, html = '';
+    var parent = { app: 'apps', api: 'apis', role: 'roles' }[page] || page;
+    menu().forEach(function (item) {
+      if (!item) { g++; html += '<div class="group">' + GROUPS[Math.min(g, 2)] + '</div>'; return; }
+      html += '<a href="#' + item[0] + '"' + (parent === item[0] ? ' class="on"' : '') + '><span>' + esc(item[1]) + '</span>' + (item[2] != null ? '<span class="n">' + esc(item[2]) + '</span>' : '') + '</a>';
+    });
+    $('nav').innerHTML = html;
+  }
 
-  // Arcanum installations: which release each address runs (its bff's public
-  // /version, asked through this tool's Worker). arcanum-auth doesn't mark a
-  // client as an installation, so it's told by its addresses: an installation
-  // signs in at <its address>/callback (the bff) and its installer at
-  // .../auth/callback (or it's self-hosted: instance 'kubernetes'/'docker').
-  // The bootstrapper's own client has only a /callback, an app like Webstudio
-  // only its own. Every /callback address is asked; a release is always shown,
-  // "not answering" only for an installation.
+  // --- Routing: #page/id/tab.
+  function parts() { return (location.hash || '#overview').slice(1).split('/').map(function (p) { try { return decodeURIComponent(p); } catch (e) { return ''; } }); }
+  function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+  window.addEventListener('hashchange', function () { if (info) route(); });
+  var VIEWS = {};
+  function route() {
+    var p = parts(), page = VIEWS[p[0]] ? p[0] : 'overview';
+    renderNav(page);
+    $('view').innerHTML = '<p>Loading...</p>';
+    Promise.resolve(VIEWS[page](p[1], p[2])).then(function (html) { if (typeof html === 'string') $('view').innerHTML = html; })
+      .catch(function (e) { $('view').innerHTML = '<div class="card"><div class="cb"><p class="msg error">' + esc(e.message) + '</p></div></div>'; });
+    window.scrollTo(0, 0);
+  }
+  function reload() { return api('GET', '/admin/overview').then(function (o) { cache.overview = o; route(); }); }
+
+  function head(title, sub, actions) {
+    return '<div class="head"><div><h1>' + esc(title) + '</h1>' + (sub ? '<p class="sub">' + sub + '</p>' : '') + '</div>' + (actions ? '<div class="row">' + actions + '</div>' : '') + '</div>';
+  }
+  function copyBtn(text) { return '<button type="button" class="sm" data-copy="' + esc(text) + '">Copy</button>'; }
+
+  // --- Overview.
+  VIEWS.overview = function () {
+    return api('GET', '/admin/overview').then(function (o) {
+      cache.overview = o; renderNav('overview');
+      var stats = dedicated()
+        ? [[o.applications, 'Applications'], [o.machine_clients, 'Machine clients'], [o.people, 'People'], [o.active_30_days, 'Active (30 days)']]
+        : [[o.applications, 'Clients'], [o.people, 'People'], [o.active_30_days, 'Active (30 days)'], [o.access_requests, 'Access requests']];
+      var sub = esc(info.issuer) + ' · ' + (dedicated() ? 'Google sign-in' + (info.google_hosted_domain ? ', ' + esc(info.google_hosted_domain) + ' Workspace only' : '') : 'mailed codes, passkeys' + (info.google ? ', Google' : ''));
+      return head('Overview', sub) +
+        '<div class="stats">' + stats.map(function (s) { return '<div class="card stat"><div class="v">' + esc(s[0] || 0) + '</div><div class="l">' + s[1] + '</div></div>'; }).join('') + '</div>' +
+        '<div class="card"><div class="ch"><h2>Recent changes</h2><a class="btn" href="#audit">Audit log</a></div>' + auditTable(o.recent) + '</div>';
+    });
+  };
+
+  function auditText(a) {
+    var d = a.detail || {};
+    if (a.name === 'admin') return (d.method || '') + ' ' + (d.path || '') + (d.status ? ' (' + d.status + ')' : '');
+    if (d.client) return a.name.replace(/_/g, ' ') + ': ' + d.client;
+    return a.name.replace(/_/g, ' ');
+  }
+  function auditTable(rows) {
+    if (!rows || !rows.length) return '<div class="cb"><p>Nothing yet.</p></div>';
+    return '<div class="tscroll"><table><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>' + rows.map(function (a) {
+      return '<tr><td class="s" style="white-space:nowrap">' + esc(when(a.at)) + '</td><td>' + esc(a.by || 'system') + '</td><td><code>' + esc(auditText(a)) + '</code></td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }
+
+  VIEWS.audit = function () {
+    return api('GET', '/admin/audit?limit=300').then(function (rows) {
+      return head('Audit log', 'Admin changes, secret rotations and revocations, failed machine sign-ins - kept a year. Every security event is also in this instance\'s Workers Logs (<code>event = security</code>).') +
+        '<div class="card">' + auditTable(rows) + '</div>';
+    });
+  };
+
+  // --- Applications (user and machine clients).
   var releases = {};
-  function paths(c, path) {
-    return c.redirect_uris.filter(function (u) { try { return new URL(u).pathname === path; } catch (e) { return false; } });
-  }
-  function isInstallation(c) {
-    return (paths(c, '/callback').length > 0 && paths(c, '/auth/callback').length > 0) || c.instance_url === 'kubernetes' || c.instance_url === 'docker';
-  }
-  function callbackHosts(c) {
-    var hosts = paths(c, '/callback').map(function (u) { return new URL(u).host; });
-    return shownHosts(c).filter(function (h) { return hosts.indexOf(h) >= 0; });
-  }
+  function paths(c, path) { return c.redirect_uris.filter(function (u) { try { return new URL(u).pathname === path; } catch (e) { return false; } }); }
+  // Arcanum installations: which release each address runs (its public
+  // /version, asked through this tool's Worker). An installation signs in
+  // at <address>/callback and its installer at .../auth/callback, or is self-hosted.
+  function isInstallation(c) { return (paths(c, '/callback').length > 0 && paths(c, '/auth/callback').length > 0) || c.instance_url === 'kubernetes' || c.instance_url === 'docker'; }
+  function callbackHosts(c) { var hosts = paths(c, '/callback').map(function (u) { return new URL(u).host; }); return (c.hosts || []).filter(function (h) { return hosts.indexOf(h) >= 0; }); }
   function releaseBadge(c, h) {
     var r = releases[h], attr = ' data-release="' + esc(h) + '" data-client="' + esc(c.client_id) + '"';
     if (!r) return '<span' + attr + '></span>';
-    if (r.ok && r.release) return '<span class="badge ok"' + attr + '>' + esc(r.release) + '</span>';
-    return isInstallation(c) ? '<span class="badge warn"' + attr + '>not answering</span>' : '<span' + attr + '></span>';
+    if (r.ok && r.release) return '<span class="chip ok"' + attr + '>' + esc(r.release) + '</span>';
+    return isInstallation(c) ? '<span class="chip warn"' + attr + '>not answering</span>' : '<span' + attr + '></span>';
   }
   function checkReleases(list) {
     list.forEach(function (c) {
-      if (c.disabled_at) return;
+      if (c.disabled_at || c.kind === 'machine') return;
       callbackHosts(c).forEach(function (h) {
-        if (releases[h]) return;
+        if (releases[h] !== undefined) return;
         releases[h] = null;
-        fetch('/version?host=' + encodeURIComponent(h)).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; }).then(function (r) {
+        fetch('/version?host=' + enc(h)).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; }).then(function (r) {
           releases[h] = r;
           document.querySelectorAll('[data-release="' + h + '"]').forEach(function (el) {
-            var owner = clients.filter(function (x) { return x.client_id === el.dataset.client; })[0];
+            var owner = (cache.clients || []).filter(function (x) { return x.client_id === el.dataset.client; })[0];
             if (owner) el.outerHTML = releaseBadge(owner, h);
           });
         });
       });
     });
   }
-
-  var clients = [];
-  function render() {
-    var q = $('search').value.trim().toLowerCase();
-    var list = clients.filter(function (c) {
-      return !q || [c.name, c.shown_name || '', c.client_id, c.owner_email || ''].concat(c.redirect_uris, c.post_logout_redirect_uris).join(' ').toLowerCase().indexOf(q) >= 0;
-    });
-    $('clients').innerHTML = list.length ? list.map(clientHtml).join('') : '<p>' + (clients.length ? 'No client matches.' : 'No clients yet.') + '</p>';
-  }
-  $('search').addEventListener('input', render);
-
   function loadClients() {
     return api('GET', '/admin/clients').then(function (list) {
       list.sort(function (a, b) { return (!!a.disabled_at - !!b.disabled_at) || a.name.localeCompare(b.name); });
-      clients = list; releases = {}; render(); checkReleases(list);
-    }).catch(function (e) { $('clients').innerHTML = '<p class="msg error">' + esc(e.message) + '</p>'; });
+      cache.clients = list; return list;
+    });
+  }
+  function clientById(id) { return (cache.clients || []).filter(function (c) { return c.client_id === id; })[0]; }
+
+  VIEWS.apps = function () {
+    return Promise.all([loadClients(), hasApis() ? api('GET', '/admin/apis') : Promise.resolve([])]).then(function (r) {
+      var list = r[0];
+      var search = '<input id="search" type="search" placeholder="Search name, address, owner, id" aria-label="Search" style="width:260px">';
+      var people = list.filter(function (c) { return c.kind !== 'machine'; }), machines = list.filter(function (c) { return c.kind === 'machine'; });
+      var html = head(dedicated() ? 'Applications' : 'Clients', dedicated() ? 'Front-ends people sign in to, and machine clients that call an API themselves.' : 'One per application or Arcanum installation.',
+        search + (hasApis() ? '<button type="button" data-act="new-machine">New machine client</button>' : '') + '<button type="button" class="pri" data-act="new-app">New ' + (dedicated() ? 'application' : 'client') + '</button>') +
+        (cache.created ? secretBox(cache.created.c, cache.created.title) : '') +
+        '<div class="card"><div class="ch"><h2>For people</h2><span class="s">' + people.length + '</span></div><div class="tscroll"><table><thead><tr><th>Name</th><th>Who may sign in</th><th>Addresses</th><th>Last used</th></tr></thead><tbody id="peopleRows"></tbody></table></div></div>';
+      if (hasApis() || machines.length) html += '<div class="card"><div class="ch"><h2>Machine clients</h2><span class="s">Client credentials, no sign-in</span></div><div class="tscroll"><table><thead><tr><th>Name</th><th>Secret</th><th>Last used</th></tr></thead><tbody id="machineRows"></tbody></table></div></div>';
+      cache.created = null;
+      setTimeout(function () { renderApps(''); checkReleases(list); var s = $('search'); if (s) s.addEventListener('input', function () { renderApps(s.value); }); });
+      return html;
+    });
+  };
+  function renderApps(q) {
+    q = q.trim().toLowerCase();
+    var list = (cache.clients || []).filter(function (c) {
+      return !q || [c.name, c.shown_name || '', c.client_id, c.owner_email || ''].concat(c.redirect_uris, c.post_logout_redirect_uris).join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    var people = list.filter(function (c) { return c.kind !== 'machine'; }), machines = list.filter(function (c) { return c.kind === 'machine'; });
+    $('peopleRows').innerHTML = people.map(function (c) {
+      var who = c.disabled_at ? '<span class="chip warn">Disabled</span>' : c.restricted ? '<span class="chip warn">Restricted</span>' : '<span class="chip ok">' + (dedicated() ? 'Whole Workspace' : 'Open') + '</span>';
+      if (c.require_passkey && !dedicated()) who += ' <span class="chip">Passkey</span>';
+      var hosts = (c.hosts || []).map(function (h) { var rel = !c.disabled_at && callbackHosts(c).indexOf(h) >= 0 ? ' ' + releaseBadge(c, h) : ''; return '<span>' + esc(h) + rel + '</span>'; }).join('');
+      return '<tr class="click" data-href="#app/' + enc(c.client_id) + '"><td><div class="t">' + esc(c.shown_name || c.name) + '</div><div class="s">' + esc(c.owner_email ? 'Owner ' + c.owner_email : c.client_id) + '</div></td><td>' + who +
+        '</td><td><div class="hosts">' + hosts + '</div></td><td class="s">' + esc(ago(c.last_used_at)) + '<br>' + c.active_users + ' active</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="s">' + (q ? 'No match.' : 'None yet.') + '</td></tr>';
+    var m = $('machineRows');
+    if (m) m.innerHTML = machines.map(function (c) {
+      var age = months(c.secret_created_at), chip = age >= 12 ? '<span class="chip warn">' + Math.floor(age) + ' months old</span>' : '<span class="s">' + esc(day(c.secret_created_at)) + '</span>';
+      return '<tr class="click" data-href="#app/' + enc(c.client_id) + '"><td><div class="t">' + esc(c.name) + '</div><div class="s">' + esc(c.client_id) + '</div></td><td>' + (c.disabled_at ? '<span class="chip warn">Disabled</span>' : chip) + '</td><td class="s">' + esc(ago(c.last_used_at)) + '</td></tr>';
+    }).join('') || '<tr><td colspan="3" class="s">' + (q ? 'No match.' : 'None yet.') + '</td></tr>';
   }
 
-  function clientHtml(c) {
-    var id = esc(c.client_id);
-    var badges = c.disabled_at ? '<span class="badge warn">Disabled ' + esc(when(c.disabled_at)) + '</span>'
-      : (c.restricted ? '<span class="badge">Restricted</span>' : '<span class="badge ok">Open</span>') + (c.require_passkey ? ' <span class="badge">Passkey required</span>' : '') +
-        ((c.enroll_domains || []).length ? ' <span class="badge">Enrolls ' + esc(c.enroll_domains.join(', ')) + (c.enroll_reset ? ' (+ reset)' : '') + '</span>' : '');
-    var actions = c.disabled_at
-      ? '<button class="danger" data-act="delete" data-id="' + id + '" data-name="' + esc(c.name) + '">Delete for good</button>'
-      : '<button class="secondary" data-act="restricted" data-id="' + id + '" data-value="' + !c.restricted + '">' + (c.restricted ? 'Open to everyone' : 'Restrict') + '</button>' +
-        '<button class="secondary" data-act="passkey" data-id="' + id + '" data-value="' + !c.require_passkey + '">' + (c.require_passkey ? 'Passkey not required' : 'Require passkey') + '</button>' +
-        '<button class="danger" data-act="disable" data-id="' + id + '" data-name="' + esc(c.name) + '">Disable</button>';
-    var edit = c.disabled_at ? '' :
-      '<details><summary>Addresses</summary><form data-uris="' + id + '">' +
-      '<div class="grid2"><div><label>Redirect URIs</label><textarea name="r" rows="' + Math.max(2, c.redirect_uris.length) + '">' + esc(c.redirect_uris.join('\n')) + '</textarea></div>' +
-      '<div><label>Logout return addresses</label><textarea name="l" rows="' + Math.max(2, c.post_logout_redirect_uris.length) + '">' + esc(c.post_logout_redirect_uris.join('\n')) + '</textarea></div></div>' +
-      '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save addresses</button></div></form></details>' +
-      // Enrollment (enroll.ts): only domains whose mail this client's installation receives itself.
-      '<details><summary>Enrollment domains</summary><form data-enroll="' + id + '">' +
-      '<p class="meta">A first passkey without a mailed code, for addresses on these domains. Only list domains whose mail this installation receives itself (a mail server for its own domains) - never a public provider like gmail.com: its accounts work on every client.</p>' +
-      '<label>Domains (one per line)</label><textarea name="d" rows="' + Math.max(2, (c.enroll_domains || []).length) + '" placeholder="frigg.be">' + esc((c.enroll_domains || []).join('\n')) + '</textarea>' +
-      '<label class="check"><input type="checkbox" name="reset"' + (c.enroll_reset ? ' checked' : '') + '> Also reset an account that lost its passkeys (its passkeys, Google link and sessions go)</label>' +
-      '<div class="row" style="margin-top:8px"><button type="submit" class="secondary">Save enrollment</button></div></form></details>';
-    var hosts = shownHosts(c);
-    return '<div class="client' + (c.disabled_at ? ' disabled' : '') + '">' +
-      '<div class="top"><div class="name">' + esc(c.shown_name || c.name) + '</div><div class="row">' + badges + '</div></div>' +
-      (hosts.length ? '<div class="hosts">' + hosts.map(function (h) {
-        var release = !c.disabled_at && callbackHosts(c).indexOf(h) >= 0 ? ' ' + releaseBadge(c, h) : '';
-        return '<span class="host"><a href="https://' + esc(h) + '" target="_blank" rel="noopener noreferrer">' + esc(h) + '</a>' + release + '</span>';
-      }).join('') + '</div>' : '') +
-      '<div class="facts">' +
-        (c.owner_email ? '<div>Owner ' + esc(c.owner_email) + '</div>' : '') +
-        '<div>Last used ' + esc(when(c.last_used_at)) + ' · ' + c.active_users + ' active ' + (c.active_users === 1 ? 'user' : 'users') + ' in 30 days</div>' +
-        '<div>Created ' + esc(day(c.created_at)) + ' · <code>' + id + '</code></div>' +
-      '</div>' +
-      '<div class="row">' + actions + '</div>' + edit + '<p class="msg" data-msg="' + id + '" hidden></p></div>';
+  // A secret, shown once (new client, rotation), with a button to copy.
+  function secretBox(c, title) {
+    var text = 'ISSUER=' + (c.issuer || info.issuer) + '\nCLIENT_ID=' + c.client_id + '\nCLIENT_SECRET=' + c.client_secret;
+    return '<div class="secret"><strong>' + esc(title) + ' Copy the secret now - it is never shown again.</strong>' +
+      '<div>Issuer <code>' + esc(c.issuer || info.issuer) + '</code></div><div>Client id <code>' + esc(c.client_id) + '</code></div><div>Client secret <code>' + esc(c.client_secret) + '</code></div>' +
+      (c.previous_secret_expires_at ? '<div>The previous secret works until ' + esc(when(c.previous_secret_expires_at)) + '.</div>' : '') +
+      '<div class="row"><button type="button" data-copy="' + esc(text) + '">Copy all three</button></div></div>';
   }
 
-  function clientMsg(id, text, error) { var el = document.querySelector('[data-msg="' + id + '"]'); if (el) show(el, text, error); }
+  function newAppDrawer() {
+    drawer('<h2>New ' + (dedicated() ? 'application' : 'client') + '</h2>' +
+      '<form id="newClient">' +
+      '<label class="f" for="ncName">Name</label><input id="ncName" required maxlength="100" style="width:100%">' +
+      '<label class="f" for="ncApp">App address (fills in the two lists)</label><input id="ncApp" placeholder="https://app.example.be" style="width:100%">' +
+      '<label class="f" for="ncRedirects">Redirect URIs, one per line</label><textarea id="ncRedirects" rows="2" required></textarea>' +
+      '<label class="f" for="ncLogouts">Logout return addresses, one per line</label><textarea id="ncLogouts" rows="2"></textarea>' +
+      (dedicated() ? '' : '<label class="f" for="ncOwner">Owner e-mail (first admin of its access list)</label><input id="ncOwner" type="email" placeholder="optional" style="width:100%">' +
+        '<label class="f" for="ncInstance">Instance address (for support)</label><input id="ncInstance" placeholder="optional" style="width:100%">') +
+      '<div class="checks" style="margin-top:8px"><label><input id="ncRestricted" type="checkbox"' + (dedicated() ? '' : ' checked') + '><span>Restricted: only people on its list can sign in</span></label></div>' +
+      '<div class="row" style="margin-top:12px"><button type="submit" class="pri">Create</button><button type="button" data-close>Cancel</button></div><p class="msg error" id="ncMsg" hidden></p></form>', function (box) {
+      box.querySelector('#ncApp').addEventListener('input', function () {
+        var base = this.value.trim().replace(/\/+$/, ''); if (!base) return;
+        box.querySelector('#ncRedirects').value = base + '/callback'; box.querySelector('#ncLogouts').value = base;
+        var inst = box.querySelector('#ncInstance'); if (inst && (!inst.value || inst.dataset.auto)) { inst.value = base; inst.dataset.auto = '1'; }
+      });
+      box.querySelector('#newClient').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var body = { name: box.querySelector('#ncName').value.trim(), redirect_uris: lines(box.querySelector('#ncRedirects').value), post_logout_redirect_uris: lines(box.querySelector('#ncLogouts').value), restricted: box.querySelector('#ncRestricted').checked };
+        var owner = box.querySelector('#ncOwner'), inst = box.querySelector('#ncInstance');
+        if (owner && owner.value.trim()) body.owner_email = owner.value.trim();
+        if (inst && inst.value.trim()) body.instance_url = inst.value.trim();
+        api('POST', '/admin/clients', body).then(function (c) { closeDrawer(); cache.created = { c: c, title: 'Created.' }; return reload(); })
+          .catch(function (err) { var m = box.querySelector('#ncMsg'); m.textContent = err.message; m.hidden = false; });
+      });
+    });
+  }
+  function newMachineDrawer() {
+    drawer('<h2>New machine client</h2><p>A worker that calls an API for itself (client credentials). One per worker, with only what it needs.</p>' +
+      '<form id="newMachine"><label class="f" for="nmName">Name</label><input id="nmName" required maxlength="100" placeholder="my-scorpio zara worker" style="width:100%">' +
+      '<div class="row" style="margin-top:12px"><button type="submit" class="pri">Create</button><button type="button" data-close>Cancel</button></div><p class="msg error" id="nmMsg" hidden></p></form>', function (box) {
+      box.querySelector('#newMachine').addEventListener('submit', function (e) {
+        e.preventDefault();
+        api('POST', '/admin/clients', { kind: 'machine', name: box.querySelector('#nmName').value.trim() }).then(function (c) {
+          closeDrawer(); cache.created = { c: c, title: 'Created. Give it API access next.' }; return reload();
+        }).catch(function (err) { var m = box.querySelector('#nmMsg'); m.textContent = err.message; m.hidden = false; });
+      });
+    });
+  }
 
-  $('clients').addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-act]'); if (!b) return;
-    var id = b.dataset.id, act = b.dataset.act, call;
-    if (act === 'restricted') call = api('PATCH', '/admin/clients/' + encodeURIComponent(id), { restricted: b.dataset.value === 'true' });
-    else if (act === 'passkey') call = api('PATCH', '/admin/clients/' + encodeURIComponent(id), { require_passkey: b.dataset.value === 'true' });
-    else if (act === 'disable') { if (!confirm('Disable ' + b.dataset.name + '? Nobody can sign in to it any more.' + (cred && cred.kind === 'token' ? ' Its owner is mailed when that is not you.' : ''))) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id)); }
-    else if (act === 'delete') { if (!confirm('Delete ' + b.dataset.name + ' for good, with its tokens and access list? This cannot be undone.')) return; call = api('DELETE', '/admin/clients/' + encodeURIComponent(id) + '?hard=1'); }
-    b.disabled = true;
-    call.then(loadClients).catch(function (err) { b.disabled = false; clientMsg(id, err.message, true); });
-  });
+  // One application, in tabs.
+  VIEWS.app = function (id, tab) {
+    return Promise.all([loadClients(), hasApis() ? api('GET', '/admin/apis') : Promise.resolve([])]).then(function (r) {
+      var c = clientById(id); cache.apis = r[1];
+      if (!c) return head('Not found', '') + '<p><a href="#apps">Back</a></p>';
+      var machine = c.kind === 'machine';
+      var tabs = machine ? [['settings', 'Settings'], ['credentials', 'Credentials'], ['access', 'API access']]
+        : [['settings', 'Settings'], ['urls', 'URLs'], ['credentials', 'Credentials']].concat(hasApis() ? [['access', 'API access']] : []).concat([['signin', 'Who may sign in']]).concat(dedicated() ? [] : [['enroll', 'Enrollment']]);
+      tab = tabs.some(function (t) { return t[0] === tab; }) ? tab : (hasApis() ? 'access' : 'settings');
+      var top = '<div class="crumb"><a href="#apps">' + (dedicated() ? 'Applications' : 'Clients') + '</a><span>›</span><span>' + esc(c.name) + '</span></div>' +
+        head(c.shown_name || c.name, (machine ? '<span class="chip info">Machine</span>' : 'For people') + (c.disabled_at ? ' <span class="chip warn">Disabled ' + esc(when(c.disabled_at)) + '</span>' : '') + '<span>·</span><span class="idbox"><code>' + esc(c.client_id) + '</code>' + copyBtn(c.client_id) + '</span>') +
+        '<div class="tabs">' + tabs.map(function (t) { return '<a href="#app/' + enc(id) + '/' + t[0] + '"' + (t[0] === tab ? ' class="on"' : '') + '>' + t[1] + '</a>'; }).join('') + '</div><div id="tabBody"></div>';
+      setTimeout(function () { APP_TABS[tab](c); });
+      return top;
+    });
+  };
+  function tabBody(html) { $('tabBody').innerHTML = html; }
 
-  $('clients').addEventListener('submit', function (e) {
-    var enroll = e.target.closest('form[data-enroll]');
-    if (enroll) {
-      e.preventDefault();
-      var eid = enroll.dataset.enroll;
-      api('PATCH', '/admin/clients/' + encodeURIComponent(eid), { enroll_domains: lines(enroll.d.value), enroll_reset: enroll.reset.checked })
-        .then(loadClients).then(function () { clientMsg(eid, 'Enrollment saved.'); }).catch(function (err) { clientMsg(eid, err.message, true); });
+  var APP_TABS = {
+    settings: function (c) {
+      var machine = c.kind === 'machine';
+      var rows = '<dt>Name</dt><dd><form class="row" id="rename"><input name="n" value="' + esc(c.name) + '" maxlength="100" aria-label="Name"' + (c.disabled_at ? ' disabled' : '') + '><button type="submit"' + (c.disabled_at ? ' disabled' : '') + '>Rename</button></form></dd>' +
+        '<dt>Kind</dt><dd>' + (machine ? 'Machine client (client credentials)' : 'Application for people (authorization code)') + '</dd>' +
+        '<dt>Created</dt><dd>' + esc(when(c.created_at)) + '</dd><dt>Last used</dt><dd>' + esc(when(c.last_used_at)) + (machine ? '' : ' · ' + c.active_users + ' active in 30 days') + '</dd>' +
+        (c.owner_email ? '<dt>Owner</dt><dd>' + esc(c.owner_email) + '</dd>' : '') + (c.instance_url ? '<dt>Instance</dt><dd>' + esc(c.instance_url) + '</dd>' : '') +
+        (machine ? '<dt>Tokens</dt><dd>1 hour, no refresh token</dd>' : '<dt>Refresh tokens</dt><dd>With offline_access, 30 days, rotated on use</dd>');
+      var switches = machine || c.disabled_at ? '' : '<div class="card"><div class="ch"><div><h2>Restricted</h2><p class="s">Only people on its list (Who may sign in) can sign in.</p></div><button type="button" data-patch="restricted" data-value="' + !c.restricted + '">' + (c.restricted ? 'Open to everyone' : 'Restrict') + '</button></div>' +
+        (dedicated() ? '' : '<div class="ch"><div><h2>Passkey required</h2><p class="s">Only a session made with a passkey gets a code for it.</p></div><button type="button" data-patch="require_passkey" data-value="' + !c.require_passkey + '">' + (c.require_passkey ? 'Passkey not required' : 'Require passkey') + '</button></div>') + '</div>';
+      var danger = c.disabled_at
+        ? '<div class="card"><div class="ch"><div><h2>Delete for good</h2><p class="s">With its tokens and access list. Can\'t be undone.</p></div><button type="button" class="danger" data-act="hard-delete">Delete for good</button></div></div>'
+        : '<div class="card"><div class="ch"><div><h2>Disable</h2><p class="s">Nobody gets a new token from it; issued ones run out within the hour.' + (c.owner_email && cred && cred.kind === 'token' ? ' Its owner is mailed when that is not you.' : '') + '</p></div><button type="button" class="danger" data-act="disable">Disable</button></div></div>';
+      tabBody('<div class="card"><div class="cb"><dl class="kv">' + rows + '</dl></div></div>' + switches + danger);
+      var form = $('rename'); if (form) form.addEventListener('submit', function (e) { e.preventDefault(); api('PATCH', '/admin/clients/' + enc(c.client_id), { name: form.n.value.trim() }).then(function () { toast('Renamed'); route(); }).catch(fail); });
+    },
+    urls: function (c) {
+      tabBody('<div class="card"><div class="cb"><form id="uris"><div class="grid2"><div><label class="f">Redirect URIs, one per line</label><textarea name="r" rows="' + Math.max(3, c.redirect_uris.length + 1) + '">' + esc(c.redirect_uris.join('\n')) + '</textarea></div>' +
+        '<div><label class="f">After sign-out, one per line</label><textarea name="l" rows="' + Math.max(3, c.post_logout_redirect_uris.length + 1) + '">' + esc(c.post_logout_redirect_uris.join('\n')) + '</textarea></div></div>' +
+        '<p class="s" style="margin-top:8px">Exact https addresses. Logout' + (info.auth0_compat ? ' (and /v2/logout)' : '') + ' only sends people back to these.</p>' +
+        '<div class="row" style="margin-top:8px"><button type="submit" class="pri"' + (c.disabled_at ? ' disabled' : '') + '>Save addresses</button></div></form></div></div>');
+      var f = $('uris'); f.addEventListener('submit', function (e) { e.preventDefault(); api('PATCH', '/admin/clients/' + enc(c.client_id), { redirect_uris: lines(f.r.value), post_logout_redirect_uris: lines(f.l.value) }).then(function () { toast('Addresses saved'); }).catch(fail); });
+    },
+    credentials: function (c) {
+      var age = months(c.secret_created_at);
+      tabBody('<div class="card"><div class="cb"><dl class="kv"><dt>Issuer</dt><dd><code>' + esc(info.issuer) + '</code></dd><dt>Client id</dt><dd><span class="idbox"><code>' + esc(c.client_id) + '</code>' + copyBtn(c.client_id) + '</span></dd>' +
+        '<dt>Client secret</dt><dd class="s">Shown once, when created or rotated</dd><dt>Secret age</dt><dd>' + (age >= 12 ? '<span class="chip warn">' + Math.floor(age) + ' months - rotate it</span>' : esc(day(c.secret_created_at))) + '</dd>' +
+        (c.previous_secret_expires_at ? '<dt>Previous secret</dt><dd>Works until ' + esc(when(c.previous_secret_expires_at)) + ' <button type="button" class="sm danger" data-act="revoke">Revoke now</button></dd>' : '') + '</dl></div></div>' +
+        '<div id="rotated"></div><div class="card"><div class="ch"><div><h2>Rotate secret</h2><p class="s">The old secret keeps working 24 hours, so the app can be updated first. Then "Revoke now".</p></div><button type="button" data-act="rotate"' + (c.disabled_at ? ' disabled' : '') + '>Rotate</button></div></div>');
+    },
+    access: function (c) {
+      var machine = c.kind === 'machine';
+      api('GET', '/admin/clients/' + enc(c.client_id) + '/api-access').then(function (rows) {
+        cache.access = rows;
+        var apis = cache.apis || [];
+        var cell = function (apiId, kind, total, on) {
+          if (!on) return '<span class="na">Not for this kind</span>';
+          var n = rows.filter(function (r) { return r.api_id === apiId && r.kind === kind; }).length, pct = total ? Math.round(n / total * 100) : 0;
+          return '<div class="access"><div class="row"><span class="dot' + (n ? ' on' : '') + '"></span><span class="num">' + n + ' / ' + total + ' permissions</span></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>';
+        };
+        tabBody('<div class="card"><div class="ch"><div><h2>API access</h2><p class="s">' + (machine ? 'What this client gets itself with client credentials.' : 'For users: what this application may ask for on behalf of someone. A token holds only what both the person\'s roles and this allow.') + '</p></div></div>' +
+          (apis.length ? '<div class="tscroll"><table><thead><tr><th>API</th><th>For users</th><th>Machine</th><th></th></tr></thead><tbody>' + apis.map(function (a) {
+            return '<tr><td><div class="t">' + esc(a.name) + '</div><code class="s">' + esc(a.id) + '</code></td><td>' + cell(a.id, 'user', a.permissions.length, !machine) + '</td><td>' + cell(a.id, 'client', a.permissions.length, machine) + '</td>' +
+              '<td class="right"><button type="button" data-edit-access="' + esc(a.id) + '"' + (c.disabled_at ? ' disabled' : '') + '>Edit</button></td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="cb"><p>No APIs yet: <a href="#apis">add one</a>.</p></div>') + '</div>');
+      }).catch(fail);
+    },
+    signin: function (c) {
+      api('GET', '/admin/clients/' + enc(c.client_id) + '/users').then(function (r) {
+        var assigned = r.users.filter(function (u) { return u.status === 'assigned'; }), asked = r.users.filter(function (u) { return u.status === 'requested'; });
+        tabBody('<div class="card"><div class="ch"><div><h2>Who may sign in</h2><p class="s">' + (r.restricted ? 'Restricted: only the people below.' : 'Open: everyone who can sign in here' + (info.google_hosted_domain ? ' (the ' + esc(info.google_hosted_domain) + ' Workspace)' : '') + '. The list applies once it is restricted (Settings).') + '</p></div></div>' +
+          (asked.length ? '<div class="tscroll"><table><thead><tr><th>Asked for access</th><th></th></tr></thead><tbody>' + asked.map(function (u) {
+            return '<tr><td>' + esc(u.email) + ' <span class="s">' + esc(ago(u.created_at)) + '</span></td><td class="right"><button type="button" class="sm" data-assign="' + esc(u.email) + '">Approve</button> <button type="button" class="sm danger" data-unassign="' + esc(u.email) + '">Refuse</button></td></tr>';
+          }).join('') + '</tbody></table></div>' : '') +
+          '<div class="tscroll"><table><tbody>' + (assigned.map(function (u) {
+            return '<tr><td>' + esc(u.email) + (u.role === 'admin' ? ' <span class="chip">admin</span>' : '') + '</td><td class="right"><button type="button" class="sm danger" data-unassign="' + esc(u.email) + '">Remove</button></td></tr>';
+          }).join('') || '<tr><td class="s">Nobody on the list.</td></tr>') + '</tbody></table></div>' +
+          '<div class="cb top"><form class="row" id="assign"><input name="e" type="email" required placeholder="name@example.be" aria-label="E-mail address"><button type="submit" class="pri">Add</button></form><p class="s" style="margin-top:8px">Also before their first sign-in. Removing someone revokes their refresh tokens for this application.</p></div></div>');
+        var f = $('assign'); f.addEventListener('submit', function (e) { e.preventDefault(); api('PUT', '/admin/clients/' + enc(c.client_id) + '/users/' + enc(f.e.value.trim())).then(function () { toast('Added'); APP_TABS.signin(c); }).catch(fail); });
+      }).catch(fail);
+    },
+    enroll: function (c) {
+      tabBody('<div class="card"><div class="cb"><form id="enroll"><p>A first passkey without a mailed code, for addresses on these domains. Only domains whose mail this installation receives itself (a mail server for its own domains) - never a public provider like gmail.com: its accounts work on every client.</p>' +
+        '<label class="f">Domains (one per line)</label><textarea name="d" rows="' + Math.max(2, (c.enroll_domains || []).length + 1) + '" placeholder="frigg.be">' + esc((c.enroll_domains || []).join('\n')) + '</textarea>' +
+        '<div class="checks" style="margin-top:8px"><label><input type="checkbox" name="reset"' + (c.enroll_reset ? ' checked' : '') + '><span>Also reset an account that lost its passkeys (its passkeys, Google link and sessions go)</span></label></div>' +
+        '<div class="row" style="margin-top:8px"><button type="submit" class="pri"' + (c.disabled_at ? ' disabled' : '') + '>Save enrollment</button></div></form></div></div>');
+      var f = $('enroll'); f.addEventListener('submit', function (e) { e.preventDefault(); api('PATCH', '/admin/clients/' + enc(c.client_id), { enroll_domains: lines(f.d.value), enroll_reset: f.reset.checked }).then(function () { toast('Enrollment saved'); return loadClients(); }).catch(fail); });
+    }
+  };
+
+  function editAccessDrawer(c, apiId) {
+    var a = (cache.apis || []).filter(function (x) { return x.id === apiId; })[0]; if (!a) return;
+    var kind = c.kind === 'machine' ? 'client' : 'user';
+    var have = (cache.access || []).filter(function (r) { return r.api_id === apiId && r.kind === kind; }).map(function (r) { return r.permission; });
+    drawer('<div><h2>' + esc(c.name) + ' › ' + esc(a.name) + '</h2><p class="sub">' + (kind === 'user' ? 'For users: what this application may ask for on behalf of someone.' : 'Machine: what this client gets itself.') + '</p></div>' +
+      '<div class="row"><button type="button" class="sm" data-all="1">Select all</button><button type="button" class="sm" data-all="0">Clear</button></div>' +
+      '<div class="checks">' + a.permissions.map(function (p) { return '<label><input type="checkbox" value="' + esc(p.name) + '"' + (have.indexOf(p.name) >= 0 ? ' checked' : '') + '><span><code>' + esc(p.name) + '</code><div class="d">' + esc(p.description) + '</div></span></label>'; }).join('') + '</div>' +
+      '<div class="row"><button type="button" class="pri" data-save>Save</button><button type="button" data-close>Cancel</button></div>', function (box) {
+      box.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t.dataset.all) box.querySelectorAll('input[type=checkbox]').forEach(function (i) { i.checked = t.dataset.all === '1'; });
+        if (t.hasAttribute('data-save')) {
+          var body = {}; body[kind] = Array.prototype.map.call(box.querySelectorAll('input:checked'), function (i) { return i.value; });
+          api('PUT', '/admin/clients/' + enc(c.client_id) + '/api-access/' + enc(apiId), body).then(function () { closeDrawer(); toast('API access saved'); APP_TABS.access(c); }).catch(fail);
+        }
+      });
+    });
+  }
+
+  // --- APIs.
+  VIEWS.apis = function () {
+    return api('GET', '/admin/apis').then(function (list) {
+      cache.apis = list;
+      return head('APIs', 'The audience an application asks for, and the permissions in its tokens.', '<button type="button" class="pri" data-act="new-api">New API</button>') +
+        '<div class="card"><div class="tscroll"><table><thead><tr><th>API</th><th>Identifier (audience)</th><th>Permissions</th><th>Used by</th></tr></thead><tbody>' +
+        (list.map(function (a) { return '<tr class="click" data-href="#api/' + enc(a.id) + '"><td class="t">' + esc(a.name) + '</td><td><code>' + esc(a.id) + '</code></td><td class="num">' + a.permissions.length + '</td><td class="s">' + a.clients + ' applications · ' + a.roles + ' roles</td></tr>'; }).join('') ||
+          '<tr><td colspan="4" class="s">No APIs yet.</td></tr>') + '</tbody></table></div></div>';
+    });
+  };
+  VIEWS.api = function (id) {
+    return api('GET', '/admin/apis/' + enc(id)).then(function (a) {
+      var rolesFor = function (p) { return a.roles.filter(function (r) { return r.permission === p; }).map(function (r) { return '<a class="chip" href="#role/' + enc(r.role_id) + '">' + esc(r.name) + '</a>'; }).join(' '); };
+      var appsFor = function (p) { return a.clients.filter(function (r) { return r.permission === p; }).map(function (r) { return '<a class="chip' + (r.kind === 'client' ? ' info' : '') + '" href="#app/' + enc(r.client_id) + '/access">' + esc(r.name || r.client_id) + '</a>'; }).join(' '); };
+      return '<div class="crumb"><a href="#apis">APIs</a><span>›</span><span>' + esc(a.name) + '</span></div>' +
+        head(a.name, 'Audience <span class="idbox"><code>' + esc(a.id) + '</code>' + copyBtn(a.id) + '</span>', '<button type="button" data-act="rename-api" data-id="' + esc(a.id) + '" data-name="' + esc(a.name) + '">Rename</button><button type="button" class="danger" data-act="delete-api" data-id="' + esc(a.id) + '">Delete API</button>') +
+        '<div class="card"><div class="ch"><h2>Permissions</h2><span class="s num">' + a.permissions.length + '</span></div><div class="tscroll"><table><thead><tr><th>Permission</th><th>Description</th><th>In roles</th><th>Applications</th><th></th></tr></thead><tbody>' +
+        (a.permissions.map(function (p) { return '<tr><td><code>' + esc(p.name) + '</code></td><td>' + esc(p.description) + '</td><td>' + (rolesFor(p.name) || '<span class="s">none</span>') + '</td><td>' + (appsFor(p.name) || '<span class="s">none</span>') + '</td>' +
+          '<td class="right"><button type="button" class="sm" data-act="describe-perm" data-api="' + esc(a.id) + '" data-perm="' + esc(p.name) + '" data-desc="' + esc(p.description) + '">Describe</button> <button type="button" class="sm danger" data-act="remove-perm" data-api="' + esc(a.id) + '" data-perm="' + esc(p.name) + '">Remove</button></td></tr>'; }).join('') ||
+          '<tr><td colspan="5" class="s">No permissions yet.</td></tr>') + '</tbody></table></div>' +
+        '<div class="cb top"><form class="row" id="addPerm"><input name="n" required placeholder="read:things" aria-label="New permission"><input name="d" placeholder="Description" aria-label="Description"><button type="submit" class="pri">Add permission</button></form></div></div>';
+    }).then(function (html) {
+      setTimeout(function () {
+        var f = $('addPerm');
+        if (f) f.addEventListener('submit', function (e) { e.preventDefault(); api('PUT', '/admin/apis/' + enc(id) + '/permissions/' + enc(f.n.value.trim()), { description: f.d.value.trim() }).then(function () { toast('Permission added'); route(); }).catch(fail); });
+      });
+      return html;
+    });
+  };
+  function newApiDrawer() {
+    drawer('<h2>New API</h2><form id="newApi"><label class="f" for="naId">Identifier (the audience, never changes)</label><input id="naId" required placeholder="zaracloud-api" style="width:100%">' +
+      '<label class="f" for="naName">Name</label><input id="naName" placeholder="zaracloud API" style="width:100%">' +
+      '<label class="f" for="naPerms">Permissions, one per line (name, then a description after a space if you like)</label><textarea id="naPerms" rows="5" placeholder="read:shows See the shows"></textarea>' +
+      '<div class="row" style="margin-top:12px"><button type="submit" class="pri">Create</button><button type="button" data-close>Cancel</button></div><p class="msg error" id="naMsg" hidden></p></form>', function (box) {
+      box.querySelector('#newApi').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var perms = lines(box.querySelector('#naPerms').value).map(function (l) { var i = l.indexOf(' '); return i < 0 ? { name: l } : { name: l.slice(0, i), description: l.slice(i + 1).trim() }; });
+        var id = box.querySelector('#naId').value.trim();
+        api('POST', '/admin/apis', { id: id, name: box.querySelector('#naName').value.trim() || id, permissions: perms }).then(function () { closeDrawer(); cache.overview.apis = (cache.overview.apis || 0) + 1; go('#api/' + enc(id)); })
+          .catch(function (err) { var m = box.querySelector('#naMsg'); m.textContent = err.message; m.hidden = false; });
+      });
+    });
+  }
+
+  // --- Roles.
+  VIEWS.roles = function () {
+    return api('GET', '/admin/roles').then(function (list) {
+      return head('Roles', 'Roles hold permissions from one or more APIs. People get permissions only through roles.', '<button type="button" class="pri" data-act="new-role">New role</button>') +
+        '<div class="card"><div class="tscroll"><table><thead><tr><th>Role</th><th>Members</th><th>Permissions</th></tr></thead><tbody>' +
+        (list.map(function (r) { return '<tr class="click" data-href="#role/' + enc(r.id) + '"><td><div class="t">' + esc(r.name) + '</div><div class="s">' + esc(r.description) + '</div></td><td>' + (r.is_default ? '<span class="chip ok">Everyone (default)</span>' : '<span class="num">' + r.members + '</span>') + '</td><td class="num">' + r.permissions.length + '</td></tr>'; }).join('') ||
+          '<tr><td colspan="3" class="s">No roles yet.</td></tr>') + '</tbody></table></div></div>';
+    });
+  };
+  VIEWS.role = function (id, tab) {
+    tab = tab === 'members' ? 'members' : 'permissions';
+    return Promise.all([api('GET', '/admin/roles/' + enc(id)), api('GET', '/admin/apis')]).then(function (r) {
+      var role = r[0], apis = r[1];
+      var has = function (apiId, p) { return role.permissions.some(function (g) { return g.api_id === apiId && g.permission === p; }); };
+      var body;
+      if (tab === 'permissions') {
+        body = (apis.map(function (a) {
+          var n = role.permissions.filter(function (g) { return g.api_id === a.id; }).length;
+          return '<div class="card"><div class="ch"><h2>' + esc(a.name) + ' <code class="s">' + esc(a.id) + '</code></h2><span class="s num">' + n + ' / ' + a.permissions.length + '</span></div><div class="cb"><div class="checks">' +
+            a.permissions.map(function (p) { return '<label><input type="checkbox" data-rp="' + esc(a.id) + '" value="' + esc(p.name) + '"' + (has(a.id, p.name) ? ' checked' : '') + '><span><code>' + esc(p.name) + '</code><div class="d">' + esc(p.description) + '</div></span></label>'; }).join('') + '</div></div></div>';
+        }).join('') || '<div class="card"><div class="cb"><p>No APIs yet: <a href="#apis">add one</a>.</p></div></div>') +
+          (apis.length ? '<div class="row"><button type="button" class="pri" data-act="save-role-perms" data-id="' + esc(role.id) + '">Save permissions</button></div>' : '');
+      } else {
+        body = role.is_default ? '<div class="card"><div class="cb"><p>This is a default role: everyone who may sign in has it, from their first sign-in. Nobody is added here.</p></div></div>'
+          : '<div class="card"><div class="ch"><h2>Members</h2><span class="s num">' + role.members.length + '</span></div><div class="tscroll"><table><tbody>' +
+            (role.members.map(function (m) { return '<tr><td>' + esc(m.email) + ' <span class="s">added ' + esc(day(m.created_at)) + (m.added_by ? ' by ' + esc(m.added_by) : '') + '</span></td><td class="right"><button type="button" class="sm danger" data-act="remove-member" data-id="' + esc(role.id) + '" data-email="' + esc(m.email) + '">Remove</button></td></tr>'; }).join('') || '<tr><td class="s">No members.</td></tr>') +
+            '</tbody></table></div><div class="cb top"><form class="row" id="addMembers"><input name="e" required placeholder="name@example.be (several: commas or spaces)" aria-label="E-mail addresses"><button type="submit" class="pri">Add</button></form>' +
+            '<p class="s" style="margin-top:8px">Also before their first sign-in. In effect at their next sign-in, or within the hour.</p></div></div>';
+      }
+      setTimeout(function () {
+        var f = $('addMembers');
+        if (f) f.addEventListener('submit', function (e) { e.preventDefault(); api('POST', '/admin/roles/' + enc(role.id) + '/members', { emails: f.e.value.split(/[\s,;]+/).filter(Boolean) }).then(function () { toast('Added to ' + role.name); route(); }).catch(fail); });
+      });
+      return '<div class="crumb"><a href="#roles">Roles</a><span>›</span><span>' + esc(role.name) + '</span></div>' +
+        head(role.name, esc(role.description) || 'No description', '<label class="btn"><input type="checkbox" data-act="toggle-default" data-id="' + esc(role.id) + '"' + (role.is_default ? ' checked' : '') + '> Default role</label>' +
+          '<button type="button" data-act="edit-role" data-id="' + esc(role.id) + '" data-name="' + esc(role.name) + '" data-desc="' + esc(role.description) + '">Rename</button><button type="button" class="danger" data-act="delete-role" data-id="' + esc(role.id) + '">Delete role</button>') +
+        '<div class="tabs"><a href="#role/' + enc(role.id) + '/permissions"' + (tab === 'permissions' ? ' class="on"' : '') + '>Permissions</a><a href="#role/' + enc(role.id) + '/members"' + (tab === 'members' ? ' class="on"' : '') + '>Members</a></div>' + body;
+    });
+  };
+
+  // --- Users.
+  VIEWS.users = function () {
+    return api('GET', '/admin/users').then(function (list) {
+      cache.users = list;
+      var html = head('Users', 'Who signed in, and when.' + (hasApis() ? ' Roles are given in Roles; a default role applies to everyone.' : '')) +
+        '<div class="card"><div class="ch"><input id="userSearch" type="search" placeholder="Search e-mail or name" aria-label="Search people" style="flex:1 1 260px"><span class="s">up to 200 shown</span></div>' +
+        '<div class="tscroll"><table><thead><tr><th>Person</th><th>' + (hasApis() ? 'Roles' : 'Signs in with') + '</th><th>Last seen</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div></div>';
+      setTimeout(function () {
+        renderUsers(list);
+        var s = $('userSearch'), t;
+        s.addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { api('GET', '/admin/users?q=' + enc(s.value)).then(renderUsers).catch(fail); }, 250); });
+      });
+      return html;
+    });
+  };
+  function renderUsers(list) {
+    $('userRows').innerHTML = list.map(function (u) {
+      var how = hasApis() ? u.roles.map(function (r) { return '<span class="chip">' + esc(r) + '</span>'; }).join(' ') || '<span class="s">default only</span>'
+        : [u.passkeys ? u.passkeys + ' passkey' + (u.passkeys === 1 ? '' : 's') : '', u.google ? 'Google' : ''].filter(Boolean).map(function (x) { return '<span class="chip">' + esc(x) + '</span>'; }).join(' ') || '<span class="s">mailed code</span>';
+      return '<tr><td><div class="t">' + esc(u.email) + '</div><div class="s">' + esc(u.name) + ' · <code>' + esc(u.id) + '</code></div></td><td>' + how + '</td><td class="s">' + esc(ago(u.last_seen)) + '</td>' +
+        '<td class="right"><button type="button" class="sm" data-act="sign-out-user" data-email="' + esc(u.email) + '">Sign out everywhere</button></td></tr>';
+    }).join('') || '<tr><td colspan="4" class="s">Nobody.</td></tr>';
+  }
+
+  // --- The shared instance: access requests, passkeys, mail.
+  VIEWS.requests = function () {
+    return api('GET', '/admin/access-requests').then(function (list) {
+      return head('Access requests', 'People who asked to use a restricted client. Its own admins answer them on /access too.') +
+        '<div class="card"><div class="tscroll"><table><thead><tr><th>Who</th><th>Client</th><th>Asked</th><th></th></tr></thead><tbody>' +
+        (list.map(function (r) { return '<tr><td>' + esc(r.email) + '</td><td><a href="#app/' + enc(r.client_id) + '/signin">' + esc(r.client_name) + '</a></td><td class="s">' + esc(ago(r.created_at)) + '</td>' +
+          '<td class="right"><button type="button" class="sm" data-assign="' + esc(r.email) + '" data-client="' + esc(r.client_id) + '">Approve</button> <button type="button" class="sm danger" data-unassign="' + esc(r.email) + '" data-client="' + esc(r.client_id) + '">Refuse</button></td></tr>'; }).join('') ||
+          '<tr><td colspan="4" class="s">No open requests.</td></tr>') + '</tbody></table></div></div>';
+    });
+  };
+  VIEWS.passkeys = function () {
+    setTimeout(function () {
+      var f = $('passkeys');
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var email = f.e.value.trim();
+        if (!confirm('Remove all passkeys of ' + email + '?')) return;
+        api('DELETE', '/admin/users/' + enc(email) + '/passkeys').then(function (r) { toast(r.removed + ' passkey(s) removed; ' + email + ' gets a mail.'); f.reset(); })
+          .catch(function (err) { toast(err.status === 404 ? 'No account with that address.' : err.message); });
+      });
+    });
+    return head('Passkeys', 'Someone lost all their passkeys.') +
+      '<div class="card"><div class="cb"><p>Removes all passkeys of an account; they\'re told by mail and sign in with a mailed code, then add a new one.</p>' +
+      '<form id="passkeys" class="row"><input name="e" type="email" required placeholder="someone@example.be" aria-label="E-mail"><button type="submit" class="danger">Remove passkeys</button></form></div></div>';
+  };
+  VIEWS.mail = function () {
+    return api('GET', '/admin/mail').then(function (m) {
+      var used = m.active === 'settings' ? m.stored : m.active === 'secret' ? m.secret : null;
+      setTimeout(function () {
+        var f = $('testMail');
+        f.addEventListener('submit', function (e) { e.preventDefault(); api('POST', '/admin/mail/test', { to: f.to.value.trim() }).then(function () { toast('Sent - check the inbox (and spam).'); }).catch(fail); });
+      });
+      return head('Mail', 'The account the sign-in codes go out with.') +
+        '<div class="card"><div class="cb">' + (used
+          ? '<p>Sends through <strong>' + esc(used.provider) + '</strong>' + (used.values && used.values.fromAddress ? ' as <code>' + esc(used.values.fromAddress) + '</code>' : '') + ' (' + (m.active === 'settings' ? 'stored in this instance' : 'the MAIL_CONFIG / MAIL_SMTP secret') + ').</p>'
+          : '<p>No mail account: codes only go to the log. Set <code>MAIL_CONFIG</code> as a secret on this instance.</p>') +
+        '<form id="testMail" class="row"><input name="to" type="email" required placeholder="send a test mail to" aria-label="Test mail address"><button type="submit">Send test mail</button></form></div></div>';
+    });
+  };
+
+  // --- Instance (read-only).
+  VIEWS.instance = function () {
+    var yes = function (b, on, off) { return b ? '<span class="chip ok">' + on + '</span>' : '<span class="s">' + off + '</span>'; };
+    var rows = [
+      ['Issuer', '<code>' + esc(info.issuer) + '</code>'],
+      ['Name on the sign-in pages', info.product_name ? esc(info.product_name) : '<span class="s">the host (PRODUCT_NAME not set)</span>'],
+      ['Sign-in', info.sign_in === 'google' ? 'Google only' : info.sign_in_methods.map(function (m) { return { email_code: 'mailed codes', passkey: 'passkeys', google: 'Google' }[m] || m; }).join(', ')],
+      ['Workspace', info.google_hosted_domain ? '<code>' + esc(info.google_hosted_domain) + '</code> (checked on return)' : '<span class="s">any Google account</span>'],
+      ['Self-service and access requests', yes(info.self_service, 'On', 'Off')],
+      ['Device sign-in (kassa QR)', yes(info.device_flow, 'On', 'Off')],
+      ['Post-login action', yes(info.actions, 'ACTIONS bound', 'None')],
+      ['Auth0 compatibility', info.auth0_compat ? 'On: /oauth/token, /v2/logout, JSON bodies' : '<span class="s">Off</span>'],
+      ['Admins (ADMIN_EMAILS)', esc(info.admin_emails) + ' address' + (info.admin_emails === 1 ? '' : 'es')],
+      ['Protections off', info.protections_off && info.protections_off.length ? info.protections_off.map(function (p) { return '<span class="chip warn">' + esc(LABELS[p] || p) + '</span>'; }).join(' ') : '<span class="s">none</span>']
+    ];
+    return head('Instance', 'Read-only: these come from the instance\'s configuration (wrangler.jsonc vars and secrets), not from this page.') +
+      '<div class="card"><div class="cb"><dl class="kv">' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl></div></div>';
+  };
+
+  // --- A drawer on the right (forms that edit).
+  function drawer(html, setup) {
+    closeDrawer();
+    var bg = document.createElement('div'); bg.className = 'drawer-bg'; bg.id = 'drawer';
+    bg.innerHTML = '<div class="drawer" role="dialog">' + html + '</div>';
+    document.body.appendChild(bg);
+    bg.addEventListener('click', function (e) { if (e.target === bg || e.target.hasAttribute('data-close')) closeDrawer(); });
+    setup(bg.firstChild);
+    var first = bg.querySelector('input,textarea'); if (first) first.focus();
+  }
+  function closeDrawer() { var d = $('drawer'); if (d) d.remove(); }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
+
+  // --- Clicks.
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-copy],[data-href],[data-act],[data-patch],[data-edit-access],[data-assign],[data-unassign]');
+    if (!t || (t.closest('#drawer') && !t.dataset.copy)) return;
+    var p = parts();
+    if (t.dataset.copy) { var v = t.dataset.copy; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { toast('Copied'); }, function () { toast(v); }); return; }
+    if (t.dataset.href) { if (!e.target.closest('a')) go(t.dataset.href); return; }
+    if (t.dataset.patch) { var b = {}; b[t.dataset.patch] = t.dataset.value === 'true'; api('PATCH', '/admin/clients/' + enc(p[1]), b).then(function () { toast('Saved'); route(); }).catch(fail); return; }
+    if (t.dataset.editAccess) { editAccessDrawer(clientById(p[1]), t.dataset.editAccess); return; }
+    if (t.dataset.assign || t.dataset.unassign) {
+      var client = t.dataset.client || p[1], email = t.dataset.assign || t.dataset.unassign;
+      if (t.dataset.unassign && !confirm('Remove ' + email + ' from this client?')) return;
+      api(t.dataset.assign ? 'PUT' : 'DELETE', '/admin/clients/' + enc(client) + '/users/' + enc(email)).then(function () { toast('Done'); reload(); }).catch(fail);
       return;
     }
-    var f = e.target.closest('form[data-uris]'); if (!f) return;
-    e.preventDefault();
-    var id = f.dataset.uris;
-    api('PATCH', '/admin/clients/' + encodeURIComponent(id), { redirect_uris: lines(f.r.value), post_logout_redirect_uris: lines(f.l.value) })
-      .then(function () { clientMsg(id, 'Addresses saved.'); }).catch(function (err) { clientMsg(id, err.message, true); });
+    var act = t.dataset.act, c = clientById(p[1]);
+    if (act === 'new-app') newAppDrawer();
+    else if (act === 'new-machine') newMachineDrawer();
+    else if (act === 'new-api') newApiDrawer();
+    else if (act === 'new-role') {
+      var name = prompt('Name of the new role (e.g. forms_access)'); if (!name) return;
+      api('POST', '/admin/roles', { name: name.trim() }).then(function (r) { cache.overview.roles = (cache.overview.roles || 0) + 1; go('#role/' + enc(r.id)); }).catch(fail);
+    }
+    else if (act === 'disable') {
+      if (!confirm('Disable ' + c.name + '? Nobody gets a new token from it any more.')) return;
+      api('DELETE', '/admin/clients/' + enc(c.client_id)).then(function () { toast('Disabled'); reload(); }).catch(fail);
+    }
+    else if (act === 'hard-delete') {
+      if (!confirm('Delete ' + c.name + ' for good, with its tokens and access list? This cannot be undone.')) return;
+      api('DELETE', '/admin/clients/' + enc(c.client_id) + '?hard=1').then(function () { toast('Deleted'); go('#apps'); reload(); }).catch(fail);
+    }
+    else if (act === 'rotate') {
+      if (!confirm('Rotate the secret of ' + c.name + '? The old one keeps working 24 hours.')) return;
+      api('POST', '/admin/clients/' + enc(c.client_id) + '/secret').then(function (s) {
+        return loadClients().then(function () { APP_TABS.credentials(clientById(c.client_id)); $('rotated').innerHTML = secretBox(Object.assign({ issuer: info.issuer }, s), 'Rotated.'); });
+      }).catch(fail);
+    }
+    else if (act === 'revoke') {
+      if (!confirm('The previous secret of ' + c.name + ' stops working now. Is every app using the new one?')) return;
+      api('DELETE', '/admin/clients/' + enc(c.client_id) + '/secret/previous').then(function () { toast('Previous secret revoked'); return loadClients(); }).then(function () { APP_TABS.credentials(clientById(c.client_id)); }).catch(fail);
+    }
+    else if (act === 'rename-api') {
+      var n = prompt('Name of ' + t.dataset.id, t.dataset.name); if (!n) return;
+      api('PATCH', '/admin/apis/' + enc(t.dataset.id), { name: n.trim() }).then(function () { route(); }).catch(fail);
+    }
+    else if (act === 'delete-api') {
+      if (!confirm('Delete API ' + t.dataset.id + ' with its permissions, and every role\'s and application\'s grant of them?')) return;
+      api('DELETE', '/admin/apis/' + enc(t.dataset.id)).then(function () { cache.overview.apis = Math.max(0, (cache.overview.apis || 1) - 1); go('#apis'); }).catch(fail);
+    }
+    else if (act === 'describe-perm') {
+      var d = prompt('Description of ' + t.dataset.perm, t.dataset.desc); if (d === null) return;
+      api('PUT', '/admin/apis/' + enc(t.dataset.api) + '/permissions/' + enc(t.dataset.perm), { description: d.trim() }).then(function () { route(); }).catch(fail);
+    }
+    else if (act === 'remove-perm') {
+      if (!confirm('Remove ' + t.dataset.perm + '? Every role and application loses it.')) return;
+      api('DELETE', '/admin/apis/' + enc(t.dataset.api) + '/permissions/' + enc(t.dataset.perm)).then(function () { toast('Removed'); route(); }).catch(fail);
+    }
+    else if (act === 'save-role-perms') {
+      var grants = Array.prototype.map.call(document.querySelectorAll('input[data-rp]:checked'), function (i) { return { api_id: i.dataset.rp, permission: i.value }; });
+      api('PUT', '/admin/roles/' + enc(t.dataset.id) + '/permissions', { permissions: grants }).then(function () { toast('Role permissions saved'); route(); }).catch(fail);
+    }
+    else if (act === 'edit-role') {
+      var rn = prompt('Name', t.dataset.name); if (!rn) return;
+      var rd = prompt('Description', t.dataset.desc); if (rd === null) return;
+      api('PATCH', '/admin/roles/' + enc(t.dataset.id), { name: rn.trim(), description: rd.trim() }).then(function () { route(); }).catch(fail);
+    }
+    else if (act === 'delete-role') {
+      if (!confirm('Delete this role? Its members lose its permissions at their next token.')) return;
+      api('DELETE', '/admin/roles/' + enc(t.dataset.id)).then(function () { cache.overview.roles = Math.max(0, (cache.overview.roles || 1) - 1); go('#roles'); }).catch(fail);
+    }
+    else if (act === 'remove-member') {
+      api('DELETE', '/admin/roles/' + enc(t.dataset.id) + '/members/' + enc(t.dataset.email)).then(function () { toast('Removed'); route(); }).catch(fail);
+    }
+    else if (act === 'sign-out-user') {
+      if (!confirm('Sign ' + t.dataset.email + ' out everywhere? Every session and every application\'s refresh token ends.')) return;
+      api('POST', '/admin/users/' + enc(t.dataset.email) + '/sign-out').then(function (r) { toast(r.sessions + ' session(s), ' + r.refresh_tokens + ' refresh token(s) ended'); }).catch(fail);
+    }
   });
-
-  $('ncApp').addEventListener('input', function () {
-    var base = this.value.trim().replace(/\/+$/, '');
-    if (!base) return;
-    $('ncRedirects').value = base + '/callback';
-    $('ncLogouts').value = base;
-    if (!$('ncInstance').value || $('ncInstance').dataset.auto) { $('ncInstance').value = base; $('ncInstance').dataset.auto = '1'; }
-  });
-  $('ncInstance').addEventListener('input', function () { delete this.dataset.auto; });
-
-  $('newClient').addEventListener('submit', function (e) {
-    e.preventDefault();
-    show($('ncMsg'), ''); $('ncSecret').hidden = true;
-    var body = { name: $('ncName').value.trim(), redirect_uris: lines($('ncRedirects').value), post_logout_redirect_uris: lines($('ncLogouts').value), restricted: $('ncRestricted').checked };
-    if ($('ncOwner').value.trim()) body.owner_email = $('ncOwner').value.trim();
-    if ($('ncInstance').value.trim()) body.instance_url = $('ncInstance').value.trim();
-    api('POST', '/admin/clients', body).then(function (c) {
-      $('ncSecret').innerHTML = '<strong>Created. Copy the secret now - it is never shown again.</strong>' +
-        '<div style="margin-top:8px">Issuer <code>' + esc(c.issuer) + '</code></div>' +
-        '<div>Client id <code>' + esc(c.client_id) + '</code></div>' +
-        '<div>Client secret <code>' + esc(c.client_secret) + '</code></div>' +
-        '<div class="row" style="margin-top:8px"><button type="button" class="secondary" id="copySecret">Copy all three</button></div>';
-      $('ncSecret').hidden = false;
-      $('copySecret').onclick = function () {
-        navigator.clipboard.writeText('ISSUER=' + c.issuer + '\nCLIENT_ID=' + c.client_id + '\nCLIENT_SECRET=' + c.client_secret).then(function () { $('copySecret').textContent = 'Copied'; });
-      };
-      $('newClient').reset(); delete $('ncInstance').dataset.auto;
-      loadClients();
-    }).catch(function (err) { show($('ncMsg'), err.message, true); });
-  });
-
-  $('passkeys').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var email = $('pkEmail').value.trim();
-    if (!confirm('Remove all passkeys of ' + email + '?')) return;
-    api('DELETE', '/admin/users/' + encodeURIComponent(email) + '/passkeys').then(function (r) {
-      show($('pkMsg'), r.removed + ' passkey(s) removed; ' + email + ' gets a mail.'); $('passkeys').reset();
-    }).catch(function (err) { show($('pkMsg'), err.status === 404 ? 'No account with that address.' : err.message, true); });
-  });
-
-  function loadMail() {
-    api('GET', '/admin/mail').then(function (m) {
-      var used = m.active === 'settings' ? m.stored : m.active === 'secret' ? m.secret : null;
-      $('mail').innerHTML = used
-        ? '<p>Sends through <strong>' + esc(used.provider) + '</strong>' + (used.values && used.values.fromAddress ? ' as <code>' + esc(used.values.fromAddress) + '</code>' : '') +
-          ' (' + (m.active === 'settings' ? 'stored in this instance' : 'the MAIL_CONFIG / MAIL_SMTP secret') + ').</p>'
-        : '<p>No mail account: codes only go to the log. Set <code>MAIL_CONFIG</code> as a secret on this instance.</p>';
-    }).catch(function (err) { $('mail').innerHTML = '<p class="msg error">' + esc(err.message) + '</p>'; });
-  }
-
-  $('testMail').addEventListener('submit', function (e) {
-    e.preventDefault();
-    api('POST', '/admin/mail/test', { to: $('tmTo').value.trim() }).then(function () { show($('tmMsg'), 'Sent - check the inbox (and spam).'); })
-      .catch(function (err) { show($('tmMsg'), err.message, true); });
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.dataset && t.dataset.act === 'toggle-default') {
+      api('PATCH', '/admin/roles/' + enc(t.dataset.id), { is_default: t.checked }).then(function () { toast(t.checked ? 'Now a default role' : 'No longer a default role'); route(); }).catch(fail);
+    }
   });
 
   $('keyForm').addEventListener('submit', function (e) { e.preventDefault(); if ($('key').value) { cred = { bearer: $('key').value, kind: 'key' }; key = cred.bearer; connect(); } });
-  $('signOut').addEventListener('click', function () { signedOut(''); show($('keyError'), ''); });
-  $('reload').addEventListener('click', loadClients);
+  $('signOut').addEventListener('click', function () { signedOut(''); });
   if (location.pathname === '/callback') finishSignIn();
   else if (key) connect();
 })();

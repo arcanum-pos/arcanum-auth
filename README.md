@@ -413,6 +413,16 @@ sign-in; it can only use **`grant_type=client_credentials`** at `/token`
 - `client_credentials` is not in discovery's `grant_types_supported`
   (unchanged for the shared instance).
 
+### Admin dashboard (`tools/admin`, `src/dashboard.ts`)
+
+tools/admin is a dashboard with a menu that follows `GET /admin/instance`
+(its README). Besides the routes above it uses `GET /admin/overview`,
+`GET /admin/audit`, `GET /admin/users?q=`, `POST /admin/users/:email/sign-out`
+(every session and refresh token ends), `GET /admin/access-requests`,
+`GET /admin/clients/:id/users`, `PUT/DELETE /admin/clients/:id/users/:email`
+(who may sign in to a restricted client - with `SIGN_IN=google` the only
+way to add people), and `PATCH /admin/clients/:id` `{ name }`.
+
 ### Post-login action (`src/actions.ts`)
 
 An optional service binding **`ACTIONS`** to a Worker the instance's owner

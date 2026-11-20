@@ -17,13 +17,16 @@ npx wrangler login        # the account of the instance (npx wrangler whoami)
 npx wrangler dev -c tools/admin/wrangler.jsonc
 ```
 
-Then open **http://127.0.0.1:8799** and **sign in with a passkey**: the
-instance's own sign-in page, back on this page with a token for an hour.
+Then open **http://127.0.0.1:8799** and **sign in**: the instance's own
+sign-in page, back on this page with a token for an hour. On the shared
+instance that's **a passkey** (none yet: you add one on the way); on a
+Google-only instance (`SIGN_IN=google`, e.g. Radio Scorpio) it's **Google**,
+with 2-step verification by the Workspace's policy - no passkeys there.
 Only the addresses in that instance's **`ADMIN_EMAILS`** variable get in
 (comma-separated, set in the dashboard or `wrangler.jsonc` - never through
-the API, so an admin can't make another one), and only with a passkey (none
-yet: you add one on the way). No refresh: after the hour, sign in again.
-Every change is logged as a security event `admin` with `by: <your address>`.
+the API, so an admin can't make another one). No refresh: after the hour,
+sign in again. Every change is logged as a security event `admin` with
+`by: <your address>`, and in the instance's audit log (migration 0014).
 
 **The admin key** (`ADMIN_API_KEY`, under "Use the admin key instead") stays
 the way back in: signing in broken, your passkeys lost, a new instance
@@ -35,21 +38,49 @@ The token comes from arcanum-auth's built-in client `arcanum-auth-admin`
 changed or removed through the API. A token still only works through this
 tool: the admin API never answers from the internet.
 
-The page shows which instance it is and what protection is
-off (Turnstile, mail - `/admin/info`), and lets you:
+### The dashboard
 
-- see every client: open or restricted, passkey required, owner, last used,
-  active users in the last 30 days, the addresses that tell it apart (its own
-  domains, else its one workers.dev address), and for an Arcanum
-  installation which release each address runs (its public `/version`, or
-  "not answering") - what the bootstrapper's Installaties page used to show
-- create one (the secret is shown once, with a button to copy issuer, id
-  and secret), open or restrict it, require a passkey, edit its addresses,
-  set its enrollment domains (a mail installation's own domains, whose users
-  get a first passkey without a mailed code) and whether it may reset an
-  account, disable it, delete a disabled one for good
-- remove someone's passkeys (they're told by mail)
-- see which mail account it sends with, and send a test mail
+A menu on the left, the content on the right (links are `#page/id/tab`, so
+the browser's back button works). The menu follows the instance's settings
+(`GET /admin/instance`): a Google-only instance shows APIs, roles and
+machine clients; the shared one shows clients with owners, access requests,
+passkeys and mail - and APIs and roles only once it has any.
+
+- **Overview** - counts (applications, machine clients, people, active in
+  30 days, access requests) and the recent admin actions.
+- **Applications** (the shared instance: **Clients**) - every client, for
+  people and machine clients, searchable: open or restricted, passkey
+  required, owner, last used and active users, the addresses that tell it
+  apart, and for an Arcanum installation which release each address runs
+  (its public `/version`, or "not answering"). Per application, tabs:
+  - *Settings* - rename, open or restrict, require a passkey (shared
+    instance), disable, delete a disabled one for good
+  - *URLs* - redirect and logout addresses
+  - *Credentials* - id, secret age (a warning from 12 months), **rotate the
+    secret** (shown once, with a copy button; the old one works 24 hours) and
+    **revoke the previous one now**
+  - *API access* - per API, which permissions it may ask for on behalf of
+    users, or (a machine client) gets itself; Edit opens a list to tick
+  - *Who may sign in* - the list of a restricted client: add or remove
+    addresses, approve or refuse requests
+  - *Enrollment* (shared instance) - the domains whose users get a first
+    passkey without a mailed code, and whether it may reset an account
+  - New application / new client (the secret shown once, with a button to
+    copy issuer, id and secret), new machine client.
+- **APIs** - identifier (the audience), permissions (add, describe, remove),
+  which roles and applications use each one; rename or delete an API.
+- **Roles** - permissions per API (tick and save), members by e-mail
+  (also before their first sign-in), default role on or off.
+- **Users** - who signed in and when, their roles (or how they sign in, on
+  the shared instance), **sign out everywhere**.
+- **Access requests** (shared) - open requests on every client, approve or
+  refuse.
+- **Passkeys** (shared) - remove someone's passkeys (they're told by mail).
+- **Mail** (shared) - which mail account it sends with, send a test mail.
+- **Audit log** - admin changes, secret rotations and revocations, failed
+  machine sign-ins (kept a year).
+- **Instance** - read-only: issuer, sign-in methods, Workspace, self-service,
+  device flow, action hook, Auth0 compatibility, protections that are off.
 
 The token or key stays in that browser tab only (sessionStorage, "Sign out"
 clears it). The Worker answers only as localhost (`127.0.0.1:8799`, also against a
@@ -73,6 +104,12 @@ A="Authorization: Bearer $ADMIN_API_KEY"
 | delete a disabled one for good | `curl -H "$A" -X DELETE 'localhost:8799/admin/clients/<id>?hard=1'` |
 | someone's passkeys, all gone (they're told) | `curl -H "$A" -X DELETE localhost:8799/admin/users/<email>/passkeys` |
 | the mail account (stored encrypted, needs `SETTINGS_KEY`) | GET / PUT / DELETE `/admin/mail`, test mail POST `/admin/mail/test` `{"to":"…"}` - or skip it and set `MAIL_CONFIG` as a secret |
+| the instance's settings | `curl -H "$A" localhost:8799/admin/instance` |
+| APIs, roles, members, API access, importing users | see the top of `src/apis.ts` and `src/users.ts` (arcanum-auth README, "Dedicated instances") |
+| a machine client (secret shown once) | `curl -H "$A" -H 'Content-Type: application/json' -X POST localhost:8799/admin/clients -d '{"kind":"machine","name":"zara worker"}'` |
+| rotate a client's secret (24 h overlap) / end the old one now | `curl -H "$A" -X POST localhost:8799/admin/clients/<id>/secret` / `curl -H "$A" -X DELETE localhost:8799/admin/clients/<id>/secret/previous` |
+| overview, audit log, users, sign out everywhere | GET `/admin/overview`, `/admin/audit`, `/admin/users?q=`; POST `/admin/users/<email>/sign-out` |
+| who may sign in to a restricted client | GET `/admin/clients/<id>/users`; PUT / DELETE `/admin/clients/<id>/users/<email>`; open requests: GET `/admin/access-requests` |
 
 Every change is a security event `admin` in that instance's Workers Logs.
 
