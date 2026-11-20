@@ -1,6 +1,5 @@
 // Phase 5 of AUTH_DEDICATED.md: AUTH0_COMPAT - /oauth/token, JSON bodies,
 // /v2/logout, `connection` ignored. Off: none of it, as before.
-import { env } from 'cloudflare:test';
 import { decodeJwt } from 'jose';
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../src/env';
@@ -21,22 +20,25 @@ async function codeFor(e: Env, clientId: string, cookie: string, extra: Record<s
   return { code: back.searchParams.get('code')!, verifier, back };
 }
 
-describe('with AUTH0_COMPAT unset (the shared instance)', () => {
+// login.kaboutersoft.be has it on since 2026-11-20 (wrangler.jsonc); off is still the default.
+const OFF = withEnv({ AUTH0_COMPAT: undefined });
+
+describe('with AUTH0_COMPAT unset', () => {
   it('/oauth/token and /v2/logout are unknown', async () => {
-    expect((await form(env, '/oauth/token', { grant_type: 'client_credentials' })).status).toBe(404);
-    expect((await call(env, '/v2/logout?returnTo=https%3A%2F%2Fscorpio-app.test')).status).toBe(404);
+    expect((await form(OFF, '/oauth/token', { grant_type: 'client_credentials' })).status).toBe(404);
+    expect((await call(OFF, '/v2/logout?returnTo=https%3A%2F%2Fscorpio-app.test')).status).toBe(404);
   });
 
   it('a JSON body at /token is not read: no client', async () => {
-    const client = await newClient(env);
-    const res = await jsonPost(env, '/token', { grant_type: 'refresh_token', refresh_token: 'x', client_id: client.client_id, client_secret: client.client_secret });
+    const client = await newClient(OFF);
+    const res = await jsonPost(OFF, '/token', { grant_type: 'refresh_token', refresh_token: 'x', client_id: client.client_id, client_secret: client.client_secret });
     expect(res.status).toBe(401);
   });
 
   it('connection is ignored on /authorize', async () => {
-    const client = await newClient(env);
-    const { cookie } = await googleSignIn(env, unique('conn'));
-    expect((await codeFor(env, client.client_id, cookie, { connection: 'google-oauth2' })).code).toBeTruthy();
+    const client = await newClient(OFF);
+    const { cookie } = await googleSignIn(OFF, unique('conn'));
+    expect((await codeFor(OFF, client.client_id, cookie, { connection: 'google-oauth2' })).code).toBeTruthy();
   });
 });
 

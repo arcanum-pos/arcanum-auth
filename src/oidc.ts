@@ -116,8 +116,8 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
   // A client someone else runs: once per person, a yes first (one query,
   // only for such a client). Not its owner (who made it), not a demo guest
   // (no real name or address).
-  const isOwner = session.user.email.toLowerCase() === (client.owner_email || '').trim().toLowerCase();
-  if (needsConsent(env, client) && !session.user.guest && !isOwner) {
+  const isOwner = client.owner_sub === session.user.id || session.user.email.toLowerCase() === (client.owner_email || '').trim().toLowerCase();
+  if (needsConsent(client) && !session.user.guest && !isOwner) {
     const given = await env.DB.prepare('SELECT 1 FROM consents WHERE user_id = ? AND client_id = ?').bind(session.user.id, client.id).first();
     if (!given) {
       if (p.get('consent') === 'denied') return back({ error: 'access_denied' });
@@ -158,7 +158,7 @@ export async function authorizeConsent(request: Request, env: Env): Promise<Resp
   params.delete('consent');
   if (form.decision === 'allow') {
     const client = await clientById(env, params.get('client_id'));
-    if (!client || !needsConsent(env, client) || !(await mayUse(env, client, session.user))) return messagePage(request, texts(request).errors.request, 400);
+    if (!client || !needsConsent(client) || !(await mayUse(env, client, session.user))) return messagePage(request, texts(request).errors.request, 400);
     await env.DB.prepare('INSERT OR IGNORE INTO consents (user_id, client_id, created_at) VALUES (?, ?, ?)').bind(session.user.id, client.id, nowIso()).run();
     return redirect(`/authorize?${params}`);
   }

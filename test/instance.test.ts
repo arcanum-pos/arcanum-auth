@@ -84,10 +84,11 @@ describe('with no new setting (the shared instance)', () => {
     expect(await env.DB.prepare('SELECT audience FROM refresh_tokens WHERE client_id = ?').bind(client.client_id).first()).toEqual({ audience: null });
   });
 
-  it('/admin/instance tells the settings: all off', async () => {
-    const res = await admin(env, 'GET', '/admin/instance');
+  it('/admin/instance tells the settings: all off by default; the shared instance has Auth0 compatibility on (wrangler.jsonc)', async () => {
+    const res = await admin(withEnv({ AUTH0_COMPAT: undefined }), 'GET', '/admin/instance');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ issuer: ISSUER, sign_in: 'all', google_hosted_domain: null, product_name: null, auth0_compat: false, actions: false, self_service: true, device_flow: true });
+    expect((await admin(env, 'GET', '/admin/instance')).body).toMatchObject({ auth0_compat: true, sign_in: 'all', self_service: true, device_flow: true });
   });
 });
 

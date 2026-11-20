@@ -61,15 +61,23 @@ describe('the audience on /authorize', () => {
     expect(decodeJwt(String(flow.body.access_token)).permissions).toEqual(['read:shows']);
   });
 
-  it('an unknown audience, or one the app has no user access to, is refused (invalid_request)', async () => {
+  it('an API the app has no user access to is refused (invalid_request)', async () => {
     const { app } = await readyOnce();
     const { cookie } = await googleSignIn(env, unique('refused'));
-    for (const audience of ['nope-api', MY]) {
-      const flow = await codeFlow(env, app, cookie, { audience });
-      expect(flow.status).toBe(0);
-      expect(flow.authorize.searchParams.get('error')).toBe('invalid_request');
-      expect(flow.authorize.searchParams.get('state')).toBe('st4te');
-    }
+    const flow = await codeFlow(env, app, cookie, { audience: MY });
+    expect(flow.status).toBe(0);
+    expect(flow.authorize.searchParams.get('error')).toBe('invalid_request');
+    expect(flow.authorize.searchParams.get('state')).toBe('st4te');
+  });
+
+  it('an audience no API has is ignored, even with APIs around: aud is the client, no permissions', async () => {
+    const { app } = await readyOnce();
+    const { cookie } = await googleSignIn(env, unique('unknown-aud'));
+    const flow = await codeFlow(env, app, cookie, { audience: 'nope-api' });
+    expect(flow.status).toBe(200);
+    const at = decodeJwt(String(flow.body.access_token));
+    expect(at.aud).toBe(app.client_id);
+    expect(at.permissions).toBeUndefined();
   });
 
   it('without an audience everything as before: aud is the client, no permissions or email in the access token', async () => {

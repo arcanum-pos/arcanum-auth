@@ -36,17 +36,17 @@ const MAX_LIST = 500;
 
 // --- Tokens.
 
-// May this application ask for `audience` for its users? 'ignored': this
-// instance has no APIs at all, so an audience means nothing here and is
-// left out, as it always was (an app on the shared instance sending one
-// isn't refused all of a sudden). 'refused': there are APIs, and this app
-// has no user access to that one (or it isn't one).
+// May this application ask for `audience` for its users? 'ignored': no API
+// has that id, so the audience means nothing here and is left out, as it
+// always was (an app on the shared instance sending one isn't refused all
+// of a sudden, not even once other apps have APIs). 'refused': that API
+// exists and this app has no user access to it.
 export async function audienceCheck(env: Env, clientId: string, audience: string): Promise<'ok' | 'refused' | 'ignored'> {
-  let row: { any_api: number; allowed: number } | null;
+  let row: { api: number; allowed: number } | null;
   try {
     row = await env.DB.prepare(
-      `SELECT EXISTS (SELECT 1 FROM apis) AS any_api,
-         EXISTS (SELECT 1 FROM client_api_access a JOIN apis ON apis.id = a.api_id WHERE a.client_id = ? AND a.api_id = ? AND a.kind = 'user') AS allowed`
+      `SELECT EXISTS (SELECT 1 FROM apis WHERE id = ?2) AS api,
+         EXISTS (SELECT 1 FROM client_api_access a JOIN apis ON apis.id = a.api_id WHERE a.client_id = ?1 AND a.api_id = ?2 AND a.kind = 'user') AS allowed`
     )
       .bind(clientId, audience)
       .first();
@@ -55,7 +55,11 @@ export async function audienceCheck(env: Env, clientId: string, audience: string
     return 'ignored';
   }
   if (row?.allowed) return 'ok';
-  return row?.any_api ? 'refused' : 'ignored';
+  // Refused only for an API that exists and this app may not ask for. An
+  // audience no API is called (an app that always sends one, e.g. left from
+  // Auth0): ignored, as on an instance without APIs - so creating an API
+  // never breaks another app.
+  return row?.api ? 'refused' : 'ignored';
 }
 
 // Still allowed at a refresh (the app's user access to that API may be gone since).

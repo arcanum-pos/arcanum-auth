@@ -150,18 +150,13 @@ export const adminEmails = (env: Env): string[] =>
     .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
 export const isAdminEmail = (env: Env, email: string): boolean => adminEmails(env).includes(normalizeEmail(email));
 
-// A client someone else runs (security review 2026-11-20): an owner who
-// isn't on ADMIN_EMAILS - an installation made through the bootstrapper.
+// A client someone else runs (security review 2026-11-20): one made by the
+// bootstrapper or installer for an installation (owner_sub set - the
+// platform's own clients made by an admin have at most an owner_email).
 // Its users say yes once before it gets their name and address (oidc.ts,
-// migration 0016). The platform's own clients (no owner, or an admin's),
-// the admin client and machine clients never ask.
-export function needsConsent(env: Env, client: Client): boolean {
-  if (!client.owner_email || client.id === ADMIN_CLIENT_ID || isMachine(client)) return false;
-  try {
-    return !isAdminEmail(env, client.owner_email);
-  } catch {
-    return true;
-  }
+// migration 0016). Never the admin client or a machine client.
+export function needsConsent(client: Client): boolean {
+  return !!client.owner_sub && client.id !== ADMIN_CLIENT_ID && !isMachine(client);
 }
 
 export async function clientById(env: Env, id: string | null | undefined): Promise<Client | null> {

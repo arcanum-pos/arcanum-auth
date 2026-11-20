@@ -530,8 +530,8 @@ provider").
   mailed code, 10 wrong codes per address per hour; 20 wrong device codes
   per IP per quarter hour; and before any of these, 20 form posts a minute
   per IP in memory.
-- **Consent**: a client someone else runs (an owner not on `ADMIN_EMAILS`,
-  e.g. an Arcanum installation made through the bootstrapper) gets a
+- **Consent**: a client someone else runs (one the bootstrapper or
+  installer made for an installation: `owner_sub` set) gets a
   person's name and address only after they said yes once ("<app> (<host>)
   wants your name and email address"; migration 0016). Its owner and demo
   guests aren't asked; the platform's own clients never ask. `prompt=none`

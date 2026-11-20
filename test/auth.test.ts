@@ -690,11 +690,12 @@ describe('no product name', () => {
 // Security review 2026-11-20, finding 4: a client someone else runs (an
 // owner not on ADMIN_EMAILS) gets nobody's name and address without a yes.
 describe('consent for clients someone else runs', () => {
-  async function ownedClient(owner: string) {
+  async function ownedClient(owner: string, sub: string | null = `owner-sub-${owner}`) {
     const res = await call('/admin/clients', {
       method: 'POST',
       headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Club X', redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], restricted: false, owner_email: owner }),
+      // As the bootstrapper makes one: an owner_sub (an admin-made client has at most an owner_email).
+      body: JSON.stringify({ name: 'Club X', redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], restricted: false, owner_email: owner, ...(sub === null ? {} : { owner_sub: sub }) }),
     });
     expect(res.status).toBe(201);
     return (await res.json()) as { client_id: string; client_secret: string };
@@ -763,9 +764,9 @@ describe('consent for clients someone else runs', () => {
     expect(new URL(res.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
   });
 
-  it('the platform\'s own clients never ask: no owner, or an owner on ADMIN_EMAILS', async () => {
+  it('the platform\'s own clients never ask: no owner, or only an owner_email (made by an admin)', async () => {
     const cookie = await signUp(uniqueEmail('consent4'));
-    for (const client of [await newClient(), await ownedClient('second@example.test')]) {
+    for (const client of [await newClient(), await ownedClient(uniqueEmail('admin-made'), null)]) {
       const res = await start(client.client_id, cookie);
       expect(res.status).toBe(302);
       expect(new URL(res.headers.get('Location')!).searchParams.get('code')).toBeTruthy();

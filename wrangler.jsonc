@@ -36,7 +36,11 @@
 		// Must equal what arcanum's identity_providers.issuer_url (and the BFF's
 		// default IdP) is configured with, character for character — the BFF
 		// compares the id_token's `iss` to it. No trailing slash.
-		"ISSUER": "https://login.kaboutersoft.be"
+		"ISSUER": "https://login.kaboutersoft.be",
+		// Auth0's paths too (/oauth/token, /v2/logout, JSON token requests),
+		// for apps moved off an Auth0 tenant (Aquascenic, Tessera). Only adds;
+		// nothing else changes (src/instance.ts).
+		"AUTH0_COMPAT": "true"
 	},
 	"d1_databases": [
 		{
