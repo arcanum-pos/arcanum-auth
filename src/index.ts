@@ -16,7 +16,7 @@ import { cleanup } from './cleanup';
 import { enroll, enrollOptions } from './enroll';
 import { clientSelf } from './clients';
 import type { Env } from './env';
-import { auth0Logout, authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
+import { auth0Logout, authorize, authorizeConsent, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
 import { messagePage, setBrand, texts } from './pages';
 import { auth0Compat, googleOnly, productName } from './instance';
 import { manageGoogle, managePasskey, manageSessions, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions, passkeyRequired } from './passkeys';
@@ -93,6 +93,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/.well-known/openid-configuration' && method === 'GET') return discovery(env);
       if (path === '/.well-known/jwks.json' && method === 'GET') return jwks(env);
       if (path === '/authorize' && method === 'GET') return authorize(request, env);
+      if (path === '/authorize/consent' && method === 'POST') return authorizeConsent(request, env);
       if (path === '/token' && method === 'POST') return token(request, env);
       // AUTH0_COMPAT (oidc.ts): Auth0's paths. Off: unknown, as before.
       if (auth0Compat(env) && path === '/oauth/token' && method === 'POST') return token(request, env);

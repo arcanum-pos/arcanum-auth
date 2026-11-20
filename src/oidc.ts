@@ -5,9 +5,9 @@ import { auth0Compat, googleOnly, issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
-import { logoutConfirmPage, messagePage, texts } from './pages';
+import { consentPage, logoutConfirmPage, messagePage, texts } from './pages';
 import { needsPasskey, passkeyStep } from './passkeys';
-import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, isMachine, userById, type Amr, type Client } from './store';
+import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, isMachine, needsConsent, userById, type Amr, type Client } from './store';
 import { CLIENT_CREDENTIALS, clientCredentialsGrant } from './machine';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
 import { audienceCheck, userAccessTo } from './apis';
@@ -113,6 +113,20 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
   if (!(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
   // One that requires a passkey: only a session made with one (else: sign in with it, or add one).
   if (needsPasskey(client, session)) return passkeyStep(url.pathname + url.search);
+  // A client someone else runs: once per person, a yes first (one query,
+  // only for such a client). Not its owner (who made it), not a demo guest
+  // (no real name or address).
+  const isOwner = session.user.email.toLowerCase() === (client.owner_email || '').trim().toLowerCase();
+  if (needsConsent(env, client) && !session.user.guest && !isOwner) {
+    const given = await env.DB.prepare('SELECT 1 FROM consents WHERE user_id = ? AND client_id = ?').bind(session.user.id, client.id).first();
+    if (!given) {
+      if (p.get('consent') === 'denied') return back({ error: 'access_denied' });
+      if (prompts.includes('none')) return back({ error: 'consent_required' });
+      const again = new URL(url);
+      again.searchParams.delete('consent');
+      return consentPage(request, { clientName: client.name, host: new URL(redirectUri).host, email: session.user.email, continueTo: again.pathname + again.search });
+    }
+  }
 
   const code = randomToken(32);
   const fields = [await sha256(code), client.id, session.user.id, redirectUri, cleanScope(p.get('scope')), p.get('nonce'), challenge, session.authTime, inSeconds(AUTH_CODE_SECONDS), session.amr];
@@ -128,6 +142,28 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
       ).bind(...fields)
   ).run();
   return back({ code });
+}
+
+// The consent page's answer (same origin, signed in): yes is remembered and
+// the authorization goes on; cancel goes back to the app with access_denied
+// (through /authorize again, which checks the client and redirect_uri).
+export async function authorizeConsent(request: Request, env: Env): Promise<Response> {
+  if (!sameOrigin(request, env.ISSUER)) return messagePage(request, texts(request).errors.request, 403);
+  const form = await readForm(request);
+  const to = form.continue || '';
+  if (!to.startsWith('/authorize?')) return messagePage(request, texts(request).errors.request, 400);
+  const session = await currentSession(env, request);
+  if (!session) return redirect(`/login?continue=${encodeURIComponent(to)}`);
+  const params = new URLSearchParams(to.slice('/authorize?'.length));
+  params.delete('consent');
+  if (form.decision === 'allow') {
+    const client = await clientById(env, params.get('client_id'));
+    if (!client || !needsConsent(env, client) || !(await mayUse(env, client, session.user))) return messagePage(request, texts(request).errors.request, 400);
+    await env.DB.prepare('INSERT OR IGNORE INTO consents (user_id, client_id, created_at) VALUES (?, ?, ?)').bind(session.user.id, client.id, nowIso()).run();
+    return redirect(`/authorize?${params}`);
+  }
+  params.set('consent', 'denied');
+  return redirect(`/authorize?${params}`);
 }
 
 // --- Token endpoint: authorization_code, refresh_token, device_code.

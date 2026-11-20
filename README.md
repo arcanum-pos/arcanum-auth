@@ -530,8 +530,13 @@ provider").
   mailed code, 10 wrong codes per address per hour; 20 wrong device codes
   per IP per quarter hour; and before any of these, 20 form posts a minute
   per IP in memory.
-- **Not (yet) here**: an admin UI, account deletion, dynamic client
-  registration, consent screens (every client is first-party).
+- **Consent**: a client someone else runs (an owner not on `ADMIN_EMAILS`,
+  e.g. an Arcanum installation made through the bootstrapper) gets a
+  person's name and address only after they said yes once ("<app> (<host>)
+  wants your name and email address"; migration 0016). Its owner and demo
+  guests aren't asked; the platform's own clients never ask. `prompt=none`
+  without a yes: `consent_required`; cancel: `access_denied`.
+- **Not (yet) here**: account deletion, dynamic client registration.
 
 ## Rotating secrets
 

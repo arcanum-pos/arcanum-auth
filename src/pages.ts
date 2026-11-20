@@ -23,6 +23,11 @@ const T = {
     deviceConfirmText: 'Doe dit alleen voor een toestel dat voor je staat en waarop je deze code net zag.',
     allow: 'Toestaan',
     deny: 'Weigeren',
+    consentTitle: 'Toestemming',
+    consentAsk: (app: string, host: string) => `${app} (${host}) wil je naam en e-mailadres.`,
+    consentText: 'Ga alleen verder als je deze app kent en vertrouwt. We vragen dit één keer per app.',
+    consentContinue: 'Doorgaan',
+    consentCancel: 'Annuleren',
     deviceDone: 'Het toestel is aangemeld. Je kan dit venster sluiten.',
     deviceDenied: 'Geweigerd. Het toestel wordt niet aangemeld.',
     signedInAs: (email: string) => `Aangemeld als ${email}.`,
@@ -191,6 +196,11 @@ const T = {
     deviceConfirmText: 'Ne faites ceci que pour un appareil devant vous, sur lequel vous venez de voir ce code.',
     allow: 'Autoriser',
     deny: 'Refuser',
+    consentTitle: 'Autorisation',
+    consentAsk: (app: string, host: string) => `${app} (${host}) demande votre nom et votre adresse e-mail.`,
+    consentText: 'Ne continuez que si vous connaissez cette application et lui faites confiance. Nous le demandons une fois par application.',
+    consentContinue: 'Continuer',
+    consentCancel: 'Annuler',
     deviceDone: 'L’appareil est connecté. Vous pouvez fermer cette fenêtre.',
     deviceDenied: 'Refusé. L’appareil ne sera pas connecté.',
     signedInAs: (email: string) => `Connecté en tant que ${email}.`,
@@ -359,6 +369,11 @@ const T = {
     deviceConfirmText: 'Only do this for a device in front of you, on which you just saw this code.',
     allow: 'Allow',
     deny: 'Deny',
+    consentTitle: 'Consent',
+    consentAsk: (app: string, host: string) => `${app} (${host}) wants your name and email address.`,
+    consentText: 'Only continue if you know and trust this app. We ask once per app.',
+    consentContinue: 'Continue',
+    consentCancel: 'Cancel',
     deviceDone: 'The device is signed in. You can close this window.',
     deviceDenied: 'Denied. The device will not be signed in.',
     signedInAs: (email: string) => `Signed in as ${email}.`,
@@ -691,6 +706,20 @@ export function deviceConfirmPage(request: Request, opts: { userCode: string; cl
 <p style="font-family:ui-monospace,monospace;font-size:22px;letter-spacing:.2em;color:var(--fg);text-align:center">${esc(opts.userCode)}</p>
 <form method="post" action="/device/confirm" class="row">${hidden('user_code', opts.userCode)}
 <button type="submit" name="decision" value="deny" class="secondary">${t.deny}</button><button type="submit" name="decision" value="allow">${t.allow}</button></form>`
+  );
+}
+
+// The first time a client someone else runs asks for a person (oidc.ts):
+// who asks, where they'll be sent, as whom. Continue or cancel, both back
+// through /authorize/consent (same origin only).
+export function consentPage(request: Request, opts: { clientName: string; host: string; email: string; continueTo: string }) {
+  const t = texts(request);
+  return page(
+    request,
+    t.consentTitle,
+    `<h1>${esc(t.consentAsk(opts.clientName, opts.host))}</h1><p>${t.consentText}</p><p>${esc(t.signedInAs(opts.email))}</p>
+<form method="post" action="/authorize/consent" class="row">${hidden('continue', opts.continueTo)}
+<button type="submit" name="decision" value="deny" class="secondary">${t.consentCancel}</button><button type="submit" name="decision" value="allow">${t.consentContinue}</button></form>`
   );
 }
 

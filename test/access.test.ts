@@ -96,9 +96,18 @@ async function signInTo(
   cookie: string,
 ) {
   const { verifier, challenge } = await pkce();
-  const res = await call(authorizeUrl(client.client_id, challenge), {
+  let res = await call(authorizeUrl(client.client_id, challenge), {
     headers: { Cookie: cookie },
   });
+  // A client someone else runs asks once (consent): say yes, as a person would.
+  if (res.status === 200) {
+    const html = await res.clone().text();
+    const continueTo = html.match(/action="\/authorize\/consent"[\s\S]*?name="continue" value="([^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
+    if (continueTo) {
+      const yes = await call("/authorize/consent", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Origin: ISSUER, Cookie: cookie }, body: new URLSearchParams({ continue: continueTo, decision: "allow" }) });
+      res = await call(yes.headers.get("Location")!, { headers: { Cookie: cookie } });
+    }
+  }
   if (res.status !== 302) return { page: res };
   const code = new URL(res.headers.get("Location")!).searchParams.get("code")!;
   const tokens = await post("/token", {

@@ -686,3 +686,89 @@ describe('no product name', () => {
     expect((await call('/account', { headers: { Cookie: old } })).status).toBe(302);
   });
 });
+
+// Security review 2026-11-20, finding 4: a client someone else runs (an
+// owner not on ADMIN_EMAILS) gets nobody's name and address without a yes.
+describe('consent for clients someone else runs', () => {
+  async function ownedClient(owner: string) {
+    const res = await call('/admin/clients', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Club X', redirect_uris: [REDIRECT], post_logout_redirect_uris: [APP], restricted: false, owner_email: owner }),
+    });
+    expect(res.status).toBe(201);
+    return (await res.json()) as { client_id: string; client_secret: string };
+  }
+  const start = async (clientId: string, cookie: string, extra: Record<string, string> = {}) => {
+    const { challenge } = await pkce();
+    return call(authorizeUrl(clientId, challenge, extra), { headers: { Cookie: cookie } });
+  };
+
+  it('asks once: who asks and where to; continue gives a code, the next time no question', async () => {
+    const client = await ownedClient(uniqueEmail('owner'));
+    const cookie = await signUp(uniqueEmail('consent'));
+    const first = await start(client.client_id, cookie);
+    expect(first.status).toBe(200);
+    const html = await first.text();
+    expect(html).toContain('Club X (arcanum.test) wil je naam en e-mailadres.');
+    expect(html).not.toContain('<script>');
+    const continueTo = html.match(/name="continue" value="([^"]+)"/)![1].replace(/&amp;/g, '&');
+    expect(continueTo.startsWith('/authorize?')).toBe(true);
+    const yes = await post('/authorize/consent', { continue: continueTo, decision: 'allow' }, { Cookie: cookie });
+    expect(yes.status).toBe(302);
+    const again = await call(yes.headers.get('Location')!, { headers: { Cookie: cookie } });
+    expect(again.status).toBe(302);
+    expect(new URL(again.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
+    // Remembered.
+    const next = await start(client.client_id, cookie);
+    expect(next.status).toBe(302);
+    expect(new URL(next.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
+  });
+
+  it('cancel goes back with access_denied; prompt=none without a yes gets consent_required; a forced redirect gets no code', async () => {
+    const client = await ownedClient(uniqueEmail('owner2'));
+    const cookie = await signUp(uniqueEmail('consent2'));
+    const html = await (await start(client.client_id, cookie)).text();
+    const continueTo = html.match(/name="continue" value="([^"]+)"/)![1].replace(/&amp;/g, '&');
+    const no = await post('/authorize/consent', { continue: continueTo, decision: 'deny' }, { Cookie: cookie });
+    const back = await call(no.headers.get('Location')!, { headers: { Cookie: cookie } });
+    const denied = new URL(back.headers.get('Location')!);
+    expect(`${denied.origin}${denied.pathname}`).toBe(REDIRECT);
+    expect(denied.searchParams.get('error')).toBe('access_denied');
+    expect(denied.searchParams.get('code')).toBeNull();
+    const silent = new URL((await start(client.client_id, cookie, { prompt: 'none' })).headers.get('Location')!);
+    expect(silent.searchParams.get('error')).toBe('consent_required');
+    // ?consent=denied added by someone else only cancels, never grants.
+    expect((await start(client.client_id, cookie, { consent: 'yes' })).status).toBe(200);
+  });
+
+  it('the yes is same-origin only, and only for a signed-in person', async () => {
+    const client = await ownedClient(uniqueEmail('owner3'));
+    const cookie = await signUp(uniqueEmail('consent3'));
+    const html = await (await start(client.client_id, cookie)).text();
+    const continueTo = html.match(/name="continue" value="([^"]+)"/)![1].replace(/&amp;/g, '&');
+    const forged = await post('/authorize/consent', { continue: continueTo, decision: 'allow' }, { Cookie: cookie, Origin: 'https://evil.test', 'Sec-Fetch-Site': 'cross-site' });
+    expect(forged.status).toBe(403);
+    expect((await start(client.client_id, cookie)).status).toBe(200);
+    const anonymous = await post('/authorize/consent', { continue: continueTo, decision: 'allow' });
+    expect(anonymous.headers.get('Location')).toMatch(/^\/login\?continue=/);
+    expect((await post('/authorize/consent', { continue: '/account', decision: 'allow' }, { Cookie: cookie })).status).toBe(400);
+  });
+
+  it('its owner is not asked', async () => {
+    const owner = uniqueEmail('owner5');
+    const client = await ownedClient(owner);
+    const res = await start(client.client_id, await signUp(owner));
+    expect(res.status).toBe(302);
+    expect(new URL(res.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
+  });
+
+  it('the platform\'s own clients never ask: no owner, or an owner on ADMIN_EMAILS', async () => {
+    const cookie = await signUp(uniqueEmail('consent4'));
+    for (const client of [await newClient(), await ownedClient('second@example.test')]) {
+      const res = await start(client.client_id, cookie);
+      expect(res.status).toBe(302);
+      expect(new URL(res.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
+    }
+  });
+});
