@@ -2,7 +2,8 @@ import { jwtVerify, SignJWT } from 'jose';
 import type { Env } from './env';
 import { signingKey, verificationKey } from './keys';
 import { userPermissions } from './apis';
-import type { Amr, User } from './store';
+import { ADMIN_CLIENT_ID, type Amr, type User } from './store';
+import { actionClaims } from './actions';
 
 const AMR_CLAIM: Record<Amr, string[]> = { otp: ['otp'], link: ['otp'], fed: ['fed'], passkey: ['hwk', 'mfa'] };
 import { inSeconds, nowIso, randomToken, sha256, unixNow } from './util';
@@ -38,7 +39,10 @@ export async function issueTokens(
   const forApi = params.audience
     ? { permissions: await userPermissions(env, params.clientId, params.user.email, params.audience), email: params.user.email }
     : {};
-  const accessToken = await new SignJWT({ scope: params.scope, client_id: params.clientId, ...forApi })
+  // The post-login action's claims (actions.ts; only https:// names, so they
+  // can't overwrite any of ours). Not for tools/admin's own client.
+  const custom = params.clientId === ADMIN_CLIENT_ID ? {} : await actionClaims(env, { email: params.user.email, sub: params.user.id, client_id: params.clientId, audience: params.audience ?? null });
+  const accessToken = await new SignJWT({ ...custom, scope: params.scope, client_id: params.clientId, ...forApi })
     .setProtectedHeader({ alg: 'RS256', kid, typ: 'at+jwt' })
     .setIssuer(env.ISSUER)
     .setSubject(params.user.id)
@@ -51,7 +55,7 @@ export async function issueTokens(
   const body: Record<string, unknown> = { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_SECONDS, scope: params.scope };
 
   if (scopeHas(params.scope, 'openid')) {
-    const claims: Record<string, unknown> = { auth_time: params.authTime };
+    const claims: Record<string, unknown> = { ...custom, auth_time: params.authTime };
     if (params.nonce) claims.nonce = params.nonce;
     // How the user signed in (RFC 8176 values where there's one): a passkey
     // with user verification counts as two factors.

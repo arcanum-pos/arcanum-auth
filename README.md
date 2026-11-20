@@ -412,6 +412,23 @@ sign-in; it can only use **`grant_type=client_credentials`** at `/token`
 - `client_credentials` is not in discovery's `grant_types_supported`
   (unchanged for the shared instance).
 
+### Post-login action (`src/actions.ts`)
+
+An optional service binding **`ACTIONS`** to a Worker the instance's owner
+writes (Auth0's Actions, generic). Whenever a person gets tokens - signing
+in and every refresh, not tools/admin's own client - it's called with
+`POST { email, sub, client_id, audience }` and answers `{ claims: { ... } }`.
+
+- Only claims named by an `https://` URL are taken (Auth0's custom claims),
+  into the access and id token; standard ones (`sub`, `aud`, `iss`, `exp`,
+  `permissions`, `scope`, `email`, …) are dropped and can never be set or
+  changed. It can't refuse a sign-in. At most 8 KB of claims.
+- Failing, or slower than 3 seconds: the tokens go out without its claims,
+  logged (`action_failed`).
+- A service binding: no public endpoint, no shared secret, same account.
+  No binding (the shared instance): nothing happens. In `wrangler.jsonc`:
+  `"services": [{ "binding": "ACTIONS", "service": "<the actions worker>" }]`.
+
 ## Test it
 
 ### 1. Automated tests
