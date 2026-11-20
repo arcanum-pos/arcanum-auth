@@ -17,7 +17,8 @@ import { enroll, enrollOptions } from './enroll';
 import { clientSelf } from './clients';
 import type { Env } from './env';
 import { authorize, deviceAuthorization, discovery, jwks, logout, token, userinfo } from './oidc';
-import { messagePage, texts } from './pages';
+import { messagePage, setBrand, texts } from './pages';
+import { googleOnly, productName } from './instance';
 import { manageGoogle, managePasskey, manageSessions, passkeyLogin, passkeyLoginOptions, passkeyOffer, passkeyRegister, passkeyRegisterOptions, passkeyRequired } from './passkeys';
 import { PASSKEY_SCRIPT } from './passkey-script';
 import { reportProtections } from './protections';
@@ -65,11 +66,29 @@ async function limited(env: Env, request: Request, name: string): Promise<boolea
   return true;
 }
 
+// Only Google (SIGN_IN=google): everything another way of signing in needs
+// is off - mailed codes and links, passkeys, enrollment, the device flow,
+// guests' one-time links, client self-service and access requests. Unknown, as
+// any other path. (GET /login itself leads to Google: account.ts.)
+const OFF_WITH_GOOGLE_ONLY = new Set(['/login/code', '/login/link', '/login/name', '/login/passkey', '/login/once', '/enroll', '/enroll/options', '/device', '/device/confirm', '/device/code', '/passkey.js', '/account/passkeys', '/account/google']);
+export function offWithGoogleOnly(path: string, method: string): boolean {
+  return (
+    OFF_WITH_GOOGLE_ONLY.has(path) ||
+    (path === '/login' && method !== 'GET') ||
+    path.startsWith('/passkey/') ||
+    path === '/clients/self' ||
+    path.startsWith('/clients/self/') ||
+    path.startsWith('/access/')
+  );
+}
+
 async function handle(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = request.method;
+    setBrand(request, productName(env));
     try {
+      if (googleOnly(env) && offWithGoogleOnly(path, method)) return messagePage(request, texts(request).errors.request, 404);
       if (path === '/.well-known/openid-configuration' && method === 'GET') return discovery(env);
       if (path === '/.well-known/jwks.json' && method === 'GET') return jwks(env);
       if (path === '/authorize' && method === 'GET') return authorize(request, env);

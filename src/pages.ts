@@ -157,6 +157,7 @@ const T = {
       deviceCode: 'Deze code klopt niet of is verlopen. Kijk nog eens op het toestel.',
       google: 'Aanmelden met Google is niet gelukt.',
       googleUnverified: 'Dit Google-account heeft geen bevestigd e-mailadres.',
+      googleDomain: 'Dit Google-account hoort niet bij de organisatie van deze aanmeldserver. Meld je aan met je account van de organisatie.',
       request: 'Deze aanvraag is ongeldig.',
       mail: 'De e-mail kon niet verstuurd worden. Probeer het later opnieuw.',
       linkInvalid: 'Deze aanmeldlink is al gebruikt of verlopen. Vraag een nieuwe aan.',
@@ -320,6 +321,7 @@ const T = {
       deviceCode: 'Ce code est incorrect ou expiré. Vérifiez l’appareil.',
       google: 'La connexion avec Google a échoué.',
       googleUnverified: 'Ce compte Google n’a pas d’adresse e-mail confirmée.',
+      googleDomain: 'Ce compte Google n’appartient pas à l’organisation de ce serveur de connexion. Connectez-vous avec le compte de l’organisation.',
       request: 'Cette demande n’est pas valable.',
       mail: 'L’e-mail n’a pas pu être envoyé. Réessayez plus tard.',
       linkInvalid: 'Ce lien de connexion a déjà été utilisé ou a expiré. Demandez-en un nouveau.',
@@ -483,6 +485,7 @@ const T = {
       deviceCode: 'This code is incorrect or has expired. Check the device again.',
       google: 'Signing in with Google failed.',
       googleUnverified: 'This Google account has no confirmed email address.',
+      googleDomain: "This Google account doesn't belong to this sign-in server's organisation. Sign in with your organisation's account.",
       request: 'This request is not valid.',
       mail: 'The email could not be sent. Try again later.',
       linkInvalid: 'This sign-in link has already been used or has expired. Ask for a new one.',
@@ -514,6 +517,14 @@ export function language(request: Request): Lang {
 export function texts(request: Request): Texts {
   return T[language(request)] as Texts;
 }
+
+// The name at the top of every page and in its title: PRODUCT_NAME when the
+// instance sets one (index.ts names it per request), else the host - as before.
+const brands = new WeakMap<Request, string>();
+export function setBrand(request: Request, name: string | null): void {
+  if (name) brands.set(request, name);
+}
+const brandOf = (request: Request) => brands.get(request) ?? new URL(request.url).host;
 
 export function esc(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -548,8 +559,8 @@ export function page(request: Request, title: string, body: string, status = 200
   const script = (opts.passkeys ? '<script src="/passkey.js" defer></script>' : '') + (opts.turnstile ? `<script src="${TURNSTILE_SCRIPT}" async defer></script>` : '');
   const challenge = opts.turnstile ? ` ${TURNSTILE_ORIGIN}` : '';
   const html = `<!doctype html><html lang="${language(request)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${esc(title)} · ${esc(new URL(request.url).host)}</title>${ICONS}<style>${STYLE}</style>${script}</head>
-<body><main${opts.wide ? ' class="wide"' : ''}><div class="brand">${esc(new URL(request.url).host)}</div>${body}</main></body></html>`;
+<meta name="robots" content="noindex"><title>${esc(title)} · ${esc(brandOf(request))}</title>${ICONS}<style>${STYLE}</style>${script}</head>
+<body><main${opts.wide ? ' class="wide"' : ''}><div class="brand">${esc(brandOf(request))}</div>${body}</main></body></html>`;
   return new Response(html, {
     status,
     headers: {
@@ -672,7 +683,7 @@ export function deviceConfirmPage(request: Request, opts: { userCode: string; cl
 }
 
 export function messagePage(request: Request, message: string, status = 200, headers: Record<string, string> = {}) {
-  return page(request, new URL(request.url).host, `<p style="color:var(--fg)">${esc(message)}</p>`, status, headers);
+  return page(request, brandOf(request), `<p style="color:var(--fg)">${esc(message)}</p>`, status, headers);
 }
 
 export interface PasskeyItem {
@@ -719,7 +730,7 @@ function browserOf(t: Texts, ua: string | null): string {
   return os ? `${browser} · ${os}` : browser;
 }
 
-export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; sessions?: SessionItem[]; added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null }, status = 200) {
+export function accountPage(request: Request, opts: { email: string; passkeys: PasskeyItem[]; google: boolean; managed: { id: string; name: string; hosts: string[]; lastUsedAt: string | null }[]; sessions?: SessionItem[]; added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null; reduced?: boolean }, status = 200) {
   const t = texts(request);
   const sessionItems = (opts.sessions ?? [])
     .map(
@@ -739,10 +750,15 @@ export function accountPage(request: Request, opts: { email: string; passkeys: P
     request,
     t.accountTitle,
     `<h1>${t.accountTitle}</h1><p>${esc(t.signedInAs(opts.email))}</p>
-<h2>${t.passkeysTitle}</h2><p>${t.passkeysIntro}</p>
+${
+      // Only Google (SIGN_IN=google): who you are and where you're signed in, nothing else.
+      opts.reduced
+        ? error(t, opts.error)
+        : `<h2>${t.passkeysTitle}</h2><p>${t.passkeysIntro}</p>
 ${opts.added ? `<p class="ok" role="status">${t.passkeyAdded}</p>` : ''}${error(t, opts.error)}
 ${items ? `<ul class="keys">${items}</ul>` : `<p>${t.noPasskeys}</p>`}
-${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidden>${t.passkeyUnsupported}</p>
+${addPasskeyButton(t, '/account?passkey=added')}<p data-passkey-unsupported hidden>${t.passkeyUnsupported}</p>`
+    }
 <h2>${t.sessionsTitle}</h2><p>${t.sessionsIntro}</p>${opts.endedEverywhere ? `<p class="ok" role="status">${t.endedEverywhere}</p>` : ''}
 ${sessionItems ? `<ul class="keys">${sessionItems}</ul>` : ''}
 <form method="post" action="/account/sessions"><p class="hint">${t.endEverywhereText}</p><button type="submit" name="action" value="everywhere" class="secondary">${t.endEverywhere}</button></form>
@@ -764,7 +780,7 @@ ${
 <a class="button secondary" href="/logout">${t.signOut}</a>`,
     status,
     {},
-    { passkeys: true, wide: true }
+    { passkeys: !opts.reduced, wide: true }
   );
 }
 

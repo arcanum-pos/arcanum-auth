@@ -10,3 +10,7 @@ ISSUER=http://localhost:8788
 # GOOGLE_CLIENT_SECRET=
 # MAILER_INTERNAL_KEY=
 # MAIL_SMTP={"host":"smtp.example.be","port":465,"username":"…","password":"…","fromAddress":"noreply@kaboutersoft.be","fromName":"Arcanum"}
+# A dedicated instance (README, "Dedicated instances"); all off unless set:
+# SIGN_IN=google
+# GOOGLE_HOSTED_DOMAIN=example.be
+# PRODUCT_NAME=Example

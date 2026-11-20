@@ -1,6 +1,7 @@
 import { compactVerify, createLocalJWKSet } from 'jose';
 import { securityEvent } from './audit';
 import type { Env } from './env';
+import { googleOnly, issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
@@ -26,18 +27,20 @@ function cleanScope(requested: string | null | undefined): string {
 // --- Discovery.
 
 export function discovery(env: Env): Response {
-  const i = env.ISSUER;
+  const i = issuerUrl(env);
+  // Only Google (SIGN_IN=google): no device flow and no client self-service to advertise.
+  const google = googleOnly(env);
   return json(
     {
-      issuer: i,
+      issuer: env.ISSUER,
       authorization_endpoint: `${i}/authorize`,
       token_endpoint: `${i}/token`,
       userinfo_endpoint: `${i}/userinfo`,
-      device_authorization_endpoint: `${i}/device/code`,
+      ...(google ? {} : { device_authorization_endpoint: `${i}/device/code` }),
       end_session_endpoint: `${i}/logout`,
       jwks_uri: `${i}/.well-known/jwks.json`,
       response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token', DEVICE_GRANT],
+      grant_types_supported: google ? ['authorization_code', 'refresh_token'] : ['authorization_code', 'refresh_token', DEVICE_GRANT],
       subject_types_supported: ['public'],
       id_token_signing_alg_values_supported: ['RS256'],
       scopes_supported: SUPPORTED_SCOPES,
@@ -48,7 +51,7 @@ export function discovery(env: Env): Response {
       authorization_response_iss_parameter_supported: true,
       // Not standard: an application assigns who may use its client here
       // (with its own credentials; clients.ts). Arcanum looks for it.
-      client_users_endpoint: `${i}/clients/self/users`,
+      ...(google ? {} : { client_users_endpoint: `${i}/clients/self/users` }),
     },
     200,
     { 'Cache-Control': 'public, max-age=300' }
@@ -125,6 +128,7 @@ export async function token(request: Request, env: Env): Promise<Response> {
     case 'refresh_token':
       return refreshGrant(request, env, client, form);
     case DEVICE_GRANT:
+      if (googleOnly(env)) return oauthError('unsupported_grant_type', 'Unsupported grant_type');
       return deviceGrant(env, client, form);
     default:
       return oauthError('unsupported_grant_type', 'Unsupported grant_type');
@@ -201,7 +205,7 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
     const user = revoked.meta.changes ? await userById(env, row.user_id) : null;
     if (user && !user.guest) {
       const t = texts(request);
-      await sendMail(env, user.email, t.mailTokenReuseSubject, t.mailTokenReuse(client.name, `${env.ISSUER}/account`)).catch((err) => console.error('token-reuse mail failed', err));
+      await sendMail(env, user.email, t.mailTokenReuseSubject, t.mailTokenReuse(client.name, `${issuerUrl(env)}/account`)).catch((err) => console.error('token-reuse mail failed', err));
     }
     return oauthError('invalid_grant', 'Refresh token was already used');
   }
@@ -279,8 +283,8 @@ export async function deviceAuthorization(request: Request, env: Env): Promise<R
   return json({
     device_code: deviceCode,
     user_code: userCode,
-    verification_uri: `${env.ISSUER}/device`,
-    verification_uri_complete: `${env.ISSUER}/device?user_code=${encodeURIComponent(userCode)}`,
+    verification_uri: `${issuerUrl(env)}/device`,
+    verification_uri_complete: `${issuerUrl(env)}/device?user_code=${encodeURIComponent(userCode)}`,
     expires_in: DEVICE_CODE_SECONDS,
     interval: DEVICE_INTERVAL_SECONDS,
   });

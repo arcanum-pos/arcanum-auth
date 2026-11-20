@@ -299,7 +299,7 @@ passkey if your address is in the variable **`ADMIN_EMAILS`**
    `workers_dev` is off.
 
 The issuer is `ISSUER` in `wrangler.jsonc`: `https://login.kaboutersoft.be`,
-**no trailing slash**. Clients must be configured with exactly that string —
+**no trailing slash** (a dedicated instance may have one, see below). Clients must be configured with exactly that string —
 arcanum-bff compares the id_token's `iss` to it character for character.
 
 ## Another instance (another Cloudflare account)
@@ -323,6 +323,21 @@ Setting one up, logged in to that account (`npx wrangler login`, `whoami`):
    deploy command `npx wrangler d1 migrations apply DB --remote --env <name> && npx wrangler deploy --env <name>`.
    Every push to main then deploys there too, migrations first.
 4. Manage it with `tools/admin` (`--env <name>`): sign in with a passkey.
+
+## Dedicated instances (settings)
+
+The same code runs as an instance for one organisation (design:
+`AUTH_DEDICATED.md` in the arcanum folder; first Radio Scorpio, moving off
+Auth0). **Every setting below is off unless it's set**: login.kaboutersoft.be
+sets none of them and behaves exactly as before. `GET /admin/instance`
+returns them (never a secret's value); tools/admin's menu follows it.
+
+| Variable | What it does |
+|---|---|
+| `SIGN_IN=google` | Only Google. `/login` goes straight to Google. Off (404): mailed codes and links (`/login/code`, `/login/link`, `/login/name`), passkeys (`/passkey/*`, `/passkey.js`, `/login/passkey`, `/account/passkeys`), `/account/google`, `/enroll*`, the device flow (`/device*`, `/device/code` and its grant), `/clients/self*`, `/access/*`, guests (`/admin/guests`, `/admin/login-links`, `/login/once`). No mail is sent. Discovery leaves out the device endpoint and `client_users_endpoint`. `/account` shows who you are and your sessions (sign out one or everywhere). No client requires a passkey there - tools/admin's admins sign in with Google too (2-step verification by the Workspace's policy); `ADMIN_API_KEY` stays the way back in. A restricted client says "no access" without a request button: an admin adds people. |
+| `GOOGLE_HOSTED_DOMAIN=example.be` | Only that Google Workspace: sent to Google as `hd`, and the id token's `hd` claim must match on return (case-insensitive) - else refused (`google_domain_refused` security event), no account made. |
+| `PRODUCT_NAME` | The name at the top of the sign-in pages and in their titles (unset: the host). |
+| `ISSUER` ending in `/` | Allowed (Auth0's style, e.g. `https://auth.example.be/`): `iss` in tokens, discovery and the authorization response is exactly `ISSUER`; every URL is built from it without the slash. |
 
 ## Test it
 

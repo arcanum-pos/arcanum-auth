@@ -1,5 +1,6 @@
 import { decodeJwt as decodeJwtPayload } from 'jose';
 import type { Env } from './env';
+import { googleOnly, hostedDomain, issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { codePage, deviceCodePage, deviceConfirmPage, linkPage, loginPage, messagePage, namePage, texts } from './pages';
 import { mayUse, noAccess } from './access';
@@ -76,6 +77,8 @@ export async function login(request: Request, env: Env): Promise<Response> {
   const turnstile = turnstileSiteKey(env);
   if (request.method === 'GET') {
     const continueTo = safeContinue(url.searchParams.get('continue'));
+    // Only Google (SIGN_IN=google): the sign-in page is Google's.
+    if (googleOnly(env)) return redirect(`/google?continue=${encodeURIComponent(continueTo)}`);
     return loginPage(request, { continueTo, email: loginHintOf(continueTo), google: googleEnabled(env), turnstile });
   }
   const foreign = refuseForeign(request, env);
@@ -114,7 +117,7 @@ export async function login(request: Request, env: Env): Promise<Response> {
     .run();
   const t = texts(request);
   try {
-    await sendMail(env, email, t.mailCodeSubject, t.mailCode(code, `${env.ISSUER}/login/link?id=${id}&t=${linkToken}`));
+    await sendMail(env, email, t.mailCodeSubject, t.mailCode(code, `${issuerUrl(env)}/login/link?id=${id}&t=${linkToken}`));
   } catch (err) {
     console.error('sign-in mail failed', err);
     return again('mail', 502);
@@ -233,13 +236,15 @@ export async function googleStart(request: Request, env: Env): Promise<Response>
   const cookie = `${GOOGLE_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`;
   target.search = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
-    redirect_uri: `${env.ISSUER}/callback/google`,
+    redirect_uri: `${issuerUrl(env)}/callback/google`,
     response_type: 'code',
     scope: 'openid email profile',
     state,
     code_challenge: await sha256(verifier),
     code_challenge_method: 'S256',
     prompt: 'select_account',
+    // Only that Workspace's accounts in Google's chooser (checked again on return).
+    ...(hostedDomain(env) ? { hd: hostedDomain(env)! } : {}),
   }).toString();
   return redirect(target.toString(), { 'Set-Cookie': cookie });
 }
@@ -266,7 +271,7 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code: p.get('code')!,
-      redirect_uri: `${env.ISSUER}/callback/google`,
+      redirect_uri: `${issuerUrl(env)}/callback/google`,
       client_id: env.GOOGLE_CLIENT_ID!,
       client_secret: env.GOOGLE_CLIENT_SECRET!,
       code_verifier: saved.code_verifier,
@@ -281,6 +286,13 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
     return messagePage(request, t.errors.google, 400);
   }
   if (claims.email_verified !== true || typeof claims.email !== 'string') return messagePage(request, t.errors.googleUnverified, 400);
+  // GOOGLE_HOSTED_DOMAIN: `hd` is only a hint to Google's chooser - anyone can
+  // strip it from the URL. The id token's `hd` claim says whose account it is.
+  const domain = hostedDomain(env);
+  if (domain && (typeof claims.hd !== 'string' || claims.hd.toLowerCase() !== domain)) {
+    securityEvent('google_domain_refused', { hd: typeof claims.hd === 'string' ? claims.hd : null });
+    return messagePage(request, t.errors.googleDomain, 403);
+  }
 
   const email = normalizeEmail(claims.email);
   let user = await env.DB.prepare('SELECT * FROM users WHERE google_sub = ?').bind(claims.sub).first<User>();
@@ -291,7 +303,7 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
       await env.DB.prepare('UPDATE users SET google_sub = ?, email_verified = 1, updated_at = ? WHERE id = ?').bind(claims.sub, nowIso(), byEmail.id).run();
       user = byEmail;
       // Told, like a new passkey: from now on this Google account opens it too.
-      await sendMail(env, user.email, t.mailGoogleLinkedSubject, t.mailGoogleLinked(`${env.ISSUER}/account`)).catch((err) => console.error('google-linked mail failed', err));
+      await sendMail(env, user.email, t.mailGoogleLinkedSubject, t.mailGoogleLinked(`${issuerUrl(env)}/account`)).catch((err) => console.error('google-linked mail failed', err));
     } else {
       user = await createUser(env, { email, name: typeof claims.name === 'string' ? claims.name : email.split('@')[0], googleSub: claims.sub });
     }

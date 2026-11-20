@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { googleOnly } from './instance';
 import { readSetting, type MailSetting } from './settings';
 
 // Sends through the platform's mailer (its /send, bearer MAILER_INTERNAL_KEY,
@@ -53,7 +54,8 @@ async function callMailer(env: Env, provider: { type: string } & Record<string, 
 
 // A test mail (the bootstrapper's "Testmail sturen"): the mailer's answer as it is.
 // MAIL_SENDING "off" wins over every account, the stored one included.
-export const mailOff = (env: Env) => env.MAIL_SENDING?.trim().toLowerCase() === 'off';
+// Only Google (SIGN_IN=google) sends no mail either: nothing there needs it.
+export const mailOff = (env: Env) => env.MAIL_SENDING?.trim().toLowerCase() === 'off' || googleOnly(env);
 
 export async function sendTestMail(env: Env, to: string, subject: string, text: string): Promise<{ status: number; body: Record<string, unknown> }> {
   if (mailOff(env)) return { status: 409, body: { ok: false, code: 'mail_off', error: 'Mail is off on this instance (MAIL_SENDING)' } };

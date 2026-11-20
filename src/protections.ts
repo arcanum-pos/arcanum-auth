@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { googleOnly } from './instance';
 import { securityEvent } from './audit';
 import { currentMail, mailOff } from './mail';
 import { turnstileKeyProblem, turnstileSiteKey } from './turnstile';
@@ -14,6 +15,8 @@ import { turnstileKeyProblem, turnstileSiteKey } from './turnstile';
 //   mail_off   - MAIL_SENDING is "off"
 //   mail_unset - no mailer bound or no mail account: codes only logged
 export async function protectionsOff(env: Env): Promise<string[]> {
+  // Only Google (SIGN_IN=google): no sign-in form to guard, no mail to send.
+  if (googleOnly(env)) return [];
   const off: string[] = [];
   if (!turnstileSiteKey(env)) off.push('turnstile');
   else {

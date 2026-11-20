@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { googleOnly } from './instance';
 import { hostsOf, inSeconds, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
 export interface User {
@@ -142,12 +143,16 @@ export const isAdminEmail = (env: Env, email: string): boolean => adminEmails(en
 
 export async function clientById(env: Env, id: string | null | undefined): Promise<Client | null> {
   if (!id) return null;
-  if (id === ADMIN_CLIENT_ID) return ADMIN_CLIENT;
+  // Only Google (SIGN_IN=google): no passkeys here, so none is required - the
+  // admins sign in with Google (2-step verification by the Workspace's policy).
+  const noPasskeys = googleOnly(env);
+  if (id === ADMIN_CLIENT_ID) return noPasskeys ? { ...ADMIN_CLIENT, require_passkey: 0 } : ADMIN_CLIENT;
   const row = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(id).first<ClientRow>();
   if (!row || row.disabled_at) return null;
   const redirects = JSON.parse(row.redirect_uris) as string[];
   return {
     ...row,
+    ...(noPasskeys ? { require_passkey: 0 } : {}),
     name: shownName(row.name, row.instance_url, redirects),
     redirect_uris: redirects,
     post_logout_redirect_uris: JSON.parse(row.post_logout_redirect_uris),

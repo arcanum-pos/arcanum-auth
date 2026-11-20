@@ -1,6 +1,7 @@
 import { securityEvent } from './audit';
 import { needsPasskey, passkeyStep } from './passkeys';
 import type { Env } from './env';
+import { googleOnly, issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { accessAdminPage, accessPage, messagePage, notAdminPage, texts, type AccessItem } from './pages';
 import { ADMIN_CLIENT_ID, clientById, currentSession, isAdminEmail, recordAttempt, shownName, tooManyAttempts, type Client, type User } from './store';
@@ -95,6 +96,8 @@ export async function noAccess(request: Request, env: Env, client: Client, user:
     securityEvent('admin_signin_refused', { email: user.email });
     return messagePage(request, texts(request).notAdminTool(user.email), 403);
   }
+  // Only Google (SIGN_IN=google): no access requests - an admin adds people.
+  if (googleOnly(env)) return messagePage(request, texts(request).accessText(client.name), 403);
   const row = await accessRow(env, client.id, user.email);
   return accessPage(request, { clientId: client.id, clientName: client.name, email: user.email, requested: row?.status === 'requested' }, 403);
 }
@@ -122,7 +125,7 @@ export async function requestAccess(request: Request, env: Env, clientId: string
   // Only a new request mails the admins (asking again changes nothing).
   if (added.meta.changes) {
     await recordAttempt(env, key);
-    const manage = `${env.ISSUER}/access/${encodeURIComponent(client.id)}`;
+    const manage = `${issuerUrl(env)}/access/${encodeURIComponent(client.id)}`;
     for (const admin of await adminsOf(env, client)) {
       await sendMail(env, admin, t.mailAccessRequestSubject(client.name), t.mailAccessRequest(user.name || user.email, user.email, client.name, manage)).catch((err) =>
         console.error('access request mail failed', err)
@@ -228,7 +231,7 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
       }
       await env.DB.prepare('UPDATE clients SET redirect_uris = ?, post_logout_redirect_uris = ? WHERE id = ?').bind(JSON.stringify(redirects), JSON.stringify(logouts), client.id).run();
       // The other admins hear of it: these addresses decide where a sign-in may go.
-      const manage = `${env.ISSUER}/access/${encodeURIComponent(client.id)}`;
+      const manage = `${issuerUrl(env)}/access/${encodeURIComponent(client.id)}`;
       for (const admin of (await adminsOf(env, client)).filter((a) => a !== user.email)) {
         await sendMail(env, admin, t.mailUrisSubject(client.name), t.mailUris(client.name, user.email, redirects, manage)).catch((err) => console.error('uris mail failed', err));
       }
@@ -240,7 +243,7 @@ export async function manageAccess(request: Request, env: Env, clientId: string)
       if (!!client.require_passkey === on) return back('none');
       await env.DB.prepare('UPDATE clients SET require_passkey = ? WHERE id = ?').bind(on ? 1 : 0, client.id).run();
       securityEvent('passkey_rule', { client: client.id, on, by: user.email });
-      const manage = `${env.ISSUER}/access/${encodeURIComponent(client.id)}`;
+      const manage = `${issuerUrl(env)}/access/${encodeURIComponent(client.id)}`;
       for (const admin of (await adminsOf(env, client)).filter((a) => a !== user.email)) {
         await sendMail(env, admin, t.mailPasskeyRuleSubject(client.name), t.mailPasskeyRule(client.name, user.email, on, manage)).catch((err) => console.error('passkey rule mail failed', err));
       }

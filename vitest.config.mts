@@ -31,9 +31,12 @@ function recordingMailer() {
 }
 
 // Stand-in for Google's token endpoint: the code picks the account.
+// "hd:<domain>:<email>": a Workspace account of <domain> (the `hd` claim).
 function fakeGoogle(request: Request): Promise<Response> {
   return request.formData().then((form) => {
-    const code = String(form.get('code'));
+    const asked = String(form.get('code'));
+    const hd = asked.match(/^hd:([^:]+):(.*)$/);
+    const code = hd ? hd[2] : asked;
     const claims = {
       iss: 'https://accounts.google.com',
       aud: 'google-client-id',
@@ -41,6 +44,7 @@ function fakeGoogle(request: Request): Promise<Response> {
       email: `${code.replace(/^unverified-/, '')}`,
       email_verified: !code.startsWith('unverified-'),
       name: 'Google User',
+      ...(hd ? { hd: hd[1] } : {}),
     };
     const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
     return Response.json({ id_token: `${part({ alg: 'none' })}.${part(claims)}.` });

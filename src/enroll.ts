@@ -24,6 +24,7 @@ import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 import { accessRow } from './access';
 import { securityEvent } from './audit';
 import type { Env } from './env';
+import { issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { enrollPage, messagePage, texts } from './pages';
 import { body, fail, jsonFromHere, passkeysOf, registrationOptions, storePasskey, verifiedRegistration } from './passkeys';
@@ -109,7 +110,7 @@ export async function createEnrollment(request: Request, env: Env, client: Clien
     ).bind(await sha256(token), client.id, email, name, user?.id ?? crypto.randomUUID(), continueTo, reset ? 1 : 0, now, inSeconds(OPEN_SECONDS)),
   ]);
   securityEvent('enrollment_created', { client: client.id, email, reset, ip: clientIp(request) });
-  return json({ url: `${env.ISSUER}/enroll?ticket=${encodeURIComponent(token)}`, expires_in: OPEN_SECONDS }, 201);
+  return json({ url: `${issuerUrl(env)}/enroll?ticket=${encodeURIComponent(token)}`, expires_in: OPEN_SECONDS }, 201);
 }
 
 // This browser's enrollment: opened here, not finished, still in time.
@@ -171,8 +172,8 @@ export async function enroll(request: Request, env: Env): Promise<Response> {
   const cookie = await createSession(env, user.id, unixNow(), { amr: 'passkey', request });
   securityEvent('enrollment_done', { client: client.id, email: row.email, reset: !!row.reset });
   const mail = row.reset
-    ? sendMail(env, user.email, t.mailSignInResetSubject, t.mailSignInReset(client.name, `${env.ISSUER}/account`))
-    : sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${env.ISSUER}/account`));
+    ? sendMail(env, user.email, t.mailSignInResetSubject, t.mailSignInReset(client.name, `${issuerUrl(env)}/account`))
+    : sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${issuerUrl(env)}/account`));
   await mail.catch((err) => console.error('enrollment mail failed', err));
   return json({ redirect: row.continue_to }, 200, { 'Set-Cookie': cookie });
 }

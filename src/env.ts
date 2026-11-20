@@ -4,7 +4,8 @@ export interface Env {
   // Google sign-in's state, a passkey challenge): limited per caller in
   // memory — no D1 write to count them, so they can't eat the daily quota.
   PUBLIC_RATE_LIMITER?: RateLimit;
-  // The issuer URL, exactly as clients are configured with (no trailing slash).
+  // The issuer URL, exactly as clients are configured with. `iss` is exactly
+  // this; a trailing slash (Auth0's style) is allowed, URLs are built without it.
   ISSUER: string;
   // Private signing key: a JWK (RSA, alg RS256, with a kid) as JSON. Create
   // one with `npm run generate-key`.
@@ -45,4 +46,19 @@ export interface Env {
   // Encrypts the platform settings stored in D1 (settings.ts): 32 random
   // bytes, base64. Unset: the bootstrapper can't store a mail account here.
   SETTINGS_KEY?: string;
+
+  // --- Dedicated instances (AUTH_DEDICATED.md, instance.ts): all off unless set.
+  // "google": only Google signs in; mailed codes, passkeys, the device flow,
+  // enrollment, client self-service and access requests are off (404).
+  SIGN_IN?: string;
+  // Only accounts of this Google Workspace: sent to Google as `hd` and
+  // checked on the id token's `hd` claim on return.
+  GOOGLE_HOSTED_DOMAIN?: string;
+  // The name on the sign-in pages (unset: the host, as before).
+  PRODUCT_NAME?: string;
+  // "true": Auth0's /oauth/token, JSON bodies, /v2/logout (oidc.ts).
+  AUTH0_COMPAT?: string;
+  // A post-login action Worker (service binding, actions.ts): extra URL-named
+  // claims in a person's tokens. Unbound: nothing happens.
+  ACTIONS?: Fetcher;
 }

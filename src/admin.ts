@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { googleOnly, instanceSettings, issuerUrl } from './instance';
 import { currentMail, mailProvider, sendMail, sendTestMail } from './mail';
 import { deleteSetting, mailSummary, readSetting, SECRET_FIELDS, writeSetting, type MailSetting } from './settings';
 import { ADMIN_CLIENT_ID, clientById, createGuest, isAdminEmail, shownName, userById } from './store';
@@ -203,6 +204,15 @@ export async function admin(request: Request, env: Env, path: string, by: string
     return json({ issuer: env.ISSUER, protections_off: await protectionsOff(env), you: by });
   }
 
+  // How this instance is set up (instance.ts) - what the admin dashboard's
+  // menu follows. Settings only: never a secret's value.
+  if (path === '/admin/instance' && request.method === 'GET') {
+    return json({ ...instanceSettings(env), you: by });
+  }
+
+  // Guests and their one-time links are for the demo; only Google (SIGN_IN=google) has neither.
+  if ((path === '/admin/guests' || path === '/admin/login-links') && googleOnly(env)) return json({ error: 'Not found' }, 404);
+
   if (path === '/admin/guests' && request.method === 'POST') {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const hours = Number(body.lifetime_hours ?? 5);
@@ -223,7 +233,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
     await env.DB.prepare('INSERT INTO login_links (token_hash, user_id, continue_to, expires_at) VALUES (?, ?, ?, ?)')
       .bind(await sha256(token), user.id, target, inSeconds(LOGIN_LINK_SECONDS))
       .run();
-    return json({ url: `${env.ISSUER}/login/once?token=${encodeURIComponent(token)}`, expires_in: LOGIN_LINK_SECONDS }, 201);
+    return json({ url: `${issuerUrl(env)}/login/once?token=${encodeURIComponent(token)}`, expires_in: LOGIN_LINK_SECONDS }, 201);
   }
 
   if (path === '/admin/mail' && request.method === 'GET') {
@@ -271,7 +281,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
     // asker's language — what people get, so a checker scores what matters —
     // marked as a test, so nobody takes it for a real one.
     const t = texts(request);
-    const result = await sendTestMail(env, to, `${t.mailTestSubject} - ${t.mailCodeSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailCode(newEmailCode(), `${env.ISSUER}/login`)}`);
+    const result = await sendTestMail(env, to, `${t.mailTestSubject} - ${t.mailCodeSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailCode(newEmailCode(), `${issuerUrl(env)}/login`)}`);
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
 
@@ -334,7 +344,7 @@ export async function admin(request: Request, env: Env, path: string, by: string
     if (!user) return json({ error: 'Not found' }, 404);
     const removed = await env.DB.prepare('DELETE FROM passkeys WHERE user_id = ?').bind(user.id).run();
     const t = texts(request);
-    await sendMail(env, user.email, t.mailPasskeysResetSubject, t.mailPasskeysReset(`${env.ISSUER}/account`)).catch((err) => console.error('passkeys reset mail failed', err));
+    await sendMail(env, user.email, t.mailPasskeysResetSubject, t.mailPasskeysReset(`${issuerUrl(env)}/account`)).catch((err) => console.error('passkeys reset mail failed', err));
     return json({ ok: true, removed: removed.meta.changes ?? 0 });
   }
   if (one && request.method === 'DELETE') {

@@ -30,6 +30,7 @@ import {
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server';
 import type { Env } from './env';
+import { googleOnly, issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { managedClients } from './access';
 import { securityEvent } from './audit';
@@ -123,7 +124,8 @@ export function passkeysOf(env: Env, userId: string) {
 // Offered after signing in another way: an account (not a guest) without a
 // passkey, unless "not now" was said less than 30 days ago.
 export async function shouldOfferPasskey(env: Env, user: User): Promise<boolean> {
-  if (user.guest) return false;
+  // Only Google (SIGN_IN=google): no passkeys on this instance.
+  if (user.guest || googleOnly(env)) return false;
   if (user.passkey_offer_dismissed_at && Date.parse(user.passkey_offer_dismissed_at) > Date.now() - OFFER_AGAIN_DAYS * 86_400_000) return false;
   const any = await env.DB.prepare('SELECT 1 FROM passkeys WHERE user_id = ? LIMIT 1').bind(user.id).first();
   return !any;
@@ -258,7 +260,7 @@ export async function passkeyRegister(request: Request, env: Env): Promise<Respo
   if (first) await env.DB.prepare("UPDATE sessions SET amr = 'passkey' WHERE id_hash = ?").bind(session.idHash).run();
   // Told by mail: someone who got into the account can't quietly add a way back in.
   const t = texts(request);
-  await sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${env.ISSUER}/account`)).catch((err) => console.error('passkey mail failed', err));
+  await sendMail(env, user.email, t.mailPasskeySubject, t.mailPasskey(name, `${issuerUrl(env)}/account`)).catch((err) => console.error('passkey mail failed', err));
   return json({ redirect: safeContinue(typeof b.continue === 'string' ? b.continue : null) });
 }
 
@@ -335,6 +337,11 @@ export async function passkeyOffer(request: Request, env: Env): Promise<Response
 // --- /account: the list, rename, remove.
 
 export async function accountWithPasskeys(request: Request, env: Env, user: User, opts: { added?: boolean; googleUnlinked?: boolean; endedEverywhere?: boolean; error?: ErrorKey | null } = {}, status = 200) {
+  // Only Google (SIGN_IN=google): who you are and your sessions - no passkeys,
+  // no Google to unlink (it's the only way in), no access lists to manage.
+  if (googleOnly(env)) {
+    return accountPage(request, { email: user.email, passkeys: [], google: false, managed: [], sessions: await sessionsOf(env, request, user), endedEverywhere: opts.endedEverywhere, error: opts.error, reduced: true }, status);
+  }
   const passkeys: PasskeyItem[] = (await passkeysOf(env, user.id)).map((k) => {
     const transports = JSON.parse(k.transports) as string[];
     return {
