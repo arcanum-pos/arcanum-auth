@@ -366,6 +366,15 @@ describe('device authorization grant (the kassa)', () => {
     expect(unknown.status).toBe(400);
   });
 
+  it('wrong codes in the URL count like typed ones: 20 per IP, then 429', async () => {
+    const cookie = await signUp(uniqueEmail('device-guess'));
+    const headers = { Cookie: cookie, 'CF-Connecting-IP': '198.51.100.77' };
+    for (let i = 0; i < 20; i++) expect((await call('/device?user_code=BBBB-CCCC', { headers })).status).toBe(200);
+    expect((await call('/device?user_code=BBBB-CCCC', { headers })).status).toBe(429);
+    // The bare page (no code) still opens.
+    expect((await call('/device', { headers })).status).toBe(200);
+  });
+
   it('a signed-out phone signs in first, then lands on the confirmation', async () => {
     const client = await newClient();
     const d = await start(client.client_id);

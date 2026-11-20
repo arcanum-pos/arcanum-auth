@@ -23,7 +23,8 @@ import { manageGoogle, managePasskey, manageSessions, passkeyLogin, passkeyLogin
 import { PASSKEY_SCRIPT } from './passkey-script';
 import { reportProtections } from './protections';
 import { json, redirect, safeContinue } from './util';
-import { tooManyRequests, withinLimit } from './ratelimit';
+import { ipBucket, tooManyRequests, withinLimit } from './ratelimit';
+import { clientIp } from './store';
 import { auditLog, securityEvent } from './audit';
 
 export type { Env };
@@ -61,7 +62,7 @@ const tooMany = tooManyRequests;
 async function limited(env: Env, request: Request, name: string): Promise<boolean> {
   const ip = request.headers.get('CF-Connecting-IP');
   if (!ip || request.method !== 'POST') return false;
-  if (await withinLimit(env, `${name}:${ip}`)) return false;
+  if (await withinLimit(env, `${name}:${ipBucket(ip)}`)) return false;
   securityEvent('rate_limited', { route: name, ip });
   return true;
 }
@@ -113,7 +114,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
         return redirect(`/login?continue=${encodeURIComponent(safeContinue(url.searchParams.get('continue')))}`, {}, 303);
       }
       if (path === '/google' && method === 'GET') {
-        if (!(await withinLimit(env, `google:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`))) return tooMany();
+        if (!(await withinLimit(env, `google:${clientIp(request)}`))) return tooMany();
         return googleStart(request, env);
       }
       if (path === '/callback/google' && method === 'GET') return googleCallback(request, env);
@@ -122,7 +123,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/account' && method === 'GET') return account(request, env);
       if (path === '/login/once' && method === 'GET') return loginOnce(request, env);
       if (path === '/passkey/login/options' && method === 'POST') {
-        if (!(await withinLimit(env, `passkey-options:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`))) return tooMany();
+        if (!(await withinLimit(env, `passkey-options:${clientIp(request)}`))) return tooMany();
         return passkeyLoginOptions(request, env);
       }
       if (path === '/passkey/login' && method === 'POST') return passkeyLogin(request, env);

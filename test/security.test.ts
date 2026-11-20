@@ -35,8 +35,36 @@ describe('mailed codes: limits per address, not only per IP (many IPs, one addre
     const wrong = (c: { id: string; code: string }) => post('/login/code', { id: c.id, code: c.code === '000000' ? '111111' : '000000' });
     for (const [c, times] of [[codes[0], 4], [codes[1], 4], [codes[2], 2]] as const) for (let i = 0; i < times; i++) expect((await wrong(c)).status).toBe(400);
     const right = await post('/login/code', { id: codes[2].id, code: codes[2].code });
-    expect(right.status).toBe(400);
-    expect(await right.text()).toMatch(/klopt niet of is verlopen/);
+    expect(right.status).toBe(429);
+    expect(await right.text()).toMatch(/Te veel foute codes/);
+  });
+
+  it('a burst of parallel guesses is counted before any comparison: at most 5 per code', async () => {
+    const email = uniqueEmail('burst');
+    await signUp(email);
+    const { id } = await askCode(post, email);
+    const code = await lastCodeFor(email);
+    const guess = code === '000000' ? '111111' : '000000';
+    const results = await Promise.all(Array.from({ length: 40 }, () => post('/login/code', { id, code: guess })));
+    expect(results.every((r) => r.status === 400 || r.status === 429)).toBe(true);
+    const row = await env.DB.prepare('SELECT attempts FROM email_codes WHERE id = ?').bind(id).first<{ attempts: number }>();
+    expect(row!.attempts).toBe(5);
+    const counted = await env.DB.prepare('SELECT COUNT(*) AS n FROM attempts WHERE key = ?').bind(`code-email:${email}`).first<{ n: number }>();
+    expect(counted!.n).toBeLessThanOrEqual(5);
+    // Spent: even the right code is refused now.
+    expect((await post('/login/code', { id, code })).status).toBe(400);
+  });
+
+  it('the right code takes its attempt back: no lockout from signing in', async () => {
+    const email = uniqueEmail('right');
+    await signUp(email);
+    // (5 codes an hour per address: mail-email.)
+    for (let i = 0; i < 4; i++) {
+      const { id } = await askCode(post, email);
+      expect((await post('/login/code', { id, code: await lastCodeFor(email) })).status).toBe(302);
+    }
+    const counted = await env.DB.prepare('SELECT COUNT(*) AS n FROM attempts WHERE key = ?').bind(`code-email:${email}`).first<{ n: number }>();
+    expect(counted!.n).toBe(0);
   });
 });
 

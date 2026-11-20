@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { ipBucket } from './ratelimit';
 import { googleOnly } from './instance';
 import { hostsOf, inSeconds, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 
@@ -294,6 +295,8 @@ export async function recordAttempt(env: Env, key: string): Promise<void> {
   await env.DB.prepare('INSERT INTO attempts (key, at) VALUES (?, ?)').bind(key, nowIso()).run();
 }
 
+// For limits per caller: IPv6 per /64 (ratelimit.ts).
 export function clientIp(request: Request): string {
-  return request.headers.get('CF-Connecting-IP') || 'unknown';
+  const ip = request.headers.get('CF-Connecting-IP');
+  return ip ? ipBucket(ip) : 'unknown';
 }

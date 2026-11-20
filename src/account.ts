@@ -129,21 +129,28 @@ export async function login(request: Request, env: Env): Promise<Response> {
 // — and, per e-mail address across all its codes, fewer than
 // MAX_CODE_TRIES_PER_ADDRESS wrong in an hour. Per code alone, an attacker
 // with many IP addresses could ask many codes for one address and guess on each.
-async function checkEmailCode(env: Env, id: string, code: string): Promise<EmailCodeRow | 'invalid' | 'unknown'> {
-  const row = await codeRow(env, id);
-  if (!row || row.used_at || row.expires_at <= nowIso() || row.attempts >= MAX_CODE_TRIES) return 'unknown';
+// Counted before the comparison, atomically (security review 2026-11-20):
+// checking first and counting after a wrong guess let a burst of parallel
+// guesses all pass the check (200 at once got 20 compared, not 5). The
+// attempt is claimed with the code's row (attempts < MAX in the UPDATE);
+// the address's attempt is written first and then counted, so in a burst
+// the ones past the limit see it. A right code takes its attempt back.
+async function checkEmailCode(env: Env, id: string, code: string): Promise<EmailCodeRow | 'invalid' | 'unknown' | 'tooMany'> {
+  const row = await env.DB.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE id = ? AND used_at IS NULL AND expires_at > ? AND attempts < ? RETURNING *')
+    .bind(id, nowIso(), MAX_CODE_TRIES)
+    .first<EmailCodeRow>();
+  if (!row) return 'unknown';
   const addressKey = `code-email:${row.email}`;
-  if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS, 3600)) {
+  await recordAttempt(env, addressKey);
+  if (await tooManyAttempts(env, addressKey, MAX_CODE_TRIES_PER_ADDRESS + 1, 3600)) {
     securityEvent('code_guesses_limited', { email: row.email });
-    return 'unknown';
+    return 'tooMany';
   }
-  if (!timingSafeEqual(await codeHash(env.CODE_HASH_KEY, code.trim()), row.code_hash)) {
-    await env.DB.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE id = ?').bind(id).run();
-    await recordAttempt(env, addressKey);
-    return 'invalid';
-  }
+  if (!timingSafeEqual(await codeHash(env.CODE_HASH_KEY, code.trim()), row.code_hash)) return 'invalid';
   const claimed = await env.DB.prepare('UPDATE email_codes SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(nowIso(), id).run();
-  return claimed.meta.changes ? row : 'unknown';
+  if (!claimed.meta.changes) return 'unknown';
+  await env.DB.prepare('DELETE FROM attempts WHERE rowid = (SELECT rowid FROM attempts WHERE key = ? ORDER BY at DESC LIMIT 1)').bind(addressKey).run();
+  return row;
 }
 
 export async function loginCode(request: Request, env: Env): Promise<Response> {
@@ -158,7 +165,8 @@ export async function loginCode(request: Request, env: Env): Promise<Response> {
   const result = await checkEmailCode(env, form.id || '', form.code || '');
   if (typeof result === 'string') {
     const row = await codeRow(env, form.id || '');
-    return row ? codePage(request, { id: row.id, email: row.email, continueTo: safeContinue(row.continue_to), error: 'codeInvalid' }, 400) : messagePage(request, texts(request).errors.codeInvalid, 400);
+    const error = result === 'tooMany' ? 'codeTooMany' : 'codeInvalid';
+    return row ? codePage(request, { id: row.id, email: row.email, continueTo: safeContinue(row.continue_to), error }, result === 'tooMany' ? 429 : 400) : messagePage(request, texts(request).errors[error], 400);
   }
   return proven(request, env, result);
 }
@@ -348,7 +356,12 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
   if (request.method === 'GET') {
     const userCode = normalizeUserCode(url.searchParams.get('user_code') || '');
     if (!session) return redirect(`/login?continue=${encodeURIComponent(url.pathname + url.search)}`);
+    // A code in the URL is a guess like a typed one (security review
+    // 2026-11-20): the same 20 wrong per IP as the form below.
+    const ipKey = `device-ip:${clientIp(request)}`;
+    if (userCode && (await tooManyAttempts(env, ipKey, 20))) return deviceCodePage(request, { userCode: url.searchParams.get('user_code') || '', error: 'tooMany' }, 429);
     const pending = await pendingDevice(env, userCode);
+    if (userCode && !pending) await recordAttempt(env, ipKey);
     const client = pending ? await clientById(env, pending.client_id) : null;
     if (pending && client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
     if (pending && client && needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
