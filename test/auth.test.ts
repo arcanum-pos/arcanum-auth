@@ -194,6 +194,23 @@ describe('authorization code flow (the console)', () => {
     expect(wrongSecret.status).toBe(401);
   });
 
+  it('a wrong verifier or redirect_uri does not burn the code: the real exchange still works, nothing revoked', async () => {
+    const client = await newClient();
+    const cookie = await signUp(uniqueEmail('burn'));
+    const { verifier, challenge } = await pkce();
+    const res = await call(authorizeUrl(client.client_id, challenge), { headers: { Cookie: cookie } });
+    const code = new URL(res.headers.get('Location')!).searchParams.get('code')!;
+    const base = { grant_type: 'authorization_code', code, client_id: client.client_id, client_secret: client.client_secret };
+    expect(((await (await post('/token', { ...base, redirect_uri: REDIRECT, code_verifier: 'x'.repeat(50) })).json()) as Record<string, string>).error).toBe('invalid_grant');
+    expect(((await (await post('/token', { ...base, redirect_uri: 'https://evil.example/cb', code_verifier: verifier })).json()) as Record<string, string>).error).toBe('invalid_grant');
+    const real = await post('/token', { ...base, redirect_uri: REDIRECT, code_verifier: verifier });
+    expect(real.status).toBe(200);
+    const { refresh_token } = (await real.json()) as { refresh_token: string };
+    // A copy without the verifier, after the exchange: refused, and the session stays.
+    expect(((await (await post('/token', { ...base, redirect_uri: REDIRECT, code_verifier: 'y'.repeat(50) })).json()) as Record<string, string>).error).toBe('invalid_grant');
+    expect((await post('/token', { grant_type: 'refresh_token', refresh_token, client_id: client.client_id, client_secret: client.client_secret })).status).toBe(200);
+  });
+
   // RFC 9700 §4.2.4: a code used twice means someone has a copy - what it
   // was exchanged for is revoked too. RFC 9207: the response names the issuer.
   it('a code used again revokes the refresh token it gave; every response carries iss', async () => {

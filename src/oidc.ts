@@ -184,20 +184,26 @@ interface AuthCodeRow {
 
 async function authorizationCodeGrant(env: Env, client: Client, form: Record<string, string>): Promise<Response> {
   const codeHash = await sha256(form.code || '');
+  // Client, redirect_uri and PKCE are checked before the code is claimed
+  // (security review 2026-11-20): someone with a copy of the code but not
+  // the verifier can't burn it - which would also have made the real
+  // exchange look like a reuse and revoked that user's sessions.
+  const row = await env.DB.prepare('SELECT * FROM auth_codes WHERE code_hash = ?').bind(codeHash).first<AuthCodeRow>();
+  if (!row || row.expires_at <= nowIso()) return oauthError('invalid_grant', 'Invalid, expired or used code');
+  if (row.client_id !== client.id || row.redirect_uri !== form.redirect_uri) return oauthError('invalid_grant', 'Code was issued to another client or redirect_uri');
+  if (!(await pkceMatches(form.code_verifier || '', row.code_challenge))) return oauthError('invalid_grant', 'PKCE verification failed');
   // Single use: claim it atomically (D1 is one SQLite writer).
   const claimed = await env.DB.prepare('UPDATE auth_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?')
     .bind(nowIso(), codeHash, nowIso())
     .run();
-  const row = await env.DB.prepare('SELECT * FROM auth_codes WHERE code_hash = ?').bind(codeHash).first<AuthCodeRow>();
-  if (!claimed.meta.changes && row?.used_at && row.client_id === client.id) {
-    // Used before: someone has a copy (RFC 9700 §4.2.4). What it was
-    // exchanged for goes too - that user's refresh tokens for this client.
+  if (!claimed.meta.changes) {
+    // Used before, by someone with the code and its verifier: a copy
+    // (RFC 9700 §4.2.4). What it was exchanged for goes too - that user's
+    // refresh tokens for this client.
     await env.DB.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL').bind(nowIso(), row.user_id, row.client_id).run();
     securityEvent('code_reuse', { client: client.id, user: row.user_id });
+    return oauthError('invalid_grant', 'Invalid, expired or used code');
   }
-  if (!claimed.meta.changes || !row) return oauthError('invalid_grant', 'Invalid, expired or used code');
-  if (row.client_id !== client.id || row.redirect_uri !== form.redirect_uri) return oauthError('invalid_grant', 'Code was issued to another client or redirect_uri');
-  if (!(await pkceMatches(form.code_verifier || '', row.code_challenge))) return oauthError('invalid_grant', 'PKCE verification failed');
   const user = await userById(env, row.user_id);
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
   if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
