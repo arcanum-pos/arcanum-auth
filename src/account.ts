@@ -297,8 +297,16 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
   const email = normalizeEmail(claims.email);
   let user = await env.DB.prepare('SELECT * FROM users WHERE google_sub = ?').bind(claims.sub).first<User>();
   if (!user) {
-    // Same verified address as a password account → the same person, same sub.
+    // Same verified address as an account without Google (a mailed code, a
+    // passkey, or imported by an admin: POST /admin/users) → the same person,
+    // same sub. Never one already linked to another Google account: that
+    // address now belongs to a different Google account than the one that
+    // signed in before (a recycled Workspace address) - refused.
     const byEmail = await userByEmail(env, email);
+    if (byEmail?.google_sub && byEmail.google_sub !== claims.sub) {
+      securityEvent('google_relink_refused', { user: byEmail.id });
+      return messagePage(request, t.errors.google, 403);
+    }
     if (byEmail) {
       await env.DB.prepare('UPDATE users SET google_sub = ?, email_verified = 1, updated_at = ? WHERE id = ?').bind(claims.sub, nowIso(), byEmail.id).run();
       user = byEmail;

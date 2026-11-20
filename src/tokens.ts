@@ -1,6 +1,7 @@
 import { jwtVerify, SignJWT } from 'jose';
 import type { Env } from './env';
 import { signingKey, verificationKey } from './keys';
+import { userPermissions } from './apis';
 import type { Amr, User } from './store';
 
 const AMR_CLAIM: Record<Amr, string[]> = { otp: ['otp'], link: ['otp'], fed: ['fed'], passkey: ['hwk', 'mfa'] };
@@ -17,7 +18,7 @@ export function scopeHas(scope: string, value: string): boolean {
 // token endpoint returns them for every grant.
 export async function issueTokens(
   env: Env,
-  params: { clientId: string; user: User; scope: string; authTime: number; nonce?: string | null; amr?: Amr | null }
+  params: { clientId: string; user: User; scope: string; authTime: number; nonce?: string | null; amr?: Amr | null; audience?: string | null }
 ): Promise<Record<string, unknown>> {
   const { key, kid } = await signingKey(env);
   const now = unixNow();
@@ -31,11 +32,17 @@ export async function issueTokens(
       'INSERT INTO client_users (client_id, user_id, last_used_at) VALUES (?, ?, ?) ON CONFLICT (client_id, user_id) DO UPDATE SET last_used_at = excluded.last_used_at WHERE client_users.last_used_at < ?'
     ).bind(params.clientId, params.user.id, nowText, hourAgo),
   ]);
-  const accessToken = await new SignJWT({ scope: params.scope, client_id: params.clientId })
+  // For an API (an audience, apis.ts): aud is that API, with the permissions
+  // the user has there through this application, and their e-mail. Without
+  // one, as always: aud is the client.
+  const forApi = params.audience
+    ? { permissions: await userPermissions(env, params.clientId, params.user.email, params.audience), email: params.user.email }
+    : {};
+  const accessToken = await new SignJWT({ scope: params.scope, client_id: params.clientId, ...forApi })
     .setProtectedHeader({ alg: 'RS256', kid, typ: 'at+jwt' })
     .setIssuer(env.ISSUER)
     .setSubject(params.user.id)
-    .setAudience(params.clientId)
+    .setAudience(params.audience || params.clientId)
     .setIssuedAt(now)
     .setExpirationTime(now + ACCESS_TOKEN_SECONDS)
     .setJti(randomToken(16))
@@ -63,11 +70,12 @@ export async function issueTokens(
 
   if (scopeHas(params.scope, 'offline_access')) {
     const refresh = randomToken(32);
-    await env.DB.prepare(
-      'INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at, amr) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    )
-      .bind(await sha256(refresh), params.clientId, params.user.id, params.scope, params.authTime, nowIso(), inSeconds(REFRESH_TOKEN_SECONDS), params.amr ?? null)
-      .run();
+    const fields = [await sha256(refresh), params.clientId, params.user.id, params.scope, params.authTime, nowIso(), inSeconds(REFRESH_TOKEN_SECONDS), params.amr ?? null];
+    // The audience goes along (migration 0014); without one, the statement as before.
+    await (params.audience
+      ? env.DB.prepare('INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at, amr, audience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(...fields, params.audience)
+      : env.DB.prepare('INSERT INTO refresh_tokens (token_hash, client_id, user_id, scope, auth_time, created_at, expires_at, amr) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(...fields)
+    ).run();
     body.refresh_token = refresh;
   }
   return body;

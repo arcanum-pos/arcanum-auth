@@ -9,6 +9,7 @@ import { logoutConfirmPage, messagePage, texts } from './pages';
 import { needsPasskey, passkeyStep } from './passkeys';
 import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, userById, type Amr, type Client } from './store';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
+import { audienceCheck, userAccessTo } from './apis';
 import { withinLimit } from './ratelimit';
 import { inSeconds, json, newUserCode, nowIso, oauthError, pkceMatches, randomToken, readForm, redirect, sameOrigin, sha256, unixNow } from './util';
 
@@ -87,6 +88,15 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
     return back({ error: 'invalid_request', error_description: 'PKCE with S256 is required' });
   }
 
+  // An API (apis.ts): only one this application may ask for on behalf of its
+  // users. On an instance without APIs (the shared one) it's ignored, as before.
+  let audience: string | null = p.get('audience') || null;
+  if (audience) {
+    const check = await audienceCheck(env, client.id, audience);
+    if (check === 'refused') return back({ error: 'invalid_request', error_description: 'Unknown audience, or this application may not ask for it' });
+    if (check === 'ignored') audience = null;
+  }
+
   const prompts = (p.get('prompt') || '').split(' ');
   const session = await currentSession(env, request);
   if (!session || prompts.includes('login')) {
@@ -104,12 +114,18 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
   if (needsPasskey(client, session)) return passkeyStep(url.pathname + url.search);
 
   const code = randomToken(32);
-  await env.DB.prepare(
-    `INSERT INTO auth_codes (code_hash, client_id, user_id, redirect_uri, scope, nonce, code_challenge, auth_time, expires_at, amr)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(await sha256(code), client.id, session.user.id, redirectUri, cleanScope(p.get('scope')), p.get('nonce'), challenge, session.authTime, inSeconds(AUTH_CODE_SECONDS), session.amr)
-    .run();
+  const fields = [await sha256(code), client.id, session.user.id, redirectUri, cleanScope(p.get('scope')), p.get('nonce'), challenge, session.authTime, inSeconds(AUTH_CODE_SECONDS), session.amr];
+  // With an audience (migration 0014) it's kept with the code; without, the statement as before.
+  await (audience
+    ? env.DB.prepare(
+        `INSERT INTO auth_codes (code_hash, client_id, user_id, redirect_uri, scope, nonce, code_challenge, auth_time, expires_at, amr, audience)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(...fields, audience)
+    : env.DB.prepare(
+        `INSERT INTO auth_codes (code_hash, client_id, user_id, redirect_uri, scope, nonce, code_challenge, auth_time, expires_at, amr)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(...fields)
+  ).run();
   return back({ code });
 }
 
@@ -146,6 +162,7 @@ interface AuthCodeRow {
   expires_at: string;
   used_at: string | null;
   amr: Amr | null;
+  audience?: string | null;
 }
 
 async function authorizationCodeGrant(env: Env, client: Client, form: Record<string, string>): Promise<Response> {
@@ -169,7 +186,7 @@ async function authorizationCodeGrant(env: Env, client: Client, form: Record<str
   if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
   // No refresh token for the admin client: after an hour, a passkey again.
   const scope = client.id === ADMIN_CLIENT_ID ? row.scope.split(' ').filter((s) => s !== 'offline_access').join(' ') : row.scope;
-  return json(await issueTokens(env, { clientId: client.id, user, scope, authTime: row.auth_time, nonce: row.nonce, amr: row.amr }));
+  return json(await issueTokens(env, { clientId: client.id, user, scope, authTime: row.auth_time, nonce: row.nonce, amr: row.amr, audience: row.audience ?? null }));
 }
 
 // A rotated-away refresh token presented again within this window counts as
@@ -182,8 +199,12 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
   const tokenHash = await sha256(form.refresh_token || '');
   const row = await env.DB.prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?')
     .bind(tokenHash)
-    .first<{ client_id: string; user_id: string; scope: string; auth_time: number; expires_at: string; revoked_at: string | null; rotated_at: string | null; amr: Amr | null }>();
+    .first<{ client_id: string; user_id: string; scope: string; auth_time: number; expires_at: string; revoked_at: string | null; rotated_at: string | null; amr: Amr | null; audience?: string | null }>();
   if (!row || row.client_id !== client.id) return oauthError('invalid_grant', 'Invalid refresh token');
+  // Its audience is kept; the application must still have user access to it (apis.ts).
+  const audience = row.audience ?? null;
+  const audienceGone = async () => !!audience && !(await userAccessTo(env, client.id, audience));
+  const noAudience = () => oauthError('invalid_grant', 'No access to this audience any more');
   if (row.revoked_at && row.rotated_at && Date.now() - Date.parse(row.rotated_at) <= ROTATION_GRACE_MS && row.expires_at > nowIso()) {
     // Only while nothing of this user + client was revoked since (theft, a new password).
     const revokedSince = await env.DB.prepare(
@@ -193,7 +214,8 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
       .first();
     const user = revokedSince ? null : await userById(env, row.user_id);
     if (user && !(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
-    if (user) return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, amr: row.amr }));
+    if (user && (await audienceGone())) return noAudience();
+    if (user) return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, amr: row.amr, audience }));
   }
   if (row.revoked_at) {
     // A rotated-away token used again: someone has a copy. Revoke them all.
@@ -217,7 +239,8 @@ async function refreshGrant(request: Request, env: Env, client: Client, form: Re
   if (!user) return oauthError('invalid_grant', 'User no longer exists');
   // Unassigned since: no new tokens (unassigning also revoked them; this is the backstop).
   if (!(await mayUse(env, client, user))) return oauthError('invalid_grant', 'No access to this client');
-  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, amr: row.amr }));
+  if (await audienceGone()) return noAudience();
+  return json(await issueTokens(env, { clientId: client.id, user, scope: row.scope, authTime: row.auth_time, amr: row.amr, audience }));
 }
 
 interface DeviceRow {

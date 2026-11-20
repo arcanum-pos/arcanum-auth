@@ -8,6 +8,8 @@ import { texts } from './pages';
 import { distinctiveHosts, inSeconds, json, newEmailCode, normalizeEmail, nowIso, randomToken, sha256, timingSafeEqual } from './util';
 import { protectionsOff } from './protections';
 import { securityEvent } from './audit';
+import { adminApis } from './apis';
+import { adminUsers } from './users';
 
 const LOGIN_LINK_SECONDS = 60;
 
@@ -284,6 +286,9 @@ export async function admin(request: Request, env: Env, path: string, by: string
     const result = await sendTestMail(env, to, `${t.mailTestSubject} - ${t.mailCodeSubject}`, `${t.mailTestNote(new URL(env.ISSUER).host)}\n\n${t.mailCode(newEmailCode(), `${issuerUrl(env)}/login`)}`);
     return json(result.body, result.status === 200 ? 200 : result.status);
   }
+
+  const apis = (await adminApis(request, env, path, by)) ?? (await adminUsers(request, env, path));
+  if (apis) return apis;
 
   const one = path.match(/^\/admin\/clients\/([^/]+)$/);
   if (one && request.method === 'PATCH') {

@@ -23,6 +23,8 @@ export async function cleanup(env: Env, now = new Date()): Promise<Record<string
     // An access request nobody answered in 90 days.
     ['client_access', "DELETE FROM client_access WHERE status = 'requested' AND created_at <= ?", [ago(24 * 90)]],
     ['attempts', 'DELETE FROM attempts WHERE at <= ?', [ago(24)]],
+    // The admin dashboard's audit log: a year.
+    ['audit_log', 'DELETE FROM audit_log WHERE at <= ?', [ago(24 * 365)]],
     ['guests', 'DELETE FROM users WHERE guest = 1 AND expires_at <= ?', [iso]],
   ];
   const results = await env.DB.batch(steps.map(([, sql, params]) => env.DB.prepare(sql).bind(...params)));

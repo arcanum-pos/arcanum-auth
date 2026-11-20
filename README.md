@@ -337,7 +337,49 @@ returns them (never a secret's value); tools/admin's menu follows it.
 | `SIGN_IN=google` | Only Google. `/login` goes straight to Google. Off (404): mailed codes and links (`/login/code`, `/login/link`, `/login/name`), passkeys (`/passkey/*`, `/passkey.js`, `/login/passkey`, `/account/passkeys`), `/account/google`, `/enroll*`, the device flow (`/device*`, `/device/code` and its grant), `/clients/self*`, `/access/*`, guests (`/admin/guests`, `/admin/login-links`, `/login/once`). No mail is sent. Discovery leaves out the device endpoint and `client_users_endpoint`. `/account` shows who you are and your sessions (sign out one or everywhere). No client requires a passkey there - tools/admin's admins sign in with Google too (2-step verification by the Workspace's policy); `ADMIN_API_KEY` stays the way back in. A restricted client says "no access" without a request button: an admin adds people. |
 | `GOOGLE_HOSTED_DOMAIN=example.be` | Only that Google Workspace: sent to Google as `hd`, and the id token's `hd` claim must match on return (case-insensitive) - else refused (`google_domain_refused` security event), no account made. |
 | `PRODUCT_NAME` | The name at the top of the sign-in pages and in their titles (unset: the host). |
-| `ISSUER` ending in `/` | Allowed (Auth0's style, e.g. `https://auth.example.be/`): `iss` in tokens, discovery and the authorization response is exactly `ISSUER`; every URL is built from it without the slash. |
+| `ISSUER` ending in `/` | Allowed (Auth0's style, e.g. `https://login.radioscorpio.be/`): `iss` in tokens, discovery and the authorization response is exactly `ISSUER`; every URL is built from it without the slash. |
+
+### APIs, roles and application access (`src/apis.ts`, migration 0014)
+
+Auth0's model, as data (empty on the shared instance): **APIs** (the id is
+the audience, e.g. `zaracloud-api`) with **permissions**; **roles** holding
+permissions of one or more APIs, with **members by e-mail** (added before
+their first sign-in is fine) or **`is_default`** (everyone has it, no row
+per person); and per application and API, which permissions it may ask for
+**on behalf of users** (`kind 'user'`) or **gets itself** (`kind 'client'`,
+machine clients).
+
+- `/authorize?audience=X`: refused (`invalid_request`, back to the app) when
+  the app has no user access to X. The audience is kept with the code and the
+  refresh token. On an instance **without any API** an audience is ignored,
+  as it always was.
+- The access token for X: `aud = X`, `permissions` = the user's role
+  permissions on X (default roles included) ∩ the app's user access on X,
+  and `email`. Worked out on every issue, refresh included: a change is in
+  effect within the hour. A refresh is refused once the app lost its user
+  access to X. The id token stays the app's (`aud = client_id`); `/userinfo`
+  accepts both kinds of access token. Without an audience, everything as
+  before.
+- Admin API (local only, like all of `/admin/*`): `GET/POST /admin/apis`,
+  `GET/PATCH/DELETE /admin/apis/:id`, `PUT/DELETE /admin/apis/:id/permissions/:name`,
+  `GET/POST /admin/roles`, `GET/PATCH/DELETE /admin/roles/:id`,
+  `PUT /admin/roles/:id/permissions`, `POST /admin/roles/:id/members`
+  (`{ emails }`, up to 500), `DELETE /admin/roles/:id/members/:email`,
+  `GET /admin/clients/:id/api-access`, `PUT /admin/clients/:id/api-access/:api`
+  (`{ user?: [], client?: [] }`). Details at the top of `src/apis.ts`.
+- **Importing users** (a move from Auth0): `POST /admin/users` `{ id, email,
+  name?, email_verified? }` or `{ users: [...] }` (up to 500) - the user
+  gets that id, so `sub` stays what the applications know (e.g.
+  `google-apps|jan@radioscorpio.be`); an existing id or address is skipped.
+  Their first Google sign-in links Google to them **by e-mail** (only when
+  Google says the address is verified and, with `GOOGLE_HOSTED_DOMAIN`, `hd`
+  matches), keeping the id.
+- An account already linked to **another** Google account is never linked
+  again by e-mail (a recycled address): refused, security event
+  `google_relink_refused`. On every instance: there, unlinking Google on
+  `/account` first lets the new Google account in.
+- Every admin change (not reads, not the demo's guests) is also written to
+  `audit_log` (kept a year) for tools/admin's audit log.
 
 ## Test it
 

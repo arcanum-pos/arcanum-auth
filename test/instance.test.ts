@@ -73,6 +73,17 @@ describe('with no new setting (the shared instance)', () => {
     expect(res.headers.get('Location')).toMatch(/^\/login\/passkey\?continue=/);
   });
 
+  it('an instance without APIs ignores an audience, as before: aud is the client, nothing refused', async () => {
+    const client = await newClient(env);
+    const { cookie } = await googleSignIn(env, unique('aud'));
+    const flow = await codeFlow(env, client, cookie, { audience: 'https://some-api.test' });
+    expect(flow.status).toBe(200);
+    const at = decodeJwt(String(flow.body.access_token));
+    expect(at.aud).toBe(client.client_id);
+    expect(at.permissions).toBeUndefined();
+    expect(await env.DB.prepare('SELECT audience FROM refresh_tokens WHERE client_id = ?').bind(client.client_id).first()).toEqual({ audience: null });
+  });
+
   it('/admin/instance tells the settings: all off', async () => {
     const res = await admin(env, 'GET', '/admin/instance');
     expect(res.status).toBe(200);

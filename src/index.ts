@@ -24,7 +24,7 @@ import { PASSKEY_SCRIPT } from './passkey-script';
 import { reportProtections } from './protections';
 import { json, redirect, safeContinue } from './util';
 import { tooManyRequests, withinLimit } from './ratelimit';
-import { securityEvent } from './audit';
+import { auditLog, securityEvent } from './audit';
 
 export type { Env };
 
@@ -155,7 +155,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
         const by = await adminCaller(request, env);
         if (!by) return json({ error: 'Unauthorized' }, 401);
         const res = await admin(request, env, path, by);
-        if (method !== 'GET') securityEvent('admin', { method, path, status: res.status, by });
+        if (method !== 'GET') {
+          securityEvent('admin', { method, path, status: res.status, by });
+          // The admin dashboard's audit log - not the demo's guests and their links (no admin's doing).
+          if (path !== '/admin/guests' && path !== '/admin/login-links') await auditLog(env, 'admin', by, { method, path, status: res.status });
+        }
         return res;
       }
       if (path === '/' && method === 'GET') return redirect('/account');
