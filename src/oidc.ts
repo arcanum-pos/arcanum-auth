@@ -1,7 +1,7 @@
 import { compactVerify, createLocalJWKSet } from 'jose';
 import { securityEvent } from './audit';
 import type { Env } from './env';
-import { googleOnly, issuerUrl } from './instance';
+import { auth0Compat, googleOnly, issuerUrl } from './instance';
 import { sendMail } from './mail';
 import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
@@ -132,8 +132,20 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
 
 // --- Token endpoint: authorization_code, refresh_token, device_code.
 
+// AUTH0_COMPAT: a JSON body too (Auth0's SDKs and the Scorpio workers send
+// one) - its plain values as the form's. Else, as always, a form only.
+async function tokenBody(request: Request, env: Env): Promise<Record<string, string>> {
+  if (!auth0Compat(env) || !(request.headers.get('Content-Type') || '').includes('application/json')) return readForm(request);
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const out: Record<string, string> = {};
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    for (const [k, v] of Object.entries(body)) if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = String(v);
+  }
+  return out;
+}
+
 export async function token(request: Request, env: Env): Promise<Response> {
-  const form = await readForm(request);
+  const form = await tokenBody(request, env);
   // A machine client for itself (machine.ts): limited before the client is looked up.
   if (form.grant_type === CLIENT_CREDENTIALS) return clientCredentialsGrant(request, env, form);
   const client = await authenticateClient(env, request, form);
@@ -374,6 +386,22 @@ export async function logout(request: Request, env: Env): Promise<Response> {
   } else {
     res = messagePage(request, texts(request).signedOut);
   }
+  for (const cookie of cookies) res.headers.append('Set-Cookie', cookie);
+  return res;
+}
+
+// --- AUTH0_COMPAT: Auth0's logout, GET /v2/logout?returnTo=…&client_id=…
+// (Aquascenic's BFF). Ends the session here at once, as Auth0 does, and goes
+// back to returnTo only when it's one of that client's registered logout or
+// redirect URLs - never an open redirect. Anything else: "signed out" here.
+export async function auth0Logout(request: Request, env: Env): Promise<Response> {
+  const p = new URL(request.url).searchParams;
+  const cookies = await endSession(env, request);
+  const client = await clientById(env, p.get('client_id'));
+  const target = p.get('returnTo') || '';
+  const registered = !!client && !isMachine(client) && !!target && (client.post_logout_redirect_uris.includes(target) || client.redirect_uris.includes(target));
+  if (target && !registered) securityEvent('logout_return_refused', { client: client?.id ?? null });
+  const res = registered ? redirect(target) : messagePage(request, texts(request).signedOut);
   for (const cookie of cookies) res.headers.append('Set-Cookie', cookie);
   return res;
 }

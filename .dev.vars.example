@@ -14,3 +14,4 @@ ISSUER=http://localhost:8788
 # SIGN_IN=google
 # GOOGLE_HOSTED_DOMAIN=example.be
 # PRODUCT_NAME=Example
+# AUTH0_COMPAT=true
