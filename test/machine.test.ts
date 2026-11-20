@@ -111,19 +111,51 @@ describe('client credentials', () => {
     expect((await credentials(m)).status).toBe(401);
   });
 
-  it('rate limited per client and per IP, before the database', async () => {
+  it('limits: failures per IP and per client id; a stranger can not lock out the right secret', async () => {
     const m = await newMachine();
     const keys: string[] = [];
-    const limiter = { limit: async ({ key }: { key: string }) => (keys.push(key), { success: !key.startsWith('cc-client:') }) };
-    const limited = withEnv({ CLIENT_CREDENTIALS_RATE_LIMITER: limiter });
-    const prepare = vi.spyOn(env.DB, 'prepare');
-    const res = await credentials(m, {}, limited, { 'CF-Connecting-IP': '203.0.113.7' });
-    expect(res.status).toBe(429);
-    expect(keys).toEqual(['cc-ip:203.0.113.7', `cc-client:${m.client_id}`]);
-    expect(prepare).not.toHaveBeenCalled();
-    // Per IP too.
-    const byIp = withEnv({ CLIENT_CREDENTIALS_RATE_LIMITER: { limit: async ({ key }: { key: string }) => ({ success: !key.startsWith('cc-ip:') }) } });
-    expect((await credentials(m, {}, byIp, { 'CF-Connecting-IP': '203.0.113.8' })).status).toBe(429);
+    // Every failure bucket full (a stranger flooding this client id from everywhere).
+    const flooded = withEnv({ CLIENT_CREDENTIALS_RATE_LIMITER: { limit: async ({ key }: { key: string }) => (keys.push(key), { success: !key.startsWith('cc-fail') }) } });
+    const wrong = await credentials({ ...m, client_secret: 'scs_wrong' }, {}, flooded, { 'CF-Connecting-IP': '2001:db8:1:2:3:4:5:6' });
+    expect(wrong.status).toBe(429);
+    expect(keys).toEqual(['cc-fail-ip:2001:db8:1:2::/64']);
+    // The right secret still gets its token, from the same address.
+    keys.length = 0;
+    expect((await credentials(m, {}, flooded, { 'CF-Connecting-IP': '2001:db8:1:2:3:4:5:6' })).status).toBe(200);
+    expect(keys).toEqual([`cc-ok:${m.client_id}`]);
+    // Per client id too.
+    const perClient = withEnv({ CLIENT_CREDENTIALS_RATE_LIMITER: { limit: async ({ key }: { key: string }) => ({ success: key !== `cc-fail:${m.client_id}` }) } });
+    expect((await credentials({ ...m, client_secret: 'scs_wrong' }, {}, perClient)).status).toBe(429);
+    expect((await credentials(m, {}, perClient)).status).toBe(200);
+  });
+
+  it('the right secret has its own limit (a worker stuck in a loop)', async () => {
+    const m = await newMachine();
+    const loop = withEnv({ CLIENT_CREDENTIALS_RATE_LIMITER: { limit: async ({ key }: { key: string }) => ({ success: !key.startsWith('cc-ok:') }) } });
+    expect((await credentials(m, {}, loop)).status).toBe(429);
+  });
+
+  it('failures reach the audit log once per client per window, never for an unknown or disabled client', async () => {
+    const m = await newMachine();
+    for (let i = 0; i < 4; i++) expect((await credentials({ ...m, client_secret: `scs_wrong-${i}` })).status).toBe(401);
+    const count = async (id: string) =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE name = 'client_credentials_failed' AND detail = ?").bind(JSON.stringify({ client: id })).first<{ n: number }>())!.n;
+    expect(await count(m.client_id)).toBe(1);
+    await credentials({ client_id: 'arc_nobody', client_secret: 'scs_x' });
+    expect(await count('arc_nobody')).toBe(0);
+    const gone = await newMachine();
+    await admin(env, 'DELETE', `/admin/clients/${gone.client_id}`);
+    await credentials({ ...gone, client_secret: 'scs_x' });
+    expect(await count(gone.client_id)).toBe(0);
+  });
+
+  it('IPv6 callers are bucketed per /64', async () => {
+    const { ipBucket } = await import('../src/ratelimit');
+    expect(ipBucket('203.0.113.7')).toBe('203.0.113.7');
+    expect(ipBucket('2001:db8:1:2:3:4:5:6')).toBe('2001:db8:1:2::/64');
+    expect(ipBucket('2001:DB8:0001:0002:ffff::1')).toBe('2001:db8:1:2::/64');
+    expect(ipBucket('2001:db8::1')).toBe('2001:db8:0:0::/64');
+    expect(ipBucket('::1')).toBe('0:0:0:0::/64');
   });
 
   it('the machine client shows as used', async () => {

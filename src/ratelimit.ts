@@ -13,3 +13,18 @@ export async function withinLimit(env: Env, key: string): Promise<boolean> {
 }
 
 export const tooManyRequests = () => json({ error: 'too_many_requests' }, 429, { 'Retry-After': '60' });
+
+// A caller's bucket for a limit keyed by address: IPv4 as it is, IPv6 per
+// /64 (one connection usually gets a whole /64, so per address it's free to
+// rotate).
+export function ipBucket(ip: string): string {
+  if (!ip.includes(':')) return ip;
+  let parts = ip.split('%')[0].split(':');
+  const gap = parts.indexOf('');
+  if (gap !== -1) {
+    const head = parts.slice(0, gap).filter(Boolean);
+    const tail = parts.slice(gap + 1).filter(Boolean);
+    parts = [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
+  }
+  return `${parts.slice(0, 4).map((p) => (p || '0').toLowerCase().replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}

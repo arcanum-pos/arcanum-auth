@@ -10,8 +10,7 @@
 //     `permissions` and `scope`. An hour; no id token, no refresh token.
 //
 // Only a machine client may use it, and a machine client nothing else (no
-// sign-in, no redirect URIs, no people). Limited per client and per IP in
-// memory before D1 is asked (a worker stuck in a loop can't eat the quota).
+// sign-in, no redirect URIs, no people). Rate limited in memory (below).
 //
 // Secrets: 256 random bits with a recognizable prefix (scs_), stored only as
 // SHA-256, shown once. A rotation keeps the old one working 24 hours
@@ -24,7 +23,7 @@ import { auditLog, securityEvent } from './audit';
 import { clientPermissions } from './apis';
 import type { Env } from './env';
 import { signingKey } from './keys';
-import { tooManyRequests, withinLimit } from './ratelimit';
+import { ipBucket, tooManyRequests, withinLimit } from './ratelimit';
 import { authenticateClient, isMachine } from './store';
 import { ACCESS_TOKEN_SECONDS } from './tokens';
 import { inSeconds, json, nowIso, oauthError, randomToken, sha256, unixNow } from './util';
@@ -36,20 +35,30 @@ export const SECRET_OVERLAP_SECONDS = 24 * 3600;
 // scs_ + 43 characters (32 random bytes, base64url).
 export const newMachineSecret = () => `${SECRET_PREFIX}${randomToken(32)}`;
 
-// Before anything touches D1: per IP (when it comes from the internet) and per
-// client id as given. CLIENT_CREDENTIALS_RATE_LIMITER when bound (a limit for
-// busy workers), else the public one (20 a minute).
-async function limited(env: Env, request: Request, clientId: string): Promise<boolean> {
-  const limiter = env.CLIENT_CREDENTIALS_RATE_LIMITER ? { ...env, PUBLIC_RATE_LIMITER: env.CLIENT_CREDENTIALS_RATE_LIMITER } : env;
-  const ip = request.headers.get('CF-Connecting-IP');
-  for (const key of [...(ip ? [`cc-ip:${ip}`] : []), `cc-client:${clientId}`]) {
-    if (!(await withinLimit(limiter, key))) {
-      securityEvent('rate_limited', { route: 'client_credentials', client: clientId, ip });
+// Limits (security review 2026-11-20): a stranger knows a machine client's
+// id (it's in every token it shows an API), so nothing a stranger can send
+// may stop the right secret. Failed attempts are counted per caller (IP,
+// IPv6 per /64) and per client id; past either limit a failure gets 429 and
+// writes nothing. A request with the right secret never touches those
+// buckets: it has its own, per client, that only the secret's holder can
+// fill (a worker stuck in a loop). CLIENT_CREDENTIALS_RATE_LIMITER when
+// bound (a limit for busy workers), else the public one (20 a minute).
+const limiterOf = (env: Env): Env => (env.CLIENT_CREDENTIALS_RATE_LIMITER ? { ...env, PUBLIC_RATE_LIMITER: env.CLIENT_CREDENTIALS_RATE_LIMITER } : env);
+
+async function overLimit(env: Env, keys: string[], fields: Record<string, unknown>): Promise<boolean> {
+  for (const key of keys) {
+    if (!(await withinLimit(limiterOf(env), key))) {
+      securityEvent('rate_limited', { route: 'client_credentials', ...fields });
       return true;
     }
   }
   return false;
 }
+
+// A failure goes to the audit log at most once per client per this window
+// (the first one): a flood can't bury the admins' entries or use up D1's
+// daily writes. Every failure is still a security event in Workers Logs.
+export const FAILURE_AUDIT_SECONDS = 15 * 60;
 
 // The client id a request names (body, or Basic) - for the limits and the log, before it's checked.
 function namedClient(request: Request, form: Record<string, string>): string {
@@ -70,16 +79,32 @@ export async function clientCredentialsGrant(request: Request, env: Env, form: R
     return oauthError('invalid_request', 'client_secret must not be in the URL: send it in the body or the Authorization header');
   }
   const named = namedClient(request, form);
-  if (await limited(env, request, named)) return tooManyRequests();
+  const ip = request.headers.get('CF-Connecting-IP');
   const client = await authenticateClient(env, request, form);
   if (!client) {
-    securityEvent('client_credentials_failed', { client: named, ip: request.headers.get('CF-Connecting-IP') });
-    // A machine client that exists: in its audit log too (a wrong or old secret somewhere).
-    if (named && (await env.DB.prepare("SELECT 1 FROM clients WHERE id = ? AND kind = 'machine'").bind(named).first())) {
-      await auditLog(env, 'client_credentials_failed', null, { client: named });
+    if (await overLimit(env, [...(ip ? [`cc-fail-ip:${ipBucket(ip)}`] : []), `cc-fail:${named}`], { client: named, ip })) return tooManyRequests();
+    securityEvent('client_credentials_failed', { client: named, ip });
+    // A machine client that exists: in its audit log too (a wrong or old
+    // secret somewhere) - the first failure in the window only.
+    if (named) {
+      const since = new Date(Date.now() - FAILURE_AUDIT_SECONDS * 1000).toISOString();
+      const detail = JSON.stringify({ client: named });
+      try {
+        await env.DB.prepare(
+          `INSERT INTO audit_log (at, name, by, detail)
+           SELECT ?, 'client_credentials_failed', NULL, ?
+           WHERE EXISTS (SELECT 1 FROM clients WHERE id = ? AND kind = 'machine' AND disabled_at IS NULL)
+             AND NOT EXISTS (SELECT 1 FROM audit_log WHERE at > ? AND name = 'client_credentials_failed' AND detail = ?)`
+        )
+          .bind(nowIso(), detail, named, since, detail)
+          .run();
+      } catch (err) {
+        console.error('audit log write failed', (err as Error).message);
+      }
     }
     return oauthError('invalid_client', 'Unknown client or wrong secret', 401);
   }
+  if (await overLimit(env, [`cc-ok:${client.id}`], { client: client.id, ip })) return tooManyRequests();
   if (!isMachine(client)) return oauthError('unauthorized_client', 'Only a machine client may use client_credentials');
   const audience = form.audience || '';
   if (!audience) return oauthError('invalid_request', 'audience is required');
