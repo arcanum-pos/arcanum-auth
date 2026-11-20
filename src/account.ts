@@ -321,7 +321,9 @@ export async function googleCallback(request: Request, env: Env): Promise<Respon
     // maybe years ago, maybe by someone who no longer has it): that one is
     // linked only from a browser already signed in to the account - a code
     // mailed to the address now, or a passkey (security review 2026-11-20).
-    if (byEmail && !googleSpeaksFor(email, claims.hd)) {
+    // (GOOGLE_HOSTED_DOMAIN: only that Workspace's accounts got this far -
+    // its admin hands out the addresses, an alias domain included.)
+    if (byEmail && !domain && !googleSpeaksFor(email, claims.hd)) {
       const session = await currentSession(env, request);
       if (session?.user.id !== byEmail.id) {
         securityEvent('google_link_needs_signin', { user: byEmail.id });

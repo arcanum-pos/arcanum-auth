@@ -195,6 +195,14 @@ describe('GOOGLE_HOSTED_DOMAIN', () => {
     }
   });
 
+  it('an imported user on an alias domain of the Workspace links on first sign-in (no mailed code on this instance)', async () => {
+    const email = unique('alias', 'scorpio-alias.test');
+    expect((await admin(WORKSPACE, 'POST', '/admin/users', { id: `google-apps|${email}`, email, name: 'Alias' })).status).toBe(201);
+    const { res } = await googleSignIn(WORKSPACE, `hd:radioscorpio.test:${email}`);
+    expect(res.status).toBe(302);
+    expect((await env.DB.prepare('SELECT google_sub FROM users WHERE email = ?').bind(email).first<{ google_sub: string }>())!.google_sub).toBe(`google-${email}`);
+  });
+
   it('hd is compared without case', async () => {
     expect((await googleSignIn(WORKSPACE, `hd:RadioScorpio.test:${unique('case', 'radioscorpio.test')}`)).res.status).toBe(302);
   });
