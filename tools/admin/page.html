@@ -37,7 +37,7 @@ nav a .n{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 nav .group{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:12px 10px 4px}
 .who{margin-top:auto;font-size:12px;color:var(--muted);padding:0 8px;display:grid;gap:6px}.who b{color:var(--fg);font-weight:500;word-break:break-all}
 main{min-width:0;padding:24px 32px 64px}
-.wrap{max-width:1040px;display:grid;gap:20px}
+.wrap{display:grid;gap:20px}
 .crumb{color:var(--muted);font-size:13px;display:flex;gap:6px;flex-wrap:wrap}.crumb a{color:var(--muted);text-decoration:none}.crumb a:hover{color:var(--fg)}
 .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
 .sub{color:var(--muted);margin:4px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -49,6 +49,8 @@ main{min-width:0;padding:24px 32px 64px}
 .tabs a{padding:8px 12px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
 .tabs a.on{color:var(--fg);border-color:var(--fg);font-weight:600}
 .tscroll{overflow-x:auto}
+/* In a table, an identifier (permission, client id, audience) stays on one line: the column grows, the card scrolls sideways if it must. Long free text (the audit log) wraps. */
+td code{word-break:normal;white-space:nowrap}td code.w{white-space:normal;overflow-wrap:anywhere}
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:10px 16px;border-bottom:1px solid var(--border);white-space:nowrap}
 td{padding:10px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -295,7 +297,7 @@ details summary{cursor:pointer;font-size:13px;color:var(--muted)}
   function auditTable(rows) {
     if (!rows || !rows.length) return '<div class="cb"><p>Nothing yet.</p></div>';
     return '<div class="tscroll"><table><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>' + rows.map(function (a) {
-      return '<tr><td class="s" style="white-space:nowrap">' + esc(when(a.at)) + '</td><td>' + esc(a.by || 'system') + '</td><td><code>' + esc(auditText(a)) + '</code></td></tr>';
+      return '<tr><td class="s" style="white-space:nowrap">' + esc(when(a.at)) + '</td><td>' + esc(a.by || 'system') + '</td><td><code class="w">' + esc(auditText(a)) + '</code></td></tr>';
     }).join('') + '</tbody></table></div>';
   }
 

@@ -3,3 +3,4 @@ node_modules/
 .dev.vars
 dist/
 examples_dont_commit.md
+tools/admin/scorpio.wrangler.jsonc
