@@ -22,7 +22,11 @@ export const productName = (env: Env): string | null => env.PRODUCT_NAME?.trim()
 // ISSUER as given goes into `iss` (tokens, discovery, the authorization
 // response) - Auth0's issuers end in a slash, and APIs compare it exactly.
 // Every URL is built from it without that slash.
-export const issuerUrl = (env: Env): string => env.ISSUER.replace(/\/+$/, '');
+export const issuerUrl = (env: Env): string => {
+  let url = env.ISSUER;
+  while (url.endsWith('/')) url = url.slice(0, -1);
+  return url;
+};
 
 // The instance's settings for the admin dashboard (GET /admin/instance):
 // what's on, never a secret's value.
