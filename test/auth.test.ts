@@ -726,6 +726,24 @@ describe('consent for clients someone else runs', () => {
     expect(new URL(next.headers.get('Location')!).searchParams.get('code')).toBeTruthy();
   });
 
+  it('the device page asks the same, names the installation, and Allow is the yes', async () => {
+    const res = await call('/admin/clients', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-admin-key', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Club Y', redirect_uris: [REDIRECT], restricted: false, owner_email: uniqueEmail('owner'), owner_sub: 'owner-sub-y', instance_url: 'https://club-y.example' }),
+    });
+    const client = (await res.json()) as { client_id: string };
+    const cookie = await signUp(uniqueEmail('device-consent'));
+    const d = (await (await post('/device/code', { client_id: client.client_id, scope: 'openid email' })).json()) as { user_code: string };
+    const page = await (await call(`/device?user_code=${d.user_code}`, { headers: { Cookie: cookie } })).text();
+    expect(page).toContain('Club Y (club-y.example) wil je naam en e-mailadres.');
+    expect((await post('/device/confirm', { user_code: d.user_code, decision: 'allow' }, { Cookie: cookie })).status).toBe(200);
+    // Remembered: /authorize doesn't ask again, and the installation's own address is what /authorize names too.
+    const user = await env.DB.prepare('SELECT id FROM users WHERE email LIKE ?').bind('device-consent-%').first<{ id: string }>();
+    expect(await env.DB.prepare('SELECT 1 FROM consents WHERE user_id = ? AND client_id = ?').bind(user!.id, client.client_id).first()).not.toBeNull();
+    expect((await start(client.client_id, cookie)).status).toBe(302);
+  });
+
   it('cancel goes back with access_denied; prompt=none without a yes gets consent_required; a forced redirect gets no code', async () => {
     const client = await ownedClient(uniqueEmail('owner2'));
     const cookie = await signUp(uniqueEmail('consent2'));

@@ -66,7 +66,13 @@ describe('AUTH0_COMPAT=true', () => {
     const client = await newClient(COMPAT);
     for (const returnTo of [APP, REDIRECT]) {
       const { cookie } = await googleSignIn(COMPAT, unique('out'));
-      const res = await call(COMPAT, `/v2/logout?${new URLSearchParams({ returnTo, client_id: client.client_id })}`, { headers: { Cookie: cookie } });
+      // Asked first (any page could link here); the confirmation posts back from this origin.
+      const ask = await call(COMPAT, `/v2/logout?${new URLSearchParams({ returnTo, client_id: client.client_id })}`, { headers: { Cookie: cookie } });
+      expect(ask.status).toBe(200);
+      const html = await ask.text();
+      expect(html).toContain('action="/v2/logout"');
+      expect((await call(COMPAT, '/account', { headers: { Cookie: cookie } })).status).toBe(200);
+      const res = await form(COMPAT, '/v2/logout', { returnTo, client_id: client.client_id }, { Cookie: cookie, Origin: ISSUER });
       expect(res.status).toBe(302);
       expect(res.headers.get('Location')).toBe(returnTo);
       expect(res.headers.get('Set-Cookie')).toContain('Max-Age=0');
@@ -86,13 +92,24 @@ describe('AUTH0_COMPAT=true', () => {
       { returnTo: APP, client_id: 'unknown' },
     ]) {
       const { cookie } = await googleSignIn(COMPAT, unique('stay'));
-      const res = await call(COMPAT, `/v2/logout?${new URLSearchParams(q)}`, { headers: { Cookie: cookie } });
+      const res = await form(COMPAT, '/v2/logout', q, { Cookie: cookie, Origin: ISSUER });
       expect(res.status).toBe(200);
       expect(res.headers.get('Location')).toBeNull();
       // Signed out all the same.
       expect(cookieOf(res)).toMatch(/=$/);
     }
     expect(other.status).toBe(201);
+  });
+
+  it('/v2/logout: a cross-site confirmation is refused; signed out already, it goes straight back', async () => {
+    const client = await newClient(COMPAT);
+    const { cookie } = await googleSignIn(COMPAT, unique('csrf'));
+    const forged = await form(COMPAT, '/v2/logout', { returnTo: APP, client_id: client.client_id }, { Cookie: cookie, Origin: 'https://evil.test', 'Sec-Fetch-Site': 'cross-site' });
+    expect(forged.status).toBe(403);
+    expect((await call(COMPAT, '/account', { headers: { Cookie: cookie } })).status).toBe(200);
+    const anon = await call(COMPAT, `/v2/logout?${new URLSearchParams({ returnTo: APP, client_id: client.client_id })}`);
+    expect(anon.status).toBe(302);
+    expect(anon.headers.get('Location')).toBe(APP);
   });
 
   it('Radio Scorpio\'s workers: client credentials as JSON at /oauth/token, iss with the slash', async () => {

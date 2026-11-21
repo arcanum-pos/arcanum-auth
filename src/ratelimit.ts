@@ -19,6 +19,9 @@ export const tooManyRequests = () => json({ error: 'too_many_requests' }, 429, {
 // rotate).
 export function ipBucket(ip: string): string {
   if (!ip.includes(':')) return ip;
+  // IPv4-mapped (::ffff:1.2.3.4): that IPv4 address.
+  const last = ip.split(':').pop() || '';
+  if (last.includes('.')) return last;
   let parts = ip.split('%')[0].split(':');
   const gap = parts.indexOf('');
   if (gap !== -1) {

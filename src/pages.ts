@@ -697,12 +697,14 @@ ${error(t, opts.error)}<button type="submit">${t.next}</button></form>`,
   );
 }
 
-export function deviceConfirmPage(request: Request, opts: { userCode: string; clientName: string; email: string }) {
+export function deviceConfirmPage(request: Request, opts: { userCode: string; clientName: string; email: string; consentHost?: string | null }) {
   const t = texts(request);
+  // A client someone else runs, not agreed to yet: allowing also shares name and address (oidc.ts consent).
+  const consent = opts.consentHost != null ? `<p style="color:var(--fg)">${esc(t.consentAsk(opts.clientName, opts.consentHost))}</p><p>${t.consentText}</p>` : '';
   return page(
     request,
     t.deviceTitle,
-    `<h1>${esc(t.deviceConfirm(opts.clientName))}</h1><p>${t.deviceConfirmText}</p><p>${esc(t.signedInAs(opts.email))}</p>
+    `<h1>${esc(t.deviceConfirm(opts.clientName))}</h1><p>${t.deviceConfirmText}</p>${consent}<p>${esc(t.signedInAs(opts.email))}</p>
 <p style="font-family:ui-monospace,monospace;font-size:22px;letter-spacing:.2em;color:var(--fg);text-align:center">${esc(opts.userCode)}</p>
 <form method="post" action="/device/confirm" class="row">${hidden('user_code', opts.userCode)}
 <button type="submit" name="decision" value="deny" class="secondary">${t.deny}</button><button type="submit" name="decision" value="allow">${t.allow}</button></form>`
@@ -954,11 +956,11 @@ export function notAdminPage(request: Request, opts: { clientId: string; clientN
 // /logout without a valid id_token_hint: anyone's page could send a browser
 // there, so ask first (OpenID RP-Initiated Logout §2). The same parameters go
 // along with the POST.
-export function logoutConfirmPage(request: Request, params: Record<string, string>) {
+export function logoutConfirmPage(request: Request, params: Record<string, string>, action: '/logout' | '/v2/logout' = '/logout') {
   const t = texts(request);
   const host = new URL(request.url).host;
   const fields = Object.entries(params).map(([k, v]) => hidden(k, v)).join('');
-  return page(request, t.signOut, `<h1>${esc(t.logoutConfirm(host))}</h1><p>${t.logoutConfirmText}</p><form method="post" action="/logout">${fields}<button type="submit">${t.signOut}</button></form>`);
+  return page(request, t.signOut, `<h1>${esc(t.logoutConfirm(host))}</h1><p>${t.logoutConfirmText}</p><form method="post" action="${action}">${fields}<button type="submit">${t.signOut}</button></form>`);
 }
 
 // A client that requires a passkey (passkeys.ts passkeyRequired): sign in

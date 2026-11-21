@@ -7,7 +7,7 @@ import { publicKeys } from './keys';
 import { mayUse, noAccess } from './access';
 import { consentPage, logoutConfirmPage, messagePage, texts } from './pages';
 import { needsPasskey, passkeyStep } from './passkeys';
-import { ADMIN_CLIENT_ID, authenticateClient, clientById, currentSession, endSession, isMachine, needsConsent, userById, type Amr, type Client } from './store';
+import { ADMIN_CLIENT_ID, authenticateClient, clientById, consentAskedOf, consentHost, currentSession, endSession, isMachine, needsConsent, userById, type Amr, type Client } from './store';
 import { CLIENT_CREDENTIALS, clientCredentialsGrant } from './machine';
 import { issueTokens, scopeHas, verifyAccessToken } from './tokens';
 import { audienceCheck, userAccessTo } from './apis';
@@ -116,15 +116,14 @@ export async function authorize(request: Request, env: Env): Promise<Response> {
   // A client someone else runs: once per person, a yes first (one query,
   // only for such a client). Not its owner (who made it), not a demo guest
   // (no real name or address).
-  const isOwner = client.owner_sub === session.user.id || session.user.email.toLowerCase() === (client.owner_email || '').trim().toLowerCase();
-  if (needsConsent(client) && !session.user.guest && !isOwner) {
+  if (consentAskedOf(client, session.user)) {
     const given = await env.DB.prepare('SELECT 1 FROM consents WHERE user_id = ? AND client_id = ?').bind(session.user.id, client.id).first();
     if (!given) {
       if (p.get('consent') === 'denied') return back({ error: 'access_denied' });
       if (prompts.includes('none')) return back({ error: 'consent_required' });
       const again = new URL(url);
       again.searchParams.delete('consent');
-      return consentPage(request, { clientName: client.name, host: new URL(redirectUri).host, email: session.user.email, continueTo: again.pathname + again.search });
+      return consentPage(request, { clientName: client.name, host: consentHost(client, redirectUri), email: session.user.email, continueTo: again.pathname + again.search });
     }
   }
 
@@ -433,11 +432,21 @@ export async function logout(request: Request, env: Env): Promise<Response> {
 }
 
 // --- AUTH0_COMPAT: Auth0's logout, GET /v2/logout?returnTo=…&client_id=…
-// (Aquascenic's BFF). Ends the session here at once, as Auth0 does, and goes
+// (Aquascenic's BFF). Signed in: asks first (below). Then, as Auth0: goes
 // back to returnTo only when it's one of that client's registered logout or
 // redirect URLs - never an open redirect. Anything else: "signed out" here.
 export async function auth0Logout(request: Request, env: Env): Promise<Response> {
-  const p = new URL(request.url).searchParams;
+  const post = request.method === 'POST';
+  if (post && !sameOrigin(request, env.ISSUER)) return messagePage(request, texts(request).errors.request, 403);
+  const p = post ? new URLSearchParams(await readForm(request)) : new URL(request.url).searchParams;
+  // Signed in and not confirmed here: asked first, like /logout without a
+  // hint (security review 2026-11-21) - any page could link here and sign
+  // someone out. The confirmation posts back here, from this origin only.
+  if (!post && (await currentSession(env, request))) {
+    const keep: Record<string, string> = {};
+    for (const k of ['client_id', 'returnTo']) if (p.get(k)) keep[k] = p.get(k)!;
+    return logoutConfirmPage(request, keep, '/v2/logout');
+  }
   const cookies = await endSession(env, request);
   const client = await clientById(env, p.get('client_id'));
   const target = p.get('returnTo') || '';

@@ -97,7 +97,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       if (path === '/token' && method === 'POST') return token(request, env);
       // AUTH0_COMPAT (oidc.ts): Auth0's paths. Off: unknown, as before.
       if (auth0Compat(env) && path === '/oauth/token' && method === 'POST') return token(request, env);
-      if (auth0Compat(env) && path === '/v2/logout' && method === 'GET') return auth0Logout(request, env);
+      if (auth0Compat(env) && path === '/v2/logout' && (method === 'GET' || method === 'POST')) return auth0Logout(request, env);
       if (path === '/device/code' && method === 'POST') return deviceAuthorization(request, env);
       if (path === '/userinfo' && (method === 'GET' || method === 'POST')) return userinfo(request, env);
       if (path === '/logout' && (method === 'GET' || method === 'POST')) return logout(request, env);

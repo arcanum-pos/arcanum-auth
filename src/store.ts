@@ -159,6 +159,26 @@ export function needsConsent(client: Client): boolean {
   return !!client.owner_sub && client.id !== ADMIN_CLIENT_ID && !isMachine(client);
 }
 
+// Must this person say yes first? Not the client's owner (who made it), not
+// a demo guest (no real name or address).
+export function consentAskedOf(client: Client, user: User): boolean {
+  const isOwner = client.owner_sub === user.id || user.email.toLowerCase() === (client.owner_email || '').trim().toLowerCase();
+  return needsConsent(client) && !user.guest && !isOwner;
+}
+
+// The host the consent question names: the installation's own address when
+// known (what the person knows it by), else the redirect's host.
+export function consentHost(client: Client, redirectUri: string | null): string {
+  for (const candidate of [client.instance_url, redirectUri]) {
+    try {
+      if (candidate) return new URL(candidate).host;
+    } catch {
+      /* next */
+    }
+  }
+  return '';
+}
+
 export async function clientById(env: Env, id: string | null | undefined): Promise<Client | null> {
   if (!id) return null;
   // Only Google (SIGN_IN=google): no passkeys here, so none is required - the

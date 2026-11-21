@@ -7,7 +7,7 @@ import { mayUse, noAccess } from './access';
 import { securityEvent } from './audit';
 import { turnstilePasses, turnstileSiteKey } from './turnstile';
 import { accountWithPasskeys, needsPasskey, passkeyStep, shouldOfferPasskey } from './passkeys';
-import { clientById, clientIp, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type Amr, type User } from './store';
+import { clientById, clientIp, consentAskedOf, consentHost, cookieValue, createSession, createUser, currentSession, recordAttempt, tooManyAttempts, userByEmail, type Amr, type Client, type User } from './store';
 import {
   codeHash,
   inSeconds,
@@ -370,6 +370,14 @@ async function pendingDevice(env: Env, userCode: string): Promise<PendingDevice 
   return row && row.status === 'pending' && row.expires_at > nowIso() ? row : null;
 }
 
+// The device page for a client someone else runs, not agreed to yet: the
+// consent question's host (deviceConfirmPage shows it); else null.
+async function deviceConsentHost(env: Env, client: Client, user: User): Promise<string | null> {
+  if (!consentAskedOf(client, user)) return null;
+  const given = await env.DB.prepare('SELECT 1 FROM consents WHERE user_id = ? AND client_id = ?').bind(user.id, client.id).first();
+  return given ? null : consentHost(client, client.redirect_uris[0] || null);
+}
+
 export async function devicePage(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const session = await currentSession(env, request);
@@ -385,7 +393,7 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
     const client = pending ? await clientById(env, pending.client_id) : null;
     if (pending && client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
     if (pending && client && needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
-    if (pending && client) return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email });
+    if (pending && client) return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email, consentHost: await deviceConsentHost(env, client, session.user) });
     return deviceCodePage(request, { userCode: url.searchParams.get('user_code') || '', error: userCode ? 'deviceCode' : null });
   }
   const foreign = refuseForeign(request, env);
@@ -403,7 +411,7 @@ export async function devicePage(request: Request, env: Env): Promise<Response> 
   }
   if (!(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
   if (needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
-  return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email });
+  return deviceConfirmPage(request, { userCode, clientName: client.name, email: session.user.email, consentHost: await deviceConsentHost(env, client, session.user) });
 }
 
 export async function deviceConfirm(request: Request, env: Env): Promise<Response> {
@@ -420,6 +428,10 @@ export async function deviceConfirm(request: Request, env: Env): Promise<Respons
     const client = pending ? await clientById(env, pending.client_id) : null;
     if (client && !(await mayUse(env, client, session.user))) return noAccess(request, env, client, session.user);
     if (client && needsPasskey(client, session)) return passkeyStep(`/device?user_code=${encodeURIComponent(userCode)}`);
+    // Allowed on a page that asked (deviceConfirmPage): that's the yes, as on /authorize's consent page.
+    if (client && consentAskedOf(client, session.user)) {
+      await env.DB.prepare('INSERT OR IGNORE INTO consents (user_id, client_id, created_at) VALUES (?, ?, ?)').bind(session.user.id, client.id, nowIso()).run();
+    }
   }
   const done = await env.DB.prepare(
     "UPDATE device_codes SET status = ?, user_id = ?, auth_time = ?, amr = ? WHERE user_code = ? AND status = 'pending' AND expires_at > ?"

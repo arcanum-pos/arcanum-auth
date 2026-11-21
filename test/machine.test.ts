@@ -156,6 +156,8 @@ describe('client credentials', () => {
     expect(ipBucket('2001:DB8:0001:0002:ffff::1')).toBe('2001:db8:1:2::/64');
     expect(ipBucket('2001:db8::1')).toBe('2001:db8:0:0::/64');
     expect(ipBucket('::1')).toBe('0:0:0:0::/64');
+    expect(ipBucket('::ffff:203.0.113.9')).toBe('203.0.113.9');
+    expect(ipBucket('::ffff:198.51.100.1')).not.toBe(ipBucket('::ffff:203.0.113.9'));
   });
 
   it('the machine client shows as used', async () => {
