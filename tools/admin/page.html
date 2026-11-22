@@ -261,9 +261,12 @@ details summary{cursor:pointer;font-size:13px;color:var(--muted)}
   var VIEWS = {};
   function route() {
     var p = parts(), page = Object.prototype.hasOwnProperty.call(VIEWS, p[0]) ? p[0] : 'overview';
+    // Only one of our own views (the name comes from the URL's hash).
+    var view = VIEWS[page];
+    if (typeof view !== 'function') { page = 'overview'; view = VIEWS.overview; }
     renderNav(page);
     $('view').innerHTML = '<p>Loading...</p>';
-    Promise.resolve(VIEWS[page](p[1], p[2])).then(function (html) { if (typeof html === 'string') $('view').innerHTML = html; })
+    Promise.resolve(view(p[1], p[2])).then(function (html) { if (typeof html === 'string') $('view').innerHTML = html; })
       .catch(function (e) { $('view').innerHTML = '<div class="card"><div class="cb"><p class="msg error">' + esc(e.message) + '</p></div></div>'; });
     window.scrollTo(0, 0);
   }
