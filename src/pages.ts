@@ -24,8 +24,9 @@ const T = {
     allow: 'Toestaan',
     deny: 'Weigeren',
     consentTitle: 'Toestemming',
-    consentAsk: (app: string, host: string) => `${app} (${host}) wil je naam en e-mailadres.`,
-    consentText: 'Ga alleen verder als je deze app kent en vertrouwt. We vragen dit één keer per app.',
+    consentAsk: (host: string) => `Aanmelden bij ${host}?`,
+    consentShares: (email: string) => `Deze app krijgt dan je naam en je e-mailadres (${email}).`,
+    consentText: 'We vragen dit één keer per app. Ga alleen verder als je deze app vertrouwt.',
     consentContinue: 'Doorgaan',
     consentCancel: 'Annuleren',
     deviceDone: 'Het toestel is aangemeld. Je kan dit venster sluiten.',
@@ -197,8 +198,9 @@ const T = {
     allow: 'Autoriser',
     deny: 'Refuser',
     consentTitle: 'Autorisation',
-    consentAsk: (app: string, host: string) => `${app} (${host}) demande votre nom et votre adresse e-mail.`,
-    consentText: 'Ne continuez que si vous connaissez cette application et lui faites confiance. Nous le demandons une fois par application.',
+    consentAsk: (host: string) => `Se connecter à ${host} ?`,
+    consentShares: (email: string) => `Cette application recevra votre nom et votre adresse e-mail (${email}).`,
+    consentText: 'Nous le demandons une fois par application. Ne continuez que si vous lui faites confiance.',
     consentContinue: 'Continuer',
     consentCancel: 'Annuler',
     deviceDone: 'L’appareil est connecté. Vous pouvez fermer cette fenêtre.',
@@ -370,8 +372,9 @@ const T = {
     allow: 'Allow',
     deny: 'Deny',
     consentTitle: 'Consent',
-    consentAsk: (app: string, host: string) => `${app} (${host}) wants your name and email address.`,
-    consentText: 'Only continue if you know and trust this app. We ask once per app.',
+    consentAsk: (host: string) => `Sign in to ${host}?`,
+    consentShares: (email: string) => `This app then gets your name and your email address (${email}).`,
+    consentText: 'We ask this once per app. Only continue if you trust it.',
     consentContinue: 'Continue',
     consentCancel: 'Cancel',
     deviceDone: 'The device is signed in. You can close this window.',
@@ -700,7 +703,7 @@ ${error(t, opts.error)}<button type="submit">${t.next}</button></form>`,
 export function deviceConfirmPage(request: Request, opts: { userCode: string; clientName: string; email: string; consentHost?: string | null }) {
   const t = texts(request);
   // A client someone else runs, not agreed to yet: allowing also shares name and address (oidc.ts consent).
-  const consent = opts.consentHost != null ? `<p style="color:var(--fg)">${esc(t.consentAsk(opts.clientName, opts.consentHost))}</p><p>${t.consentText}</p>` : '';
+  const consent = opts.consentHost != null ? `<p style="color:var(--fg)">${esc(t.consentShares(opts.email))}</p><p class="hint">${t.consentText}</p>` : '';
   return page(
     request,
     t.deviceTitle,
@@ -719,9 +722,11 @@ export function consentPage(request: Request, opts: { clientName: string; host: 
   return page(
     request,
     t.consentTitle,
-    `<h1>${esc(t.consentAsk(opts.clientName, opts.host))}</h1><p>${t.consentText}</p><p>${esc(t.signedInAs(opts.email))}</p>
+    // One question, the address people know the app by; what it gets, with whose address; then the buttons. The note last, small.
+    `<h1>${esc(t.consentAsk(opts.host))}</h1><p style="color:var(--fg)">${esc(t.consentShares(opts.email))}</p>
 <form method="post" action="/authorize/consent" class="row">${hidden('continue', opts.continueTo)}
-<button type="submit" name="decision" value="deny" class="secondary">${t.consentCancel}</button><button type="submit" name="decision" value="allow">${t.consentContinue}</button></form>`
+<button type="submit" name="decision" value="deny" class="secondary">${t.consentCancel}</button><button type="submit" name="decision" value="allow">${t.consentContinue}</button></form>
+<p class="hint" style="margin-top:16px">${t.consentText}</p>`
   );
 }
 

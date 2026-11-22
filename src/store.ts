@@ -166,9 +166,13 @@ export function consentAskedOf(client: Client, user: User): boolean {
   return needsConsent(client) && !user.guest && !isOwner;
 }
 
-// The host the consent question names: the installation's own address when
-// known (what the person knows it by), else the redirect's host.
+// The host the consent question names: the installation's own domain, else
+// its address (instance_url), else the redirect's host.
 export function consentHost(client: Client, redirectUri: string | null): string {
+  // The installation's own domain first (demo.arcanum.kaboutersoft.be, not
+  // arcanum-bff.x.workers.dev): what people know it by.
+  const own = hostsOf(client.redirect_uris).find((h) => !h.endsWith('.workers.dev') && !/^(localhost|127\.0\.0\.1)(:|$)/.test(h));
+  if (own) return own;
   for (const candidate of [client.instance_url, redirectUri]) {
     try {
       if (candidate) return new URL(candidate).host;
